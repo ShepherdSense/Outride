@@ -59,6 +59,33 @@ class BleScanException implements Exception {
   String toString() => message;
 }
 
+/// Ask the OS for the BLE runtime permissions, including the location
+/// grant, before scanning.
+///
+/// `startScan` does request permissions internally, but without the
+/// location grant (`requestLocationPermission` defaults to false in
+/// `universal_ble`'s scan path). This manifest declares BLUETOOTH_SCAN
+/// without the `neverForLocation` flag, so on Android 12+ the OS
+/// withholds scan results when the location permission is missing —
+/// the scan then succeeds but silently finds nothing. Requesting up
+/// front with fine location closes that gap; when everything is already
+/// granted the call succeeds immediately with no re-prompt. (On older
+/// Android the location permission is required for BLE scanning
+/// regardless.)
+/// On Windows/Linux/Web this always succeeds. Throws [BleScanException]
+/// with a plain-language message when the user denies.
+Future<void> _ensureBleScanPermission() async {
+  try {
+    await UniversalBle.requestPermissions(withAndroidFineLocation: true);
+  } catch (e) {
+    debugPrint('BLE permission request failed: $e');
+    throw BleScanException(
+      'Bluetooth scan permission not granted — allow Nearby devices for '
+      'Shepherd in Android Settings > Apps > Permissions, then scan again.',
+    );
+  }
+}
+
 /// Source of BLE scan results. Real adapter on device, simulated demo
 /// data otherwise (and in tests).
 abstract class BleScanSource {
@@ -87,6 +114,7 @@ class UniversalBleScanSource extends BleScanSource {
     if (avail != AvailabilityState.poweredOn) {
       throw BleScanException(_explain(avail));
     }
+    await _ensureBleScanPermission();
 
     final found = <String, BleNearbyDevice>{};
     final sub = UniversalBle.scanStream.listen((d) {
@@ -398,6 +426,7 @@ class BleScanService {
         throw BleScanException(
             'Bluetooth is not on — cannot monitor.');
       }
+      await _ensureBleScanPermission();
       monitoring = true;
       _monitorSub = UniversalBle.scanStream.listen(
         (d) {
@@ -415,6 +444,11 @@ class BleScanService {
       await UniversalBle.startScan();
     } catch (e) {
       monitoring = false;
+      // The subscription was created before startScan() threw; cancel it
+      // so samples stop feeding the tripwire while the UI shows
+      // monitoring off.
+      await _monitorSub?.cancel();
+      _monitorSub = null;
       error = e is BleScanException ? e.message : 'MONITOR FAILED: $e';
     }
     onUpdate?.call();

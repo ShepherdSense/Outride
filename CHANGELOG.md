@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.27.2 — 2026-11-10 — BLE scan permission fix
+
+- **BLE scanning actually works now (Android 12+).** The scan never asked the OS for the runtime permissions: `startScan` requests them internally, but without the location grant, and this manifest declares `BLUETOOTH_SCAN` without the `neverForLocation` flag — so the OS withheld scan results and the scan silently found nothing. The scan and the continuous monitor now request the permissions up front (with fine location) before starting; a denial shows a plain message pointing at Settings > Apps > Permissions instead of an empty list. Regression tests in `test/ble_scan_test.dart` (3 new) fail with the request removed. Also fixed an adjacent leak: if `startScan()` throws after the monitor subscription is created, the subscription is now cancelled.
+- **Review:** independent reviewer verdict SHIP-AFTER-FIXES; all three items applied (true-mechanism doc comment, regression test with negative check, debug logging of the underlying permission error).
+
+Verified in this workspace: `flutter analyze` clean, full suite 592/592 (589 v0.27.1 baseline + 3 new BLE tests).
+
 ## v0.27.1 — 2026-11-05 — Soft build-age warning
 
 - **Soft build-age warning** — once a build is 90+ days old, the dashboard shows an amber BUILD AGE banner ("THIS BUILD IS N DAYS OLD — PLEASE UPDATE TO THE LATEST SHEPHERD"). A nudge only: sensing, detection, and alerts are unaffected, nothing ever locks or shuts down. Build date lives in `lib/services/build_age.dart` and must be updated at every version bump. No network check; the device clock is the only input.
