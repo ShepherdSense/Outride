@@ -13,7 +13,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/tiny_ml.dart';
+import 'package:outride/services/tiny_ml.dart';
 
 void main() {
   test('shipped disturbance_clf weights reproduce the golden vector', () {

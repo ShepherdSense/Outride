@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/screens/wifi_vision.dart';
-import 'package:shepherd/services/wifi_sense.dart';
-import 'package:shepherd/state/app_state.dart';
+import 'package:outride/screens/wifi_vision.dart';
+import 'package:outride/services/wifi_sense.dart';
+import 'package:outride/state/app_state.dart';
 
 /// Regression tests for the field report of 2026-10-20 (BLE section):
 /// the NEARBY WIRELESS (BLE) header put the title, MONITOR and SCAN in

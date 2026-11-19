@@ -6,7 +6,7 @@ adds a transmitter.
 
 ## Goal
 
-Port two peer-reviewed, fully-read results into the Shepherd Field Kit
+Port two peer-reviewed, fully-read results into the Outride Field Kit
 node pipeline so the ESP32 nodes get an *outdoor-usable CSI motion
 channel* without the usual CSI pitfalls (CFO/SFO drift, wind clutter,
 and unstable weak links):
@@ -51,7 +51,7 @@ Buffalo AP at 5.6 GHz, 20 MHz bandwidth. The key results:
 
 **Honest limit, stated in the paper and load-bearing here:** this is
 *meters-class* detection. Bird-sized targets were seen meters from
-the link. This reinforces Shepherd's standing honest scope —
+the link. This reinforces Outride's standing honest scope —
 **tripwire, not radar**.
 
 ### (b) Commodity CSI stability, arXiv:2203.12888 — READ IN FULL, CONFIRMED
@@ -82,7 +82,7 @@ before CSI use.
 - The inter-chain mechanism (common AGC across chains) applies to
   multi-chain hardware. The ESP32 is single-chain, so there is no
   second chain to imbalance *on that node*. The imbalance rule
-  transfers to Shepherd only where multiple receive paths meet:
+  transfers to Outride only where multiple receive paths meet:
   across the nodes that form one mesh link, or across the SDR
   bridge's multi-channel backends.
 - Label this accordingly: the 60 dB rule is a CONFIRMED
@@ -115,7 +115,7 @@ confidence_merger.dart §5a/§5b (upgrade-only corroboration of the RF tripwire 
 
 The symmetric-subcarrier averaging lives **in the ESP32 firmware,
 per CSI frame, in or right after the CSI callback** (`csi_cb` in
-`shepherd_node.ino`). Rationale: it is a per-packet operation on data
+`outride_node.ino`). Rationale: it is a per-packet operation on data
 that only exists transiently; doing it in firmware halves the bytes
 that ever need aggregation and keeps the raw slope-cancellation
 exactly where the phase linearity holds (before any averaging across
@@ -149,7 +149,7 @@ Once per second (the existing 1 s aggregation cadence in `loop()`):
 
 **Per-channel vs per-AP-link (known implementation deviation):** the
 spec above calls for a "Hz-deviation metric per AP-link", but the
-shipped firmware (`shepherd_node.ino`) aggregates *all* frames seen on
+shipped firmware (`outride_node.ino`) aggregates *all* frames seen on
 the channel into one scalar metric labeled `wifi_ch%d`, with no
 per-MAC separation. Frames from different APs carry independent
 CFO/channel phases, so mixing them muddies the ZCR metric — a known
@@ -371,7 +371,7 @@ not a test.
 
 ## Files (existing + proposed touch points)
 
-- `field_kit/esp32/shepherd_node/shepherd_node.ino` — symmetric-pair
+- `field_kit/esp32/outride_node/outride_node.ino` — symmetric-pair
   averaging in/after `csi_cb`, 1 s `dev_hz` aggregation in `loop()`,
   wind-gate suppression, `WIND` UART parse, `CSI`/`WIND` UDP JSON
   emission on 49160.

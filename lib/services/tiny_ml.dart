@@ -1,4 +1,4 @@
-/// Shared inference kernel for Shepherd's tiny embedded models.
+/// Shared inference kernel for Outride's tiny embedded models.
 ///
 /// Both the disturbance classifier and the track stitcher are small
 /// multilayer perceptrons (standardized inputs, relu hidden layers)

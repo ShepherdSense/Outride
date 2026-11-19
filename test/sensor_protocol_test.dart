@@ -3,12 +3,12 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/models/sensor_observation.dart';
-import 'package:shepherd/models/tracking.dart';
-import 'package:shepherd/services/camera_driver.dart';
-import 'package:shepherd/services/generic_sensor_driver.dart';
-import 'package:shepherd/services/node_udp_hub.dart';
-import 'package:shepherd/services/sensor_protocol.dart';
+import 'package:outride/models/sensor_observation.dart';
+import 'package:outride/models/tracking.dart';
+import 'package:outride/services/camera_driver.dart';
+import 'package:outride/services/generic_sensor_driver.dart';
+import 'package:outride/services/node_udp_hub.dart';
+import 'package:outride/services/sensor_protocol.dart';
 
 TrackEstimate _track({double x = 50, double y = 0}) => TrackEstimate(
       timestamp: DateTime.now(),

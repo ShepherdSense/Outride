@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/esp32_driver.dart';
-import 'package:shepherd/services/meshtastic_driver.dart';
+import 'package:outride/services/esp32_driver.dart';
+import 'package:outride/services/meshtastic_driver.dart';
 
 // --- Minimal protobuf encoder for building synthetic frames ---
 

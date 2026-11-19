@@ -8,7 +8,7 @@
 /// choice inside the single EO stream, which is why the EO view is
 /// labeled PILOT'S FOCAL VIEW).
 ///
-/// Telemetry overlay comes from the Class B CoT feed Shepherd already
+/// Telemetry overlay comes from the Class B CoT feed Outride already
 /// ingests — NOT from the video stream. MISB 0601 KLV extraction
 /// through the player (media_kit/libmpv) is not practical: libmpv
 /// does not surface demuxed KLV metadata for RTSP inputs through
@@ -235,10 +235,10 @@ class _DroneTabState extends State<DroneTab> {
           _healthNow == DroneStreamHealth.frozen);
 
   Color get _healthColor => switch (_healthNow) {
-        DroneStreamHealth.live => SentryColors.green,
-        DroneStreamHealth.connecting => SentryColors.amber,
-        DroneStreamHealth.frozen => SentryColors.orange,
-        DroneStreamHealth.noSignal => SentryColors.red,
+        DroneStreamHealth.live => OutrideColors.green,
+        DroneStreamHealth.connecting => OutrideColors.amber,
+        DroneStreamHealth.frozen => OutrideColors.orange,
+        DroneStreamHealth.noSignal => OutrideColors.red,
       };
 
   @override
@@ -262,11 +262,11 @@ class _DroneTabState extends State<DroneTab> {
       padding: const EdgeInsets.all(16),
       children: [
         Row(children: [
-          Text('DRONE', style: SentryType.readout(18, SentryColors.onDark)),
+          Text('DRONE', style: OutrideType.readout(18, OutrideColors.onDark)),
           const SizedBox(width: 12),
-          SentryChip(label: cfg.sourceLabel, color: SentryColors.blue),
+          OutrideChip(label: cfg.sourceLabel, color: OutrideColors.blue),
           const Spacer(),
-          SentryChip(
+          OutrideChip(
               label: _healthNow.label, color: _healthColor, icon: Icons.circle),
         ]),
         const SizedBox(height: 12),
@@ -282,7 +282,7 @@ class _DroneTabState extends State<DroneTab> {
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.black,
-                border: Border.all(color: SentryColors.border),
+                border: Border.all(color: OutrideColors.border),
                 borderRadius: BorderRadius.circular(12),
               ),
               clipBehavior: Clip.antiAlias,
@@ -291,21 +291,21 @@ class _DroneTabState extends State<DroneTab> {
                 Positioned(
                   left: 10,
                   top: 10,
-                  child: SentryChip(
-                      label: _kind.label, color: SentryColors.purple),
+                  child: OutrideChip(
+                      label: _kind.label, color: OutrideColors.purple),
                 ),
                 if (selected != null)
                   Positioned(
                     left: 10,
                     bottom: 10,
-                    child: SentryChip(
+                    child: OutrideChip(
                         label: selected.displayName,
-                        color: SentryColors.green),
+                        color: OutrideColors.green),
                   ),
                 if (_tapRetryArmed)
                   const Center(
-                    child: SentryChip(
-                        label: 'TAP TO RETRY', color: SentryColors.amber),
+                    child: OutrideChip(
+                        label: 'TAP TO RETRY', color: OutrideColors.amber),
                   ),
               ]),
             ),
@@ -329,10 +329,10 @@ class _DroneTabState extends State<DroneTab> {
           style: ButtonStyle(
             backgroundColor: WidgetStateProperty.resolveWith(
               (states) => states.contains(WidgetState.selected)
-                  ? SentryColors.purple.withAlpha(60)
-                  : SentryColors.surface2,
+                  ? OutrideColors.purple.withAlpha(60)
+                  : OutrideColors.surface2,
             ),
-            foregroundColor: const WidgetStatePropertyAll(SentryColors.onDark),
+            foregroundColor: const WidgetStatePropertyAll(OutrideColors.onDark),
           ),
         ),
         const SizedBox(height: 6),
@@ -342,22 +342,22 @@ class _DroneTabState extends State<DroneTab> {
                   'BY THE PILOT IN THE AIRCRAFT, NOT HERE.'
               : 'THERMAL IS ITS OWN SIMULTANEOUS STREAM — SWITCHING '
                   'ONLY CHANGES WHAT THIS SCREEN WATCHES.',
-          style: SentryType.section(10).copyWith(height: 1.6),
+          style: OutrideType.section(10).copyWith(height: 1.6),
         ),
         const SizedBox(height: 12),
         // ---- Per-airframe selector + telemetry ------------------
-        SentryPanel(
+        OutridePanel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('AIRFRAME', style: SentryType.section(11)),
+              Text('AIRFRAME', style: OutrideType.section(11)),
               const SizedBox(height: 8),
               if (platforms.isEmpty)
                 Text(
                   'NO FRIENDLY AIRFRAMES OBSERVED. AIRCRAFT APPEAR HERE '
                   'WHEN THE CONTROLLER COT FEED OR THE MESH REPORTS THEM '
                   '(SETTINGS → COT LISTENER + DRONES).',
-                  style: SentryType.section(10).copyWith(height: 1.6),
+                  style: OutrideType.section(10).copyWith(height: 1.6),
                 )
               else
                 Wrap(
@@ -369,9 +369,9 @@ class _DroneTabState extends State<DroneTab> {
                         label: Text(r.displayName),
                         selected: selected?.key == r.key,
                         onSelected: (_) => setState(() => _selectedKey = r.key),
-                        selectedColor: SentryColors.purple.withAlpha(70),
-                        backgroundColor: SentryColors.surface2,
-                        labelStyle: SentryType.rowValue(SentryColors.onDark),
+                        selectedColor: OutrideColors.purple.withAlpha(70),
+                        backgroundColor: OutrideColors.surface2,
+                        labelStyle: OutrideType.rowValue(OutrideColors.onDark),
                       ),
                   ],
                 ),
@@ -383,7 +383,7 @@ class _DroneTabState extends State<DroneTab> {
                   'TELEMETRY VIA THE COT FEED — NOT EXTRACTED FROM THE '
                   'VIDEO STREAM (NO KLV PARSE). STREAM ENDPOINTS ARE '
                   'THE SETTINGS URLS: ONE AIRCRAFT LINK AT A TIME.',
-                  style: SentryType.section(10).copyWith(height: 1.6),
+                  style: OutrideType.section(10).copyWith(height: 1.6),
                 ),
               ],
             ],
@@ -391,9 +391,9 @@ class _DroneTabState extends State<DroneTab> {
         ),
         const SizedBox(height: 12),
         Text(
-          'VIEWER ONLY — SHEPHERD SENDS NOTHING TO THE AIRCRAFT. NO '
+          'VIEWER ONLY — OUTRIDE SENDS NOTHING TO THE AIRCRAFT. NO '
           'FLIGHT, GIMBAL, OR CAMERA CONTROL EXISTS IN THIS TAB.',
-          style: SentryType.section(10).copyWith(height: 1.6),
+          style: OutrideType.section(10).copyWith(height: 1.6),
         ),
       ],
     );
@@ -428,7 +428,7 @@ class _DroneTabState extends State<DroneTab> {
         padding: const EdgeInsets.all(16),
         child: Text(text,
             textAlign: TextAlign.center,
-            style: SentryType.section(11).copyWith(height: 1.6)),
+            style: OutrideType.section(11).copyWith(height: 1.6)),
       ),
     );
   }
@@ -458,8 +458,8 @@ class _DroneTabState extends State<DroneTab> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: SentryType.section(9)),
-              Text(value, style: SentryType.rowValue(SentryColors.onDark)),
+              Text(label, style: OutrideType.section(9)),
+              Text(value, style: OutrideType.rowValue(OutrideColors.onDark)),
             ],
           ),
       ],

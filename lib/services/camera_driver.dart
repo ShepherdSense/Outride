@@ -122,6 +122,12 @@ class CameraDriver extends RadioDriver {
       'http://<this-device>:${settings.webhookPort}/motion, or set an '
       'ONVIF address.';
 
+  /// Same contract as the Fetch driver: cameras corroborate, they
+  /// never emit LinkSamples, so an empty poll is normal — not a
+  /// fault to paint on the dashboard or feed into deployment health.
+  @override
+  bool get emptyPollIsError => false;
+
   int get webhookHits => _webhookHits;
   int get webhookBad => _webhookBad;
 

@@ -30,7 +30,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/remote_id.dart';
+import 'package:outride/services/remote_id.dart';
 
 const basicIdBytes = <int>[
   2, 18, 49, 53, 56, 49, 70, 53, 70, 72, //

@@ -10,7 +10,7 @@ anywhere in this feature.
 is present, never claims identity, and never improves sensing range.
 Any accuracy numbers cited from the literature below are CLAIMED in
 their original regimes (indoor/through-wall, stationary humans,
-30-node meshes) and are NOT transferred to Shepherd's regime
+30-node meshes) and are NOT transferred to Outride's regime
 (6 nodes, dismounted, on the move, Group 2–3 UAS airborne targets).
 The value imported is the *method*, not the numbers.
 
@@ -90,7 +90,7 @@ node; requires an empty room; indoor only.
 regime: indoor, stationary-human, rich-multipath.** NOT transferable
 to open-field airborne detection; cite with that caveat, always.
 
-**Shepherd port constraint:** servos are dead on arrival for a
+**Outride port constraint:** servos are dead on arrival for a
 dismounted team. The mechanism (raise `F_l` by sub-wavelength
 repositioning) survives; the actuator becomes the operator's hand.
 
@@ -111,7 +111,7 @@ each band becomes a virtual link.)
 
 1. Compute the current track estimate `x̂` (position + velocity) from
    the existing tracker (`lib/services/tracker.dart`).
-2. **Residual gate:** `||z − Hx̂|| < T_r`. Shepherd adaptation:
+2. **Residual gate:** `||z − Hx̂|| < T_r`. Outride adaptation:
    `T_r` is set in *disturbance units*, not meters — the residual is
    between observed link disturbance and the track-predicted
    disturbance. Default: residual within 2× the link's MAD threshold
@@ -250,7 +250,7 @@ same sortie file as tracks and health.
   per-link fade levels and ARTI divergence flags: a node owning
   persistently deep-fade or `suspect` links degrades honestly
   instead of silently feeding bad geometry to the tracker.
-- **`~/workspace/shepherd_field_kit/esp32/shepherd_node/shepherd_node.ino`**
+- **`~/workspace/outride_field_kit/esp32/outride_node/outride_node.ino`**
   — beacons on UDP 49160 already carry node identity/position;
   calibration mode needs one addition: a `calib` flag in the beacon
   so the app knows which nodes are participating in the vacant
@@ -268,7 +268,7 @@ same sortie file as tracks and health.
 
 - **Regime transfer:** every accuracy number in this spec (ARTI
   ~2×/3×, "Dial it in" 32%) is CLAIMED in 30-node, indoor or
-  through-wall, stationary-human regimes. Shepherd's regime — 6
+  through-wall, stationary-human regimes. Outride's regime — 6
   nodes / 15 links, dismounted, moving, open field, airborne
   Group 2–3 UAS — is outside all of it. The method ports; the
   numbers do not. Field validation must re-measure from zero.
@@ -291,7 +291,7 @@ same sortie file as tracks and health.
 ## The loitering-target caveat (documented, not hand-waved)
 
 ARTI's motion gate **freezes all `mu`/`phi` updates when the track
-is stationary** (speed ≤ 0.2 m/s). For Shepherd this is protective:
+is stationary** (speed ≤ 0.2 m/s). For Outride this is protective:
 a loitering Group 2–3 UAS — holding overhead, the hardest profile
 for a tripwire — **cannot blend into the baseline**, because the
 estimator refuses to learn while the target is still. The existing
@@ -390,4 +390,4 @@ ARTI runtime stats (1/min aggregate):
 - `lib/services/node_udp_hub.dart` — `calib` beacon flag parsing
 - `lib/services/recorder.dart` — calibration + `arti_stats` persistence
 - `lib/state/app_state.dart` — calibration state machine, worst-link ranking
-- `~/workspace/shepherd_field_kit/esp32/shepherd_node/shepherd_node.ino` — `calib` flag in UDP 49160 beacons
+- `~/workspace/outride_field_kit/esp32/outride_node/outride_node.ino` — `calib` flag in UDP 49160 beacons

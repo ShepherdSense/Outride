@@ -14,6 +14,14 @@
          RESULTS additionally need the location permission above. -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!-- Fleet foreground service (v0.28.0): beaconing/listening runs
+         under a foreground service with a persistent notification.
+         FOREGROUND_SERVICE is install-time (no runtime prompt); the
+         Android 13+ notification permission, if denied, only hides
+         the notification — the service still runs. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- GPS capture for node positioning: walk to a node, tap capture. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -25,7 +33,7 @@
         android:usesPermissionFlags="neverForLocation" />
 
     <application
-        android:label="Shepherd"
+        android:label="Outride"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
@@ -64,6 +72,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Fleet foreground service (v0.28.0): not exported, runs
+             only while the operator is in a fleet. -->
+        <service
+            android:name=".FleetForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

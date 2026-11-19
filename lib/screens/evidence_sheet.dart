@@ -34,13 +34,13 @@ class EvidenceSheet extends StatelessWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: SentryColors.muted,
+                  color: OutrideColors.muted,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
             const SizedBox(height: 12),
-            Text('WHY DID IT ALERT', style: SentryType.section()),
+            Text('WHY DID IT ALERT', style: OutrideType.section()),
             const SizedBox(height: 10),
             _row('LINK', shortLinkKey(event.linkKey)),
             _row('WHEN', _fmtTime(event.timestamp)),
@@ -106,7 +106,7 @@ class EvidenceSheet extends StatelessWidget {
             ),
             _bearingRow(window),
             const SizedBox(height: 12),
-            Text('DEVIATION HISTORY (60s window)', style: SentryType.section()),
+            Text('DEVIATION HISTORY (60s window)', style: OutrideType.section()),
             const SizedBox(height: 8),
             SizedBox(
               height: 120,
@@ -119,7 +119,7 @@ class EvidenceSheet extends StatelessWidget {
             Text(
               'Deviation in the expected direction vs this link\u2019s own '
               'adaptive threshold (dashed). Estimates, not measurements.',
-              style: SentryType.rowLabel().copyWith(fontSize: 10),
+              style: OutrideType.rowLabel().copyWith(fontSize: 10),
             ),
           ],
         ),
@@ -134,10 +134,10 @@ class EvidenceSheet extends StatelessWidget {
           children: [
             SizedBox(
                 width: 96,
-                child: Text(label, style: SentryType.rowLabel())),
+                child: Text(label, style: OutrideType.rowLabel())),
             Expanded(
                 child: Text(value,
-                    style: SentryType.rowValue(SentryColors.onDark))),
+                    style: OutrideType.rowValue(OutrideColors.onDark))),
           ],
         ),
       );
@@ -152,7 +152,7 @@ class EvidenceSheet extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 6),
-        Text(title, style: SentryType.section()),
+        Text(title, style: OutrideType.section()),
         const SizedBox(height: 4),
         for (final l in lines)
           Padding(
@@ -163,7 +163,7 @@ class EvidenceSheet extends StatelessWidget {
                 const SizedBox(width: 96),
                 Expanded(
                     child: Text(l,
-                        style: SentryType.rowValue(SentryColors.onDark))),
+                        style: OutrideType.rowValue(OutrideColors.onDark))),
               ],
             ),
           ),
@@ -171,7 +171,7 @@ class EvidenceSheet extends StatelessWidget {
           padding: const EdgeInsets.only(top: 2, bottom: 3),
           child: Text(
             footnote,
-            style: SentryType.rowLabel().copyWith(fontSize: 10),
+            style: OutrideType.rowLabel().copyWith(fontSize: 10),
           ),
         ),
       ],
@@ -220,7 +220,7 @@ class _DeviationPainter extends CustomPainter {
 
     // Threshold (dashed).
     final thrPaint = Paint()
-      ..color = SentryColors.amber.withValues(alpha: 0.6)
+      ..color = OutrideColors.amber.withValues(alpha: 0.6)
       ..strokeWidth = 1;
     const dash = 5.0;
     final thr = samples.last.threshold;
@@ -234,7 +234,7 @@ class _DeviationPainter extends CustomPainter {
 
     // Deviation line.
     final linePaint = Paint()
-      ..color = SentryColors.purple
+      ..color = OutrideColors.purple
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
     final path = Path();
@@ -260,7 +260,7 @@ class _DeviationPainter extends CustomPainter {
       }
     }
     final markPaint = Paint()
-      ..color = SentryColors.red.withValues(alpha: 0.8)
+      ..color = OutrideColors.red.withValues(alpha: 0.8)
       ..strokeWidth = 1.5;
     canvas.drawLine(
         Offset(x(best), 4), Offset(x(best), size.height - 4), markPaint);

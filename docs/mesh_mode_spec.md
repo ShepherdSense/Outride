@@ -1,11 +1,11 @@
-# Shepherd Mesh Mode — automatic tripwire/mesh switching with embedded-AI arbitration
+# Outride Mesh Mode — automatic tripwire/mesh switching with embedded-AI arbitration
 
 Status: SPEC (accepted 2026-10-16). Not yet implemented.
 Owner: Draco. Implements: his "automatic function for three or more nodes" decision.
 
 ## 1. Goal
 
-Shepherd detects which regime it is in and switches itself, with no user
+Outride detects which regime it is in and switches itself, with no user
 action:
 
 - **TRIPWIRE mode** (1–2 positioned nodes): today's behavior — per-link
@@ -208,7 +208,7 @@ thinking does not survive motion, so:
 
 ## 11. Hermes one-shot implementation prompt
 
-> In ~/workspace/rf_sentry (Shepherd repo), implement Phase 1 of
+> In ~/workspace/rf_sentry (Outride repo), implement Phase 1 of
 > docs/mesh_mode_spec.md: the deterministic mesh-mode layer. Add a
 > MeshModeController evaluated in AppState's polling loop implementing
 > the Layer-1 hard gates (§5), cross-link residual correlation, GPS

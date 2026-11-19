@@ -1,4 +1,4 @@
-# Skydio Integration Spec — Shepherd
+# Skydio Integration Spec — Outride
 
 Status: SPEC (2026-10-21). Source research:
 `~/workspace/research_notes/skydio-integration-surfaces-2026-10-21.md`
@@ -29,7 +29,7 @@ Promote on evidence; never demote on silence.
 - **Class A — full sensing node.** StreamScape per-link metrics
   (SNR/MCS) for a node whose position moves in 3D. Only reachable
   via AirMesh/SL5200 on the mesh (or any future MN-MIMO fit).
-  Links to ground nodes become Shepherd sensing links; the fusion
+  Links to ground nodes become Outride sensing links; the fusion
   layer must handle a moving airborne endpoint (ego-motion rules
   from the mesh-mode spec apply, extended to altitude).
 - **Class B — position node.** CoT, MAVLink, or cloud telemetry
@@ -81,7 +81,7 @@ Promote on evidence; never demote on silence.
   CoT/cloud identity → Class B FRIENDLY. A whitelist match NEVER
   suppresses a track or an alert by itself; it changes rendering
   and correlation priority only (detection stays deterministic,
-  per Shepherd's standing rule).
+  per Outride's standing rule).
 
 ## Drone tab
 
@@ -108,7 +108,7 @@ Promote on evidence; never demote on silence.
 - **Out of scope for the tab:** flight control, gimbal control,
   pilot-focal switching, recording to cloud. Camera switching in
   this spec = stream selection only; no new transmit/control
-  surface is added to Shepherd.
+  surface is added to Outride.
 
 ## Honesty rules (binding)
 

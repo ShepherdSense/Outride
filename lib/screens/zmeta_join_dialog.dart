@@ -195,7 +195,7 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
     final messenger = ScaffoldMessenger.of(context);
     if (code == null) {
       messenger.showSnackBar(const SnackBar(
-          content: Text('THAT QR IS NOT A SHEPHERD INVITE CODE')));
+          content: Text('THAT QR IS NOT A OUTRIDE INVITE CODE')));
       return;
     }
     setState(() => _codeCtl.text = code);
@@ -239,9 +239,9 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
     return PopScope(
       canPop: _step == _Step.input || _step == _Step.error,
       child: AlertDialog(
-      backgroundColor: SentryColors.surface2,
+      backgroundColor: OutrideColors.surface2,
       title: Text('JOIN ZMETA NETWORK',
-          style: SentryType.rowValue(SentryColors.onDark)),
+          style: OutrideType.rowValue(OutrideColors.onDark)),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(child: _body()),
@@ -261,14 +261,14 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
               'PASTE THE INVITE CODE FROM THE HUB OPERATOR, OR SCAN ITS '
               'QR CODE. A LOCAL WIREGUARD KEYPAIR IS GENERATED ON THIS '
               'DEVICE — THE PRIVATE KEY NEVER LEAVES IT.',
-              style: SentryType.section(10),
+              style: OutrideType.section(10),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _codeCtl,
               autofocus: true,
-              style: SentryType.rowValue(SentryColors.onDark)
-                  .copyWith(fontFamily: SentryType.mono, fontSize: 12),
+              style: OutrideType.rowValue(OutrideColors.onDark)
+                  .copyWith(fontFamily: OutrideType.mono, fontSize: 12),
               decoration: const InputDecoration(
                 labelText: 'INVITE CODE',
                 hintText: 'Z1.hub.example.com.8443.51820.…',
@@ -287,10 +287,10 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
             const SizedBox(height: 10),
             TextField(
               controller: _platformCtl,
-              style: SentryType.rowValue(SentryColors.onDark),
+              style: OutrideType.rowValue(OutrideColors.onDark),
               decoration: const InputDecoration(
                 labelText: 'PLATFORM ID (THIS MESH)',
-                hintText: 'e.g. shepherd-mesh-1',
+                hintText: 'e.g. outride-mesh-1',
               ),
             ),
           ],
@@ -302,7 +302,7 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
             const CircularProgressIndicator(),
             const SizedBox(height: 14),
             Text('GENERATING KEYPAIR, CONTACTING HUB…',
-                style: SentryType.section(10)),
+                style: OutrideType.section(10)),
           ],
         );
       case _Step.error:
@@ -311,10 +311,10 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Icon(Icons.warning_amber_rounded,
-                color: SentryColors.red, size: 36),
+                color: OutrideColors.red, size: 36),
             const SizedBox(height: 10),
             Text(_error,
-                style: SentryType.rowValue(SentryColors.red)
+                style: OutrideType.rowValue(OutrideColors.red)
                     .copyWith(height: 1.6)),
           ],
         );
@@ -333,22 +333,22 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         const Icon(Icons.check_circle_outline,
-            color: SentryColors.green, size: 44),
+            color: OutrideColors.green, size: 44),
         const SizedBox(height: 10),
         Text(
           'CONNECTED — NO OTHER APP NEEDED. TURN ON "EMIT ZMETA EVENTS" '
           'IN SETTINGS. EVENTS GO STRAIGHT TO THE HUB OVER ENCRYPTED HTTPS.',
-          style: SentryType.section(10).copyWith(height: 1.6),
+          style: OutrideType.section(10).copyWith(height: 1.6),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 10),
         if (_conf.isNotEmpty)
         ExpansionTile(
           title: Text('ADVANCED: USE WIREGUARD INSTEAD',
-              style: SentryType.section(10)),
+              style: OutrideType.section(10)),
           subtitle: Text(
             'PREFER A VPN TUNNEL OVER DIRECT HTTPS.',
-            style: SentryType.section(9),
+            style: OutrideType.section(9),
           ),
           children: [
             Padding(
@@ -387,8 +387,8 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
             child: Text(
               'HUB ACCEPTED THE JOIN BUT ITS TUNNEL NEEDS A MANUAL '
               'REACTIVATE — ASK THE HUB OPERATOR, THEN CONTINUE BELOW.',
-              style: SentryType.section(10)
-                  .copyWith(color: SentryColors.amber, height: 1.6),
+              style: OutrideType.section(10)
+                  .copyWith(color: OutrideColors.amber, height: 1.6),
               textAlign: TextAlign.center,
             ),
           ),
@@ -410,7 +410,7 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
           'TURN ON "EMIT ZMETA EVENTS" IN SETTINGS. '
           '${zmetaParseTarget(_targetNote) != null ? 'GATEWAY TARGET WILL BE SET TO $_targetNote' : 'THE HUB SENT NO GATEWAY TARGET — ENTER THE GATEWAY HOST AND PORT IN SETTINGS'}'
           ' — EXPORT STAYS OFF UNTIL YOU ENABLE IT.',
-          style: SentryType.section(10).copyWith(height: 1.6),
+          style: OutrideType.section(10).copyWith(height: 1.6),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 10),
@@ -418,16 +418,16 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
           width: double.infinity,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: SentryColors.background,
+            color: OutrideColors.background,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: SentryColors.border),
+            border: Border.all(color: OutrideColors.border),
           ),
           child: SelectableText(
             _conf,
             style: const TextStyle(
-              fontFamily: SentryType.mono,
+              fontFamily: OutrideType.mono,
               fontSize: 10.5,
-              color: SentryColors.onDark,
+              color: OutrideColors.onDark,
               height: 1.5,
             ),
           ),

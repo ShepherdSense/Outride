@@ -170,7 +170,7 @@ class RidSelfId extends RidMessage {
   final String description;
 }
 
-/// Authentication (type 2): decoded structurally only. Shepherd
+/// Authentication (type 2): decoded structurally only. Outride
 /// does NOT verify authentication data — see the library honesty
 /// contract. Carried so a populated auth message is visible as a
 /// claim, never rendered as proof.
@@ -377,13 +377,13 @@ List<RidMessage> decodeRidAppData(List<int> bytes) {
 const String kRidCooperativeLabel = 'COOPERATIVE (RID)';
 
 /// Wi-Fi NAN Remote ID is NOT available: stock Android does not
-/// expose NAN Remote ID frames to the app, so Shepherd hears RID
+/// expose NAN Remote ID frames to the app, so Outride hears RID
 /// over BLE and Wi-Fi Beacon only. Documented, never faked.
 const String kRidWifiNanUnavailableNote =
     'Wi-Fi NAN Remote ID unavailable on stock Android — BLE / Wi-Fi Beacon only';
 
 /// BLE 5 extended advertising is platform-dependent: whether a long
-/// RID pack arrives depends on the phone's BLE stack, not Shepherd.
+/// RID pack arrives depends on the phone's BLE stack, not Outride.
 const String kRidBle5Note = 'BLE 5 extended advertising is platform-dependent';
 
 /// Marker meaning for a Remote ID operator position, from the

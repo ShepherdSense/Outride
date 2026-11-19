@@ -1,9 +1,9 @@
-/// Shepherd → ZMeta event adapter (emit-only).
+/// Outride → ZMeta event adapter (emit-only).
 ///
-/// Translates Shepherd detections into ZMeta v1.1 events and ships them
+/// Translates Outride detections into ZMeta v1.1 events and ships them
 /// over UDP to a ZMeta gateway (default 127.0.0.1:5555 — the gateway's
-/// ingest port). One adapter runs per Shepherd mesh; the gateway fuses
-/// across meshes. Shepherd never receives anything back: this is the
+/// ingest port). One adapter runs per Outride mesh; the gateway fuses
+/// across meshes. Outride never receives anything back: this is the
 /// same emit-only posture as the ATAK CoT output path.
 ///
 /// Targets the v1.1 lane (spec v1.1.26, schema zmeta-event-1.1.0):
@@ -20,10 +20,10 @@
 /// Honesty rules (mirroring ZMeta's own adapter contract, which is why
 /// this pairing works):
 /// - `power_dbm` is the DOCUMENTED SENTINEL `0.0`, flagged in
-///   `quality.shepherd_power_sentinel` — a passive link sensor measures
+///   `quality.outride_power_sentinel` — a passive link sensor measures
 ///   channel disturbance, not emitter power, and the dip depth is in
 ///   radio-internal units, not dBm. The real measurement rides in the
-///   explicitly-named `shepherd_dip_depth_db` feature. See
+///   explicitly-named `outride_dip_depth_db` feature. See
 ///   docs/zmeta_adapter_spec.md.
 /// - No bearing is emitted for omnidirectional sensors. A KrakenSDR DoA
 ///   travels array-relative in `features` until a surveyed array
@@ -38,7 +38,7 @@
 ///   altitude is platform-dependent (Android: WGS-84 ellipsoid per
 ///   platform docs; iOS: MSL) and is NEVER verified HAE, so 6.2 forbids
 ///   it in `alt_m` — it rides in the explicitly-named
-///   `features.shepherd_sensor_alt_m` instead, flagged in quality.
+///   `features.outride_sensor_alt_m` instead, flagged in quality.
 ///   Substituting a non-HAE altitude into `alt_m` was rejected on the
 ///   ZMeta record (doctrine A1-02); a 2-D position is the honest
 ///   complete statement of what the sensor measured. `geo` is the
@@ -172,7 +172,7 @@ class ZmetaSensorGeo {
       };
 }
 
-/// Builds a ZMeta OBSERVATION_EVENT / RF for one Shepherd link
+/// Builds a ZMeta OBSERVATION_EVENT / RF for one Outride link
 /// disturbance.
 ///
 /// [freqHz] is the measurement channel's center frequency and is required
@@ -181,14 +181,14 @@ class ZmetaSensorGeo {
 /// bandwidth when known, else the documented 0.0 sentinel.
 ///
 /// `power_dbm` — the schema requires it, but a passive link-disturbance
-/// sensor measures channel disturbance, not emitter power, and Shepherd's
+/// sensor measures channel disturbance, not emitter power, and Outride's
 /// dip depth is in radio-internal units, not dBm. Following ZMeta's own
 /// documented-sentinel precedent (bandwidth_hz: 0.0 for receiver-class
 /// sensors that cannot measure emitter bandwidth), this adapter emits the
 /// fixed documented sentinel `power_dbm: 0.0` and flags it in
-/// `quality.shepherd_power_sentinel`. The real measurement — disturbance
+/// `quality.outride_power_sentinel`. The real measurement — disturbance
 /// depth in dB (radio units) — rides in the explicitly-named
-/// `features.shepherd_dip_depth_db`. See docs/zmeta_adapter_spec.md.
+/// `features.outride_dip_depth_db`. See docs/zmeta_adapter_spec.md.
 Map<String, dynamic> zmetaObservation({
   required String platformId,
   required String sensorId,
@@ -213,50 +213,50 @@ Map<String, dynamic> zmetaObservation({
     // Documented sentinel: this sensor cannot measure emitter bandwidth.
     'bandwidth_hz': (bwHz != null && bwHz.isFinite) ? bwHz : 0.0,
     // Documented sentinel: passive link sensors don't measure emitter
-    // power. See quality.shepherd_power_sentinel and the spec doc.
-    // The disturbance magnitude is shepherd_dip_depth_db below.
+    // power. See quality.outride_power_sentinel and the spec doc.
+    // The disturbance magnitude is outride_dip_depth_db below.
     'power_dbm': 0.0,
-    'shepherd_link': linkKey,
-    'shepherd_driver': driverId,
-    'shepherd_disturbance': direction,
+    'outride_link': linkKey,
+    'outride_driver': driverId,
+    'outride_disturbance': direction,
     // Non-finite measurements are a programming error upstream; 0.0 keeps
     // the event schema-valid rather than emitting invalid JSON.
-    'shepherd_dip_depth_db': dipDepthDb.isFinite ? dipDepthDb : 0.0,
-    'shepherd_duration_s': durationSecs.isFinite ? durationSecs : 0.0,
-    'shepherd_size_est': sizeEstimate,
-    if (viaVariance) 'shepherd_via_variance': true,
-    if (sigHint != null) 'shepherd_sig_hint': sigHint,
+    'outride_dip_depth_db': dipDepthDb.isFinite ? dipDepthDb : 0.0,
+    'outride_duration_s': durationSecs.isFinite ? durationSecs : 0.0,
+    'outride_size_est': sizeEstimate,
+    if (viaVariance) 'outride_via_variance': true,
+    if (sigHint != null) 'outride_sig_hint': sigHint,
     if (energyDbfs != null && energyDbfs.isFinite)
-      'shepherd_energy_dbfs': energyDbfs,
+      'outride_energy_dbfs': energyDbfs,
     if (doaArrayRelativeDeg != null && doaArrayRelativeDeg.isFinite)
       'kraken_doa_array_relative_deg': doaArrayRelativeDeg,
     // Device-reported altitude: platform-dependent reference frame,
     // never verified HAE — excluded from canonical geo per ZMeta 6.2,
     // carried here explicitly instead (21.8).
     if (sensorGeo?.altM != null && sensorGeo!.altM!.isFinite)
-      'shepherd_sensor_alt_m': sensorGeo.altM,
+      'outride_sensor_alt_m': sensorGeo.altM,
   };
 
   final quality = <String, dynamic>{
     'calibration_state': 'UNCALIBRATED',
-    'shepherd_estimates': true, // dip/size/duration are heuristic estimates
+    'outride_estimates': true, // dip/size/duration are heuristic estimates
     // Consumer-visible sentinel flag: power_dbm is the documented
     // "not measured" sentinel, not 1 mW of received power.
-    'shepherd_power_sentinel': true,
+    'outride_power_sentinel': true,
     // Canonical geo is the SENSOR (platform) position — never the
     // target's. Declared 2-D per 21.8: horizontal WGS-84 is real, the
     // vertical is device-reported (not verified HAE) and lives in
-    // features.shepherd_sensor_alt_m instead.
+    // features.outride_sensor_alt_m instead.
     if (sensorGeo != null) ...{
       'geo_status': 'VERTICAL_UNAVAILABLE',
-      'shepherd_geo_source': sensorGeo.source,
-      'shepherd_geo_note':
+      'outride_geo_source': sensorGeo.source,
+      'outride_geo_note':
           'Sensor (platform) position, not target position. '
           'Altitude is device-reported, reference frame not verified '
-          'HAE — see features.shepherd_sensor_alt_m and the adapter spec.',
+          'HAE — see features.outride_sensor_alt_m and the adapter spec.',
       if (sensorGeo.accuracyM != null && sensorGeo.accuracyM!.isFinite)
-        'shepherd_geo_accuracy_m': sensorGeo.accuracyM,
-      if (sensorGeo.ageSec != null) 'shepherd_geo_age_s': sensorGeo.ageSec,
+        'outride_geo_accuracy_m': sensorGeo.accuracyM,
+      if (sensorGeo.ageSec != null) 'outride_geo_age_s': sensorGeo.ageSec,
     } else
       'geo_status': 'UNAVAILABLE',
   };
@@ -298,7 +298,7 @@ Map<String, dynamic> zmetaObservation({
     'source': {
       'platform_id': platformId,
       'node_role': 'EDGE',
-      'producer': 'rf-sensor-shepherd',
+      'producer': 'rf-sensor-outride',
       'sensor_id': sensorId,
     },
     'profile': 'H',
@@ -342,16 +342,16 @@ Map<String, dynamic>? zmetaSensorObservation({
     if (geo != null) 'geo': geo.toGeoJson(),
     'features': {
       ...features,
-      'shepherd_obs_type': features['shepherd_obs_type'] ?? 'UNKNOWN',
-      'shepherd_sensor_id': obs.sensorId,
+      'outride_obs_type': features['outride_obs_type'] ?? 'UNKNOWN',
+      'outride_sensor_id': obs.sensorId,
     },
     'quality': {
       'calibration_state': 'UNCALIBRATED',
-      'shepherd_estimates': true,
+      'outride_estimates': true,
       if (geo != null) ...{
         'geo_status': 'VERTICAL_UNAVAILABLE',
-        'shepherd_geo_source': geo.source,
-        'shepherd_geo_note':
+        'outride_geo_source': geo.source,
+        'outride_geo_note':
             'Sensor (platform) position, not target position.',
       } else
         'geo_status': 'UNAVAILABLE',
@@ -376,7 +376,7 @@ Map<String, dynamic>? zmetaSensorObservation({
       'node_role': 'EDGE',
       // eo-sensor-* is the governed producer pattern for EO events
       // (policy/producer-authority.yaml).
-      'producer': 'eo-sensor-shepherd',
+      'producer': 'eo-sensor-outride',
       'sensor_id': obs.sensorId,
     },
     'profile': 'H',
@@ -395,7 +395,7 @@ Map<String, dynamic> zmetaInference({
   required DateTime ts,
   required String label, // PASSING | LINGERING | INTERFERENCE | FAULT
   required double confidence, // 0..1
-  String modelName = 'shepherd-disturbance-clf',
+  String modelName = 'outride-disturbance-clf',
   String modelVersion = '1.0.0',
 }) {
   final conf = confidence.clamp(0.0, 1.0);
@@ -413,7 +413,7 @@ Map<String, dynamic> zmetaInference({
       // GATEWAY — same convention as ZMeta's own eo-cv/sapient adapters,
       // whose inference also runs on the edge device.
       'node_role': 'GATEWAY',
-      'producer': 'classifier-shepherd',
+      'producer': 'classifier-outride',
     },
     'profile': 'H',
     // Envelope confidence is REQUIRED on INFERENCE (contract 7.1).
@@ -462,7 +462,7 @@ Map<String, dynamic> zmetaInference({
 ///
 /// Schema note: PLATFORM_STATUS metrics require one power field
 /// (battery_pct | fuel_remaining_pct | endurance_remaining_ms |
-/// power_state). Shepherd runs on a phone/PC whose power state the app
+/// power_state). Outride runs on a phone/PC whose power state the app
 /// does not measure, so it honestly reports `power_state: 'UNKNOWN'`
 /// (an allowed enum value) rather than inventing a battery percentage.
 Map<String, dynamic> zmetaPlatformStatus({
@@ -480,9 +480,9 @@ Map<String, dynamic> zmetaPlatformStatus({
     'power_state': 'UNKNOWN',
     // Dismounted team carrying the mesh: ground platform.
     'platform_type': 'GROUND',
-    'shepherd_node_count': nodeCount,
-    'shepherd_detection_count': detectionCount,
-    'shepherd_heartbeat_interval_s': heartbeatIntervalSec,
+    'outride_node_count': nodeCount,
+    'outride_detection_count': detectionCount,
+    'outride_heartbeat_interval_s': heartbeatIntervalSec,
     if (sensorGeo != null) ...{
       'position': {
         'lat': sensorGeo.lat,
@@ -516,7 +516,7 @@ Map<String, dynamic> zmetaPlatformStatus({
       // policy/producer-authority.yaml: rf-sensor-* may emit
       // OBSERVATION_EVENT and SYSTEM_EVENT.
       'node_role': 'EDGE',
-      'producer': 'rf-sensor-shepherd',
+      'producer': 'rf-sensor-outride',
     },
     'profile': 'H',
     'payload': {

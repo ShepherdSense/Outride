@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/build_age.dart';
+import 'package:outride/services/build_age.dart';
 
 void main() {
   group('buildAgeWarning', () {
@@ -60,8 +60,8 @@ void main() {
   });
 
   group('shipped buildDate', () {
-    test('is 2026-11-10, the v0.27.2 cut date', () {
-      expect(buildDate, DateTime(2026, 11, 10));
+    test('is 2026-11-17, the v0.28.0 cut date', () {
+      expect(buildDate, DateTime(2026, 11, 17));
       expect(buildAgeWarningDays, 90);
     });
   });

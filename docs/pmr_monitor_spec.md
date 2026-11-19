@@ -15,10 +15,10 @@ on Herrera-Loera et al., Sensors 2026, 26(19), 6123, "Early-Warning
 Margins for Preamble-Directed Jamming in LoRa: A Dechirp-Domain
 Sensitivity Framework with Severity-Graded Composite-Channel Stress
 Testing" (Panamericana / RIT; full-read notes in
-`~/memory/topics/shepherd_research/lane4_lowpower_transmission.md`,
+`~/memory/topics/outride_research/lane4_lowpower_transmission.md`,
 entry [P27], 2026-10-28 sweep).
 
-Shepherd's backhaul is raw SX1276 LoRa, 22-byte codec, SF7 / 125 kHz,
+Outride's backhaul is raw SX1276 LoRa, 22-byte codec, SF7 / 125 kHz,
 star topology (gateway + nodes; `radio.begin(freq, 125.0, 7, 5, 0x12,
 power, 8)` — preambleLength register 8, i.e. 8 programmed upchirps + 2
 sync-word upchirps + 2.25 downchirps (SFD) on the air). The monitor
@@ -95,7 +95,7 @@ dominates; conditions pick the winner.
 The SX1276 exposes no IQ. The monitor therefore CANNOT run on the
 gateway chip. It runs in `sdr_bridge.py` (stare mode), which already
 captures IQ from RTL-SDR / HackRF / Pluto / USRP / SoapySDR radios
-and ships UDP JSON to Shepherd at 127.0.0.1:49161. The operator stares
+and ships UDP JSON to Outride at 127.0.0.1:49161. The operator stares
 at the backhaul channel (default 915.0 MHz US915; 433.0 MHz for AS433)
 and the monitor watches the same channel the gateway receives on.
 
@@ -103,11 +103,11 @@ and the monitor watches the same channel the gateway receives on.
 
 Files:
 
-- `shepherd_field_kit/sdr_bridge/pmr_monitor.py` — the monitor
+- `outride_field_kit/sdr_bridge/pmr_monitor.py` — the monitor
   (`PmrMonitor`), plus a recorded-IQ CLI (`python pmr_monitor.py
   capture.npy --fs 4000000`). RX-only; reads IQ or files, generates
   nothing.
-- `shepherd_field_kit/sdr_bridge/sdr_bridge.py` — `--pmr` (stare-only),
+- `outride_field_kit/sdr_bridge/sdr_bridge.py` — `--pmr` (stare-only),
   `--pmr-threshold` (optional, default unset = report-only),
   `--pmr-channel` (default 915.0, the declared backhaul channel; the
   monitor runs on the actual stare center and only warns on mismatch).

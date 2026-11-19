@@ -8,10 +8,10 @@
 /// (ARTI — full read; CONFIRMED single-person, indoor/through-wall,
 /// static nodes). What ports is the *method* (anti-blend gating,
 /// far/near split, signed phi); the paper's accuracy numbers do NOT
-/// port to Shepherd's regime (6 nodes, dismounted, on the move,
+/// port to Outride's regime (6 nodes, dismounted, on the move,
 /// airborne Group 2–3 UAS) and are never cited as targets.
 ///
-/// Shepherd adaptations (the gaps the paper leaves):
+/// Outride adaptations (the gaps the paper leaves):
 ///  - TRUE band wavelengths (0.125 m @ 2.4 GHz, 0.33 m @ 915 MHz,
 ///    0.69 m @ 433 MHz) — NEVER the paper's λ0 = 0.05 m geometry-fit
 ///    constant, which is meaningless at our bands and altitudes.
@@ -45,7 +45,7 @@ import 'dart:math' as math;
 import '../models/tracking.dart';
 
 /// Tunables for the ARTI updater. Defaults are the paper's values
-/// (EWMA alpha 0.90, phi_0 −1e-3, motion gate 0.2 m/s) plus Shepherd's
+/// (EWMA alpha 0.90, phi_0 −1e-3, motion gate 0.2 m/s) plus Outride's
 /// divergence/mobility additions.
 class AdaptiveBaselineConfig {
   const AdaptiveBaselineConfig({
@@ -71,7 +71,7 @@ class AdaptiveBaselineConfig {
   final double motionGateMps;
 
   /// Residual gate = this × the link's MAD threshold (disturbance
-  /// units — the Shepherd adaptation of the paper's 1.0 m).
+  /// units — the Outride adaptation of the paper's 1.0 m).
   final double residualGateMadMult;
 
   /// |mu − mu_calib| cap in dB. Exceeding marks the link suspect and

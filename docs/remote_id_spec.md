@@ -1,18 +1,18 @@
-# Remote ID drone decoding — build spec for Shepherd (v0.15.0 candidate)
+# Remote ID drone decoding — build spec for Outride (v0.15.0 candidate)
 
 Prepared 2026-10-05 by the research stage. Feasibility verified against the
-live Shepherd codebase and current public references.
+live Outride codebase and current public references.
 
 ## Why this, why now
 
-Draco (stated 2026-10-05: military organization, Shepherd is a military tool)
+Draco (stated 2026-10-05: military organization, Outride is a military tool)
 accepted the defensive security direction. v0.14.0 already shipped the AIR
 THREATS panel (rogue-AP suspicion + disconnect-burst/"consistent with deauth"
 detection). Of the three defensive items offered, the one NOT yet built is
 **Remote ID drone decoding** — and it is the one that serves his core
 interest: actual drone identities, positions, and operator locations instead
 of anonymous signal disturbances. It is passive, legal, and fits the
-BLE-scan infrastructure Shepherd already has.
+BLE-scan infrastructure Outride already has.
 
 ## Protocol facts (verified 2026-10-05 via web)
 
@@ -77,7 +77,7 @@ BLE-scan infrastructure Shepherd already has.
   47 U.S.C. § 333 prohibits willful interference with no pen-testing
   carve-out for private parties; federal/military spectrum operations
   run under NTIA and DoD authorities inside authorized systems and
-  ranges — not as features bolted onto Shepherd. Shepherd's lane is
+  ranges — not as features bolted onto Outride. Outride's lane is
   defensive detection, which is what v0.14.0 shipped and what this
   Remote ID work extends.
 
@@ -86,14 +86,14 @@ BLE-scan infrastructure Shepherd already has.
 - No real drone needed: ArduRemoteID firmware (ESP32-S3/C3, open source)
   transmits all four transports and is the standard bench transmitter.
   Suggested test loop: flash a spare ESP32-S3 with ArduRemoteID, run
-  Shepherd's BLE scan, confirm the decode matches the flashed ID.
+  Outride's BLE scan, confirm the decode matches the flashed ID.
 - Cross-check path exists today: the opendroneid receiver-android app on
   the Play Store decodes the same broadcasts — a same-air comparison
-  validates Shepherd's port.
+  validates Outride's port.
 
 ## The ask for Draco
 
-"Want me to build Remote ID decoding into the next Shepherd build
+"Want me to build Remote ID decoding into the next Outride build
 (v0.15.0)?" — passive, legal, ~1 build cycle, verified same-day pattern.
 Optional follow-up only if he says yes: does he have (or want to flash)
 an ESP32-S3/C3 as a bench transmitter for the live test.

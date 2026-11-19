@@ -8,7 +8,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/state/app_state.dart';
+import 'package:outride/state/app_state.dart';
 
 void main() {
   test('emitter evidence line names the emitter and says coincident', () {

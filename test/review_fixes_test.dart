@@ -1,11 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/models/link_sample.dart';
-import 'package:shepherd/services/cot_listener.dart';
-import 'package:shepherd/services/esp32_driver.dart';
-import 'package:shepherd/services/node_udp_hub.dart';
-import 'package:shepherd/services/tripwire.dart';
+import 'package:outride/models/link_sample.dart';
+import 'package:outride/services/cot_listener.dart';
+import 'package:outride/services/esp32_driver.dart';
+import 'package:outride/services/node_udp_hub.dart';
+import 'package:outride/services/tripwire.dart';
 
 final _t0 = DateTime(2026, 1, 1, 12);
 
@@ -129,7 +129,7 @@ void main() {
     });
 
     test('calib flag arrives as integer 1 from the firmware', () {
-      // shepherd_node.ino formats the beacon with %d: "calib":1, not
+      // outride_node.ino formats the beacon with %d: "calib":1, not
       // a JSON bool. Dart's 1 == true is false, so the driver must
       // accept the integer form or guided calibration never engages.
       final d = Esp32Driver();

@@ -1,16 +1,16 @@
-/// Shepherd CoT track output — emit-only, defensive-only.
+/// Outride CoT track output — emit-only, defensive-only.
 ///
-/// Publishes Shepherd's fused tracks as Cursor-on-Target events so they
+/// Publishes Outride's fused tracks as Cursor-on-Target events so they
 /// appear on ATAK / WinTAK / TAK Server alongside the rest of the COP.
 ///
-/// DEFENSIVE-ONLY CONTRACT: the only bytes Shepherd ever sends are its
-/// own CoT track events. Affiliation is ALWAYS 'u' (unknown) — Shepherd
+/// DEFENSIVE-ONLY CONTRACT: the only bytes Outride ever sends are its
+/// own CoT track events. Affiliation is ALWAYS 'u' (unknown) — Outride
 /// never asserts hostile/friendly. No fire-control language, no weapon
 /// cueing, no transmit beyond our own tracks.
 ///
-/// Specs: docs/shepherd_cot_output_spec.md (emit format) and
+/// Specs: docs/outride_cot_output_spec.md (emit format) and
 /// docs/predator_integration_spec.md (callsign contract — NOTE: the
-/// callsign format here uses `SHEPHERD-<trackId>` with a hyphen, no
+/// callsign format here uses `OUTRIDE-<trackId>` with a hyphen, no
 /// space, superseding the old spec's spaced form).
 library;
 
@@ -64,7 +64,7 @@ class CotPublisherConfig {
     this.multicastPort = 6969,
     this.takHost = '',
     this.takPort = 8087,
-    this.callsignPrefix = 'SHEPHERD-',
+    this.callsignPrefix = 'OUTRIDE-',
     this.staleSeconds = 30,
     this.publishFloor = 0.3,
     this.airTypeThreshold = 0.5,
@@ -81,7 +81,7 @@ class CotPublisherConfig {
   final String takHost;
   final int takPort;
 
-  /// Callsign/uid prefix. Contract default: 'SHEPHERD-' (hyphen, no
+  /// Callsign/uid prefix. Contract default: 'OUTRIDE-' (hyphen, no
   /// space) per docs/predator_integration_spec.md.
   final String callsignPrefix;
 

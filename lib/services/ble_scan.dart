@@ -81,7 +81,7 @@ Future<void> _ensureBleScanPermission() async {
     debugPrint('BLE permission request failed: $e');
     throw BleScanException(
       'Bluetooth scan permission not granted — allow Nearby devices for '
-      'Shepherd in Android Settings > Apps > Permissions, then scan again.',
+      'Outride in Android Settings > Apps > Permissions, then scan again.',
     );
   }
 }

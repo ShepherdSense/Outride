@@ -7,7 +7,7 @@ output remains a disturbance heatmap — blobs and trails, never
 imagery, never identity, never fire-control-quality tracks.
 
 **Honesty contract (load-bearing):** the paper below was validated at
-30–33 nodes, 2D, ground-plane, stationary humans. Shepherd runs
+30–33 nodes, 2D, ground-plane, stationary humans. Outride runs
 6 nodes / 15 links against airborne Group 2–3 UAS. What ports is the
 **method** — fade-signed, direction-split, area-normalized weighting.
 The paper's ellipse parameters and its ≤ 0.30 m accuracy figure do
@@ -82,7 +82,7 @@ probability mapping:
   — summing `|Δr|` first is what lets a rise and a dip on the same
   pixel cancel or double-count.
 
-Shepherd's `β`/`λ` parameters are **not** the paper's Table I
+Outride's `β`/`λ` parameters are **not** the paper's Table I
 values — those were fit to CC2530 2.4 GHz Zigbee channels in
 rooms. Ours are fit per band (below) from our own calibration
 data, starting from the paper's *functional forms*.
@@ -177,7 +177,7 @@ Fresnel weighting on the strength of MFDL.**
 - **Node-count regime:** 6 nodes / 15 links is far below the
   validated 30–33-node regime. The method ports; no accuracy number
   ports. The ≤ 0.30 m through-wall figure is cited as a paper
-  result only — it is not a Shepherd claim, target, or requirement.
+  result only — it is not a Outride claim, target, or requirement.
 - **2D model, 3D targets:** the paper is 2D at node height;
   Group 2–3 UAS are airborne. We import the *method*
   (fade-signed, direction-split, area-normalized), not the

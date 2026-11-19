@@ -18,7 +18,7 @@ the old corpus.
 
 Usage:
   python tools/bench_link_dropout.py \
-      [--old /tmp/shepherd_old_clf/disturbance_clf.json.orig] \
+      [--old /tmp/outride_old_clf/disturbance_clf.json.orig] \
       [--new assets/models/disturbance_clf.json] \
       [--out /tmp/link_dropout_bench.json]
 """
@@ -76,7 +76,7 @@ def per_class(pred, y):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--old", default="/tmp/shepherd_old_clf/disturbance_clf.json.orig")
+    ap.add_argument("--old", default="/tmp/outride_old_clf/disturbance_clf.json.orig")
     ap.add_argument("--new", default=None,
                     help="default: <repo>/assets/models/disturbance_clf.json")
     ap.add_argument("--out", default="/tmp/link_dropout_bench.json")

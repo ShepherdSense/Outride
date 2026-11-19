@@ -84,7 +84,7 @@ bool zmetaIsValidPlatformId(String s) =>
 /// may QR the bare code or a line of text containing it (e.g. a label
 /// or URL), so this scans for the `Z1.` token and takes the run of
 /// code characters that follows. Returns the code only when it fully
-/// parses — a QR that is not a Shepherd invite yields null, never a
+/// parses — a QR that is not a Outride invite yields null, never a
 /// partially-trusted string.
 String? zmetaInviteCodeFromScan(String raw) {
   final start = raw.indexOf('Z1.');

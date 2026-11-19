@@ -45,7 +45,7 @@ class WifiAwareService {
     onUpdate?.call();
   }
 
-  Future<void> startDiscovery({String serviceName = 'shepherd'}) async {
+  Future<void> startDiscovery({String serviceName = 'outride'}) async {
     if (available != true || discovering) return;
     discovering = true;
     error = null;

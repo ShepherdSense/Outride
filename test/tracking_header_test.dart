@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/screens/tracking.dart';
-import 'package:shepherd/state/app_state.dart';
+import 'package:outride/screens/tracking.dart';
+import 'package:outride/state/app_state.dart';
 
 /// Regression test for the field report of 2026-10-20: the FIELD MAP
 /// header put the title, fullscreen button, four layer toggles and the

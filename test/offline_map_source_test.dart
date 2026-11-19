@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:shepherd/services/offline_map_source.dart';
+import 'package:outride/services/offline_map_source.dart';
 
 /// 1x1 transparent PNG.
 final _tinyPng = base64Decode(
@@ -124,7 +124,7 @@ void main() {
     late TileCache cache;
 
     setUp(() {
-      temp = Directory.systemTemp.createTempSync('shepherd_tiles_test_');
+      temp = Directory.systemTemp.createTempSync('outride_tiles_test_');
     });
 
     tearDown(() {

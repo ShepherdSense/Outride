@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train RF Sentry's embedded disturbance classifier.
+"""Train Outride's embedded disturbance classifier.
 
 A SMALL, task-oriented neural network — not an LLM. It takes 10 numeric
 features describing one closed radio disturbance event and classifies it:
@@ -92,7 +92,7 @@ KIM TUNING DISCIPLINE (v0.25.0; Kim et al., arXiv:2505.04085v2, §6.12.1
 of the lane-1 research notes) — SPARSE-RTI RECONSTRUCTION PARAMETERS,
 NOT the MLP classifier above. The classifier above is untouched by
 this section; what is added here is the discipline Kim et al. used
-for their multipath-RTI reconstruction, ported to Shepherd's sparse
+for their multipath-RTI reconstruction, ported to Outride's sparse
 link-shadow imaging as a Python-side tuning tool:
 
   * Elastic Net (l1 + l2) reconstruction of a disturbance image from
@@ -113,7 +113,7 @@ WHAT THIS PAPER DOES *NOT* SUPPORT (do not upgrade on it): Kim et
 al. ran multipath-RTI with ray-traced paths and 8-element arrays;
 their few-node results do NOT rescue plain single-antenna RSS RTI,
 and their paper explicitly leaves the 6-node plain-RSS question
-unanswered. Shepherd's standing 6-node / 15-link imaging bound of
+unanswered. Outride's standing 6-node / 15-link imaging bound of
 ~1-2 m is UNCHANGED by this work. This section tunes parameters
 for the imaging we already do; it does not claim better imaging.
 
@@ -472,7 +472,7 @@ def build_link_pixel_weights(nodes, pixels, gamma):
     Weight w = 1 / (1 + excess / gamma): gamma is the thickness
     scale -- small gamma makes thin, link-hugging ellipses; large
     gamma makes diffuse ones. Links are ordered pairs i < j, so a
-    6-node deployment yields 15 links, matching Shepherd's sparse
+    6-node deployment yields 15 links, matching Outride's sparse
     regime. Area normalization is deliberately NOT applied here:
     gamma tuning must see the raw thickness effect, and the
     area-normalized weighting already lives app-side (see

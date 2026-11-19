@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 /// glass panels, monospace technical type, glowing accents.
 /// Dark only — there is intentionally no light theme.
 
-class SentryColors {
+class OutrideColors {
   static const background = Color(0xFF060809); // near-black
   static const surface = Color(0xFF0B0F14); // floating panel
   static const surface2 = Color(0xFF121822); // inputs, wells
@@ -23,7 +23,7 @@ class SentryColors {
 }
 
 /// Monospace technical typography, RuView style.
-class SentryType {
+class OutrideType {
   static const String mono = 'JetBrainsMono';
 
   /// Letterspaced section header, e.g. "VITAL SIGNS".
@@ -31,7 +31,7 @@ class SentryType {
         fontFamily: mono,
         fontSize: size,
         letterSpacing: 2.4,
-        color: SentryColors.muted,
+        color: OutrideColors.muted,
         fontWeight: FontWeight.w500,
       );
 
@@ -47,7 +47,7 @@ class SentryType {
   static TextStyle rowLabel() => const TextStyle(
         fontFamily: mono,
         fontSize: 12,
-        color: SentryColors.muted,
+        color: OutrideColors.muted,
         letterSpacing: 0.8,
       );
 
@@ -68,8 +68,8 @@ class SentryType {
 }
 
 /// Floating dark panel with a hairline border, RuView style.
-class SentryPanel extends StatelessWidget {
-  const SentryPanel({
+class OutridePanel extends StatelessWidget {
+  const OutridePanel({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(16),
@@ -87,8 +87,8 @@ class SentryPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: SentryColors.surface,
-        border: Border.all(color: glow ?? SentryColors.border),
+        color: OutrideColors.surface,
+        border: Border.all(color: glow ?? OutrideColors.border),
         borderRadius: BorderRadius.circular(16),
         boxShadow: glow == null
             ? null
@@ -107,8 +107,8 @@ class SentryPanel extends StatelessWidget {
 }
 
 /// Outlined pill chip, e.g. "INBOUND", "SIZE M".
-class SentryChip extends StatelessWidget {
-  const SentryChip({
+class OutrideChip extends StatelessWidget {
+  const OutrideChip({
     super.key,
     required this.label,
     required this.color,
@@ -136,7 +136,7 @@ class SentryChip extends StatelessWidget {
             Icon(icon, color: color, size: 14),
             const SizedBox(width: 6),
           ],
-          Text(label, style: SentryType.chip(color)),
+          Text(label, style: OutrideType.chip(color)),
         ],
       ),
     );
@@ -144,8 +144,8 @@ class SentryChip extends StatelessWidget {
 }
 
 /// Small floating + / − / 1:1 zoom controls for the 3D views.
-class SentryZoomControls extends StatelessWidget {
-  const SentryZoomControls({
+class OutrideZoomControls extends StatelessWidget {
+  const OutrideZoomControls({
     super.key,
     required this.onZoomIn,
     required this.onZoomOut,
@@ -160,8 +160,8 @@ class SentryZoomControls extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: SentryColors.surface.withAlpha(220),
-        border: Border.all(color: SentryColors.border),
+        color: OutrideColors.surface.withAlpha(220),
+        border: Border.all(color: OutrideColors.border),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -182,7 +182,7 @@ class SentryZoomControls extends StatelessWidget {
       child: Padding(
         padding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Text(label, style: SentryType.chip(SentryColors.onDark)),
+        child: Text(label, style: OutrideType.chip(OutrideColors.onDark)),
       ),
     );
   }
@@ -192,75 +192,75 @@ ThemeData buildDarkTheme() {
   final base = ThemeData.dark(useMaterial3: true);
   return base.copyWith(
     colorScheme: const ColorScheme.dark(
-      primary: SentryColors.blue,
-      secondary: SentryColors.amber,
-      surface: SentryColors.surface,
-      error: SentryColors.red,
+      primary: OutrideColors.blue,
+      secondary: OutrideColors.amber,
+      surface: OutrideColors.surface,
+      error: OutrideColors.red,
       onPrimary: Colors.black,
       onSecondary: Colors.black,
-      onSurface: SentryColors.onDark,
+      onSurface: OutrideColors.onDark,
     ),
-    scaffoldBackgroundColor: SentryColors.background,
-    cardColor: SentryColors.surface,
-    dividerColor: SentryColors.border,
+    scaffoldBackgroundColor: OutrideColors.background,
+    cardColor: OutrideColors.surface,
+    dividerColor: OutrideColors.border,
     appBarTheme: AppBarTheme(
-      backgroundColor: SentryColors.background,
-      foregroundColor: SentryColors.onDark,
+      backgroundColor: OutrideColors.background,
+      foregroundColor: OutrideColors.onDark,
       elevation: 0,
-      titleTextStyle: SentryType.section(15).copyWith(
-        color: SentryColors.onDark,
+      titleTextStyle: OutrideType.section(15).copyWith(
+        color: OutrideColors.onDark,
         letterSpacing: 4,
         fontWeight: FontWeight.w700,
       ),
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       backgroundColor: Color(0xFF080B0E),
-      selectedItemColor: SentryColors.green,
-      unselectedItemColor: SentryColors.muted,
+      selectedItemColor: OutrideColors.green,
+      unselectedItemColor: OutrideColors.muted,
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith(
-        (s) => s.contains(WidgetState.selected) ? SentryColors.green : SentryColors.muted,
+        (s) => s.contains(WidgetState.selected) ? OutrideColors.green : OutrideColors.muted,
       ),
       trackColor: WidgetStateProperty.resolveWith(
         (s) => s.contains(WidgetState.selected)
-            ? SentryColors.green.withAlpha(90)
-            : SentryColors.surface2,
+            ? OutrideColors.green.withAlpha(90)
+            : OutrideColors.surface2,
       ),
     ),
     sliderTheme: base.sliderTheme.copyWith(
-      activeTrackColor: SentryColors.blue,
-      inactiveTrackColor: SentryColors.surface2,
-      thumbColor: SentryColors.blue,
-      overlayColor: SentryColors.blue.withAlpha(40),
-      valueIndicatorColor: SentryColors.surface2,
+      activeTrackColor: OutrideColors.blue,
+      inactiveTrackColor: OutrideColors.surface2,
+      thumbColor: OutrideColors.blue,
+      overlayColor: OutrideColors.blue.withAlpha(40),
+      valueIndicatorColor: OutrideColors.surface2,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: SentryColors.surface2,
+      fillColor: OutrideColors.surface2,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: SentryColors.border),
+        borderSide: const BorderSide(color: OutrideColors.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: SentryColors.border),
+        borderSide: const BorderSide(color: OutrideColors.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: SentryColors.blue),
+        borderSide: const BorderSide(color: OutrideColors.blue),
       ),
       labelStyle: const TextStyle(
-          color: SentryColors.muted, fontFamily: SentryType.mono, fontSize: 12),
+          color: OutrideColors.muted, fontFamily: OutrideType.mono, fontSize: 12),
       hintStyle: const TextStyle(
-          color: SentryColors.muted, fontFamily: SentryType.mono, fontSize: 12),
+          color: OutrideColors.muted, fontFamily: OutrideType.mono, fontSize: 12),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: SentryColors.green,
+        backgroundColor: OutrideColors.green,
         foregroundColor: Colors.black,
         textStyle: const TextStyle(
-          fontFamily: SentryType.mono,
+          fontFamily: OutrideType.mono,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.5,
           fontSize: 13,
@@ -273,17 +273,17 @@ ThemeData buildDarkTheme() {
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: SentryColors.blue,
+        foregroundColor: OutrideColors.blue,
         textStyle: const TextStyle(
-          fontFamily: SentryType.mono,
+          fontFamily: OutrideType.mono,
           fontSize: 12,
           letterSpacing: 1.2,
         ),
       ),
     ),
     textTheme: base.textTheme.apply(
-      bodyColor: SentryColors.onDark,
-      displayColor: SentryColors.onDark,
+      bodyColor: OutrideColors.onDark,
+      displayColor: OutrideColors.onDark,
     ),
   );
 }

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/models/link_sample.dart';
-import 'package:shepherd/services/adaptive_baseline.dart';
-import 'package:shepherd/services/tripwire.dart';
+import 'package:outride/models/link_sample.dart';
+import 'package:outride/services/adaptive_baseline.dart';
+import 'package:outride/services/tripwire.dart';
 
 final _t0 = DateTime(2026, 1, 1, 12);
 

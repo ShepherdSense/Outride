@@ -75,24 +75,24 @@ class _BeamScreenState extends State<BeamScreen> {
         return ListView(
           padding: const EdgeInsets.all(12),
           children: [
-            SentryPanel(
+            OutridePanel(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Text('BEAM VIEW', style: SentryType.section()),
+                      Text('BEAM VIEW', style: OutrideType.section()),
                       const Spacer(),
                       IconButton(
                         tooltip: 'FULLSCREEN',
                         icon: const Icon(Icons.fullscreen,
-                            color: SentryColors.muted, size: 20),
+                            color: OutrideColors.muted, size: 20),
                         onPressed: () =>
                             setState(() => _fullscreen = true),
                       ),
                       Text('DRAG TO ORBIT',
-                          style: SentryType.section(10).copyWith(
-                              color: SentryColors.blue)),
+                          style: OutrideType.section(10).copyWith(
+                              color: OutrideColors.blue)),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -100,7 +100,7 @@ class _BeamScreenState extends State<BeamScreen> {
                     'IDEALIZED WHIP + PANEL PATTERNS — NOT TO SCALE. '
                     'PANEL AIM AUTO-POINTS AT THE NEAREST NODE. '
                     'SET EACH NODE\'S ANTENNA TYPE ON THE TRACKING TAB.',
-                    style: SentryType.section(10)
+                    style: OutrideType.section(10)
                         .copyWith(height: 1.6),
                   ),
                   const SizedBox(height: 10),
@@ -109,24 +109,24 @@ class _BeamScreenState extends State<BeamScreen> {
                     runSpacing: 6,
                     children: [
                       _LegendDot(
-                          color: SentryColors.blue, label: 'WHIP'),
+                          color: OutrideColors.blue, label: 'WHIP'),
                       _LegendDot(
-                          color: SentryColors.orange, label: 'PANEL'),
+                          color: OutrideColors.orange, label: 'PANEL'),
                       _LegendDot(
-                          color: SentryColors.amber,
+                          color: OutrideColors.amber,
                           label: 'FRESNEL ZONE'),
                       _LegendDot(
-                          color: SentryColors.amber,
+                          color: OutrideColors.amber,
                           label: 'TRACK'),
                       _LegendDot(
-                          color: SentryColors.red, label: 'DEFENDED'),
+                          color: OutrideColors.red, label: 'DEFENDED'),
                     ],
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
-            SentryPanel(
+            OutridePanel(
               padding: const EdgeInsets.all(8),
               child: SizedBox(
                 height: 380,
@@ -155,7 +155,7 @@ class _BeamScreenState extends State<BeamScreen> {
     if (nodes.isEmpty) {
       return Center(
         child: Text('NO NODES YET — START POLLING FIRST',
-            style: SentryType.section()),
+            style: OutrideType.section()),
       );
     }
     return LayoutBuilder(
@@ -202,7 +202,7 @@ class _BeamScreenState extends State<BeamScreen> {
             Positioned(
               right: 4,
               top: 4,
-              child: SentryZoomControls(
+              child: OutrideZoomControls(
                 onZoomIn: () => _bumpZoom(1.25),
                 onZoomOut: () => _bumpZoom(1 / 1.25),
                 onReset: _resetView,
@@ -217,7 +217,7 @@ class _BeamScreenState extends State<BeamScreen> {
   /// Floating exit-fullscreen chip shown over the fullscreen view.
   Widget _exitFullscreenChip() {
     return Material(
-      color: SentryColors.surface2.withAlpha(220),
+      color: OutrideColors.surface2.withAlpha(220),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
@@ -229,11 +229,11 @@ class _BeamScreenState extends State<BeamScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.fullscreen_exit,
-                  color: SentryColors.onDark, size: 16),
+                  color: OutrideColors.onDark, size: 16),
               const SizedBox(width: 6),
               Text('EXIT FULLSCREEN',
-                  style: SentryType.section(10)
-                      .copyWith(color: SentryColors.onDark)),
+                  style: OutrideType.section(10)
+                      .copyWith(color: OutrideColors.onDark)),
             ],
           ),
         ),
@@ -260,7 +260,7 @@ class _LegendDot extends StatelessWidget {
               BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
-        Text(label, style: SentryType.section(10)),
+        Text(label, style: OutrideType.section(10)),
       ],
     );
   }
@@ -271,14 +271,14 @@ class _BeamScopeNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SentryPanel(
+    return OutridePanel(
       child: Text(
         'WHAT THIS SHOWS — TEXTBOOK ANTENNA PATTERNS PLACED AT YOUR NODE LAYOUT, '
         'PLUS EACH LINK\'S FIRST FRESNEL ZONE (THE SENSITIVE REGION). THE TRACK MARKER '
         'IS THE TRACK ESTIMATE — METERS-SCALE, NOT AN IMAGE OF THE OBJECT. WITH 2 NODES '
         'THERE IS NO POSITION FIX, SO NO MARKER APPEARS. THE MARKER SITS AT GROUND LEVEL '
         'WHEN ALTITUDE IS UNKNOWN.',
-        style: SentryType.section(10).copyWith(height: 1.7),
+        style: OutrideType.section(10).copyWith(height: 1.7),
       ),
     );
   }
@@ -411,7 +411,7 @@ class _BeamPainter extends CustomPainter {
     maxY += pad;
 
     // Ground grid, 10 m.
-    final gridColor = SentryColors.border.withAlpha(100);
+    final gridColor = OutrideColors.border.withAlpha(100);
     for (var gx = (minX / 10).floor() * 10.0; gx <= maxX; gx += 10) {
       wires.add(_Wire(
           [_V3(gx, minY, 0), _V3(gx, maxY, 0)], gridColor, 1));
@@ -422,7 +422,7 @@ class _BeamPainter extends CustomPainter {
     }
 
     // Faint mesh links between node tops.
-    final linkColor = SentryColors.border.withAlpha(160);
+    final linkColor = OutrideColors.border.withAlpha(160);
     final ids = tops.keys.toList();
     for (var i = 0; i < ids.length; i++) {
       for (var j = i + 1; j < ids.length; j++) {
@@ -443,7 +443,7 @@ class _BeamPainter extends CustomPainter {
             wires,
             tops[ids[i]]!,
             tops[ids[j]]!,
-            hot ? SentryColors.amber : SentryColors.muted);
+            hot ? OutrideColors.amber : OutrideColors.muted);
       }
     }
 
@@ -453,39 +453,39 @@ class _BeamPainter extends CustomPainter {
       wires.add(_Wire([
         _V3(n.x, n.y, 0),
         top
-      ], SentryColors.muted.withAlpha(120), 1));
+      ], OutrideColors.muted.withAlpha(120), 1));
       if (n.antenna == 'panel') {
         _addPanel(wires, top, _aimAtNearest(n));
       } else {
         _addWhip(wires, top);
       }
-      boards.add(_Billboard(top, SentryColors.blue, 5));
+      boards.add(_Billboard(top, OutrideColors.blue, 5));
       labels.add(_Label3(
-          _V3(n.x, n.y, n.height + 2.5), n.nodeId, SentryColors.onDark));
+          _V3(n.x, n.y, n.height + 2.5), n.nodeId, OutrideColors.onDark));
     }
 
     // Defended point marker.
     final dp = _V3(defended.x, defended.y, 0);
-    boards.add(_Billboard(dp, SentryColors.red, 5));
+    boards.add(_Billboard(dp, OutrideColors.red, 5));
     labels.add(
-        _Label3(_V3(defended.x, defended.y, 2.5), 'DEF', SentryColors.red));
+        _Label3(_V3(defended.x, defended.y, 2.5), 'DEF', OutrideColors.red));
 
     // Track marker: glow rings + billboard core + drop line.
     if (t != null) {
       final z = t.altitudeM ?? 0.0;
       final c = _V3(t.x, t.y, z);
       wires.add(_Wire([_V3(t.x, t.y, 0), c],
-          SentryColors.amber.withAlpha(130), 1.5));
+          OutrideColors.amber.withAlpha(130), 1.5));
       for (final r in [3.0, 6.0]) {
         wires.add(_Wire(_circle(c, _xAxis, _yAxis, r, 20),
-            SentryColors.amber.withAlpha(110), 1.5));
+            OutrideColors.amber.withAlpha(110), 1.5));
       }
-      boards.add(_Billboard(c, SentryColors.amber, 9));
+      boards.add(_Billboard(c, OutrideColors.amber, 9));
       boards.add(_Billboard(c, const Color(0xFFFFFFFF), 4));
       labels.add(_Label3(
           _V3(t.x, t.y, z + 3.5),
           t.altitudeM == null ? 'TRACK — ALT UNKNOWN' : 'TRACK',
-          SentryColors.amber));
+          OutrideColors.amber));
     }
 
     // Camera.
@@ -572,7 +572,7 @@ class _BeamPainter extends CustomPainter {
             style: TextStyle(
               color: l.color,
               fontSize: 10,
-              fontFamily: SentryType.mono,
+              fontFamily: OutrideType.mono,
               letterSpacing: 1.2,
             )),
         textDirection: TextDirection.ltr,
@@ -600,7 +600,7 @@ class _BeamPainter extends CustomPainter {
   /// Idealized whip (short dipole) power pattern: sin^2(polar).
   void _addWhip(List<_Wire> wires, _V3 apex) {
     const L = 16.0; // display size only — not to scale
-    const color = SentryColors.blue;
+    const color = OutrideColors.blue;
     for (var ti = 1; ti <= 11; ti++) {
       final th = ti * math.pi / 12;
       final r = L * math.pow(math.sin(th), 2);
@@ -630,7 +630,7 @@ class _BeamPainter extends CustomPainter {
 
   /// Idealized panel lobe: cone aimed at [aim], ~64° beamwidth.
   void _addPanel(List<_Wire> wires, _V3 apex, _V3 aim) {
-    const color = SentryColors.orange;
+    const color = OutrideColors.orange;
     const halfAngle = 32 * math.pi / 180;
     final ref = aim.z.abs() < 0.9 ? _zAxis : _yAxis;
     final u = aim.cross(ref).norm;

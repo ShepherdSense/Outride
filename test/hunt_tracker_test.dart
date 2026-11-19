@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/hunt_tracker.dart';
+import 'package:outride/services/hunt_tracker.dart';
 
 final _t0 = DateTime(2026, 1, 1, 12);
 DateTime _at(int seconds) => _t0.add(Duration(seconds: seconds));

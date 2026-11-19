@@ -1,7 +1,7 @@
 /// Airframe identity + capability classification for the Skydio
 /// integration (docs/skydio_integration_spec.md).
 ///
-/// Shepherd meets an airframe through whatever evidence actually
+/// Outride meets an airframe through whatever evidence actually
 /// arrives — a controller CoT feed, a Remote ID broadcast, a mesh node
 /// with the right callsign — and classifies it by that evidence:
 ///
@@ -248,7 +248,7 @@ class AirframeRecord {
   /// Display affiliation, honesty contract:
   ///  - registry/CoT-corroborated friendly → `FRIENDLY`
   ///  - CoT-affiliation-only → `FRIENDLY (FEED)` (the feed asserts
-  ///    it; Shepherd did not verify it)
+  ///    it; Outride did not verify it)
   ///  - RID whitelist claim, uncorroborated → `FRIENDLY (claimed)`
   ///  - anything else → `UNKNOWN`
   String get affiliationLabel {
@@ -308,7 +308,7 @@ class CotPlatformEvidence {
 /// One friendly GROUND track: a dismount's position as reported
 /// by the cooperative TAK feed (v0.23.0 — the PRC-163 path). A
 /// 163's PLI rides its waveform to an ATAK EUD and comes out as a
-/// CoT `a-f-G*` event; that event is ALL Shepherd ever gets from
+/// CoT `a-f-G*` event; that event is ALL Outride ever gets from
 /// the radio — position presence, never link metrics (none exist;
 /// see docs/prc163_ground_tracks_spec.md).
 ///
@@ -345,7 +345,7 @@ class GroundTrackRecord {
 
   /// How friendliness was established: 'registry' (the operator's
   /// whitelist names this unit) or 'cot' (the feed asserts the
-  /// friendly affiliation — `a-f-` — and Shepherd did not verify
+  /// friendly affiliation — `a-f-` — and Outride did not verify
   /// it). Mirrors [AirframeRecord.friendlyBasis].
   String friendlyBasis = 'cot';
 

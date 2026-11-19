@@ -13,7 +13,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/device_autoconnect.dart';
+import 'package:outride/services/device_autoconnect.dart';
 
 void main() {
   group('SilvusUsbWatcher.hasUsbLink', () {

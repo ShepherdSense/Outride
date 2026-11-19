@@ -4,7 +4,7 @@
 record, and score — neither transmits, jams, deauths, or spoofs. The
 harness is an offline design tool; nothing in it ships in the app.
 
-**Goal:** close the validation loop the program is missing. Shepherd's
+**Goal:** close the validation loop the program is missing. Outride's
 fusion pipeline (gated confidence merger, innovation monitor, track
 stitcher) and its CSI feature work are currently validated against
 synthetic data only. This spec adds two benches: (A) a public real-data
@@ -13,13 +13,13 @@ go/no-go bench for ESP32 CSI frame-rate feasibility.
 
 ## Honesty contract (load-bearing)
 
-- **The AERPAW replay validates the fusion machinery, not Shepherd's
+- **The AERPAW replay validates the fusion machinery, not Outride's
   end-to-end detection of non-cooperative targets.** The dataset's RF
   side tracked the UAV's own emission (cooperative in the RF sense);
-  Shepherd's tripwire detects non-cooperative link disturbance. Say this
+  Outride's tripwire detects non-cooperative link disturbance. Say this
   in the UI evidence copy, in the README, and in any test report: the
-  harness scores what Shepherd's tracker *does with* real trajectories,
-  not whether Shepherd's sensors would have seen this target.
+  harness scores what Outride's tracker *does with* real trajectories,
+  not whether Outride's sensors would have seen this target.
 - **The CSI bench measures raw CSI frame-rate feasibility on ESP32,
   nothing more.** It does not validate Fresnel-zone weighting for sparse
   RTI — that remains an unvalidated research lead (see § Fresnel lead).
@@ -43,14 +43,14 @@ was 21.9 m at 100% coverage. The measured radar cross-section of the
 hexacopter test target was 0.0066–0.549 m² with a mean of 0.12 m² at
 Ku-band (CONFIRMED).
 
-What this validates for Shepherd — and what it does not:
+What this validates for Outride — and what it does not:
 - **CONFIRMED from the paper:** the public dataset exists with RTK
   ground truth and is suitable for offline replay scoring.
 - **CLAIMED (adopted as a design pattern, not a paper result):** the
   fusion build pattern the trial's track management implies —
   NIS-gating + range-gate + coast-on-prediction. This is a sound
   engineering pattern to adopt; the paper is evidence it works in a
-  comparable fusion setting, not a proof it ports to Shepherd's
+  comparable fusion setting, not a proof it ports to Outride's
   tripwire geometry.
 - **Explicit non-transfer:** the RF side tracked the UAV's own emission
   (cooperative in the RF sense). This caveat travels with every replay
@@ -116,7 +116,7 @@ positions is the follow-up run the bench README already proposes.
 
 The research sweep's standing finding: synthetic training is only
 conditionally sound. The current bench scores the tracker against
-trajectories Shepherd's own `synth_data.py` invented — the same family
+trajectories Outride's own `synth_data.py` invented — the same family
 of motion models the tracker was tuned on. The AERPAW dataset breaks
 that circularity with real trajectories: real accelerations, real
 outliers, real dropouts. If the track-stitching and consistency
@@ -241,7 +241,7 @@ work with. 500 is the method's floor, not a nice-to-have.
 ### Procedure
 
 1. **Firmware-side frame-rate sweep** in
-   `~/workspace/shepherd_field_kit/esp32/shepherd_node/shepherd_node.ino`:
+   `~/workspace/outride_field_kit/esp32/outride_node/outride_node.ino`:
    add a bench mode (compile flag, off by default — never in the
    shipping build) that pushes CSI amplitude reports at the highest
    rate the Wi-Fi task will sustain, stepping the offered rate
@@ -283,21 +283,21 @@ proven on ESP32 hardware (the bisector-walk the paper requires);
 `docs/rti_imaging_weights_spec.md` on recorded link data — the paper
 contains no such comparison (CONFIRMED gap); (4) validation outside the
 5 m monotonic zone-gap regime before any claim about drones. Until all
-four hold, no Fresnel weighting enters Shepherd's imaging path.
+four hold, no Fresnel weighting enters Outride's imaging path.
 
 ## Honest-scope limits
 
 - **AERPAW replay:** validates fusion machinery (association, gating,
   stitching, consistency monitoring) against real trajectories. It does
-  **not** validate Shepherd's end-to-end detection of non-cooperative
+  **not** validate Outride's end-to-end detection of non-cooperative
   targets — the dataset's RF side tracked the UAV's own emission. Any
   report that omits this sentence is not releasable.
 - **CSI bench:** measures frame-rate feasibility only. A passing number
   is not a localization result and must never be quoted as one.
 - **RCS data:** the 0.0066–0.549 m² (mean 0.12 m²) Ku-band hexacopter
   RCS is a documented reference for range math, not a claim about
-  Shepherd's link-shadowing sensitivity or about Shahed-class targets.
-- **MFDL transfer:** everything about MFDL's applicability to Shepherd
+  Outride's link-shadowing sensitivity or about Shahed-class targets.
+- **MFDL transfer:** everything about MFDL's applicability to Outride
   (moving mesh, drone ranges, RTI weighting) is an open research
   question until the four conditions in the Fresnel-lead section hold.
   The paper's regime is 4 transceivers, ~70 m², human walkers, 5 m off
@@ -335,7 +335,7 @@ four hold, no Fresnel weighting enters Shepherd's imaging path.
 - `~/workspace/rf_sentry/tools/train_disturbance_clf.py`,
   `~/workspace/rf_sentry/tools/train_stitcher.py` — upstream training;
   replay results feed retraining decisions.
-- `~/workspace/shepherd_field_kit/esp32/shepherd_node/shepherd_node.ino`
+- `~/workspace/outride_field_kit/esp32/outride_node/outride_node.ino`
   — bench mode (compile flag, off by default); UDP 49160 is the path
   under test.
 - App modules scored in the bench (behavior ported, not duplicated):

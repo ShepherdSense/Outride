@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AERPAW dataset ingest adapter for the Shepherd replay harness.
+"""AERPAW dataset ingest adapter for the Outride replay harness.
 
 Dataset: Dickerson et al., "Fusion of Cellular ISAC and Passive RF
 Sensing for UAV Detection and Tracking", arXiv:2512.14608 (Dec 2025).
@@ -36,9 +36,9 @@ DOWNLOAD STATUS (honest, do not fake provenance):
 CAVEAT (travels with every replay result):
   This harness validates the FUSION MACHINERY (association, NIS/range
   gating, track stitching, consistency monitoring) against real
-  trajectories -- NOT Shepherd's end-to-end detection of non-cooperative
+  trajectories -- NOT Outride's end-to-end detection of non-cooperative
   targets. The dataset's RF side tracked the UAV's own emission
-  (cooperative in the RF sense); Shepherd's tripwire detects
+  (cooperative in the RF sense); Outride's tripwire detects
   non-cooperative link disturbance.
 
 RX-only. Offline design tool; nothing here ships in the app.

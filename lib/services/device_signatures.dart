@@ -1,5 +1,5 @@
 /// Wi-Fi / BLE device-signature library — "what's around me"
-/// (Shepherd v0.26.0, Fieldwatch-borrow item 2).
+/// (Outride v0.26.0, Fieldwatch-borrow item 2).
 ///
 /// CONCEPT ATTRIBUTION: the concept — matching phone-visible Wi-Fi
 /// scan results and BLE advertisements against an extensible

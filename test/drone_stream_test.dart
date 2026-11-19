@@ -9,9 +9,9 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/screens/drone_tab.dart';
-import 'package:shepherd/services/drone_stream.dart';
-import 'package:shepherd/state/app_state.dart';
+import 'package:outride/screens/drone_tab.dart';
+import 'package:outride/services/drone_stream.dart';
+import 'package:outride/state/app_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FakeDronePlayer implements DronePlayer {

@@ -25,7 +25,7 @@ import 'package:flutter/services.dart';
 import 'remote_id.dart';
 
 /// Supplies Wi-Fi survey rows for RID extraction. The real
-/// implementation reads the shepherd/wifi_sense channel; tests
+/// implementation reads the outride/wifi_sense channel; tests
 /// inject rows directly.
 typedef RidWifiSurveySource = Future<List<Map<dynamic, dynamic>>?> Function();
 
@@ -43,7 +43,7 @@ class RemoteIdService {
   Timer? _wifiTimer;
   final RidWifiSurveySource _wifiSource;
 
-  static const MethodChannel _channel = MethodChannel('shepherd/wifi_sense');
+  static const MethodChannel _channel = MethodChannel('outride/wifi_sense');
 
   static Future<List<Map<dynamic, dynamic>>?> _channelSurvey() async {
     try {

@@ -22,9 +22,9 @@ library;
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/models/sensor_observation.dart';
-import 'package:shepherd/services/confidence_merger.dart';
-import 'package:shepherd/services/track_consistency.dart';
+import 'package:outride/models/sensor_observation.dart';
+import 'package:outride/services/confidence_merger.dart';
+import 'package:outride/services/track_consistency.dart';
 
 GatedCorroboration _g(String id, double boost, double w) =>
     GatedCorroboration(sensorId: id, boost: boost, gateWeight: w);

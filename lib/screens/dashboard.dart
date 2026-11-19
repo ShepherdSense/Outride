@@ -8,14 +8,15 @@ import '../services/radio_driver.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import 'evidence_sheet.dart';
+import 'fleet_screen.dart';
 import 'hunt_screen.dart';
 
 /// Dot color for a crossing event's size estimate. Pure function so the
 /// timeline and the detection card agree — and so it's unit-testable.
 Color eventSizeColor(String sizeEstimate) => switch (sizeEstimate) {
-      'S' => SentryColors.blue,
-      'M' => SentryColors.amber,
-      _ => SentryColors.red,
+      'S' => OutrideColors.blue,
+      'M' => OutrideColors.amber,
+      _ => OutrideColors.red,
     };
 
 /// Events for the timeline strip: the last [n] events, oldest first.
@@ -47,6 +48,10 @@ class DashboardScreen extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           children: [
             _alertPanel(disturbed),
+            // v0.28.0 Fleet: one-line status chip — tap opens the
+            // Fleet screen. `FLEET 3 · 2 SENSING` or `NOT IN A FLEET`.
+            const SizedBox(height: 12),
+            _fleetChip(context),
             // v0.27.1: soft build-age banner — visible ONLY once the
             // build is 90+ days old. A nudge to update, never a
             // lockout: sensing and alerts run exactly as before.
@@ -95,16 +100,16 @@ class DashboardScreen extends StatelessWidget {
     final degraded = !idle && !detected && h.level == Coverage.degraded;
     final starting = !idle && !detected && h.level == Coverage.starting;
     final color = idle
-        ? SentryColors.muted
+        ? OutrideColors.muted
         : detected
-            ? SentryColors.amber
+            ? OutrideColors.amber
             : blind
-                ? SentryColors.red
+                ? OutrideColors.red
                 : degraded
-                    ? SentryColors.orange
+                    ? OutrideColors.orange
                     : starting
-                        ? SentryColors.muted
-                        : SentryColors.green;
+                        ? OutrideColors.muted
+                        : OutrideColors.green;
     final icon = idle
         ? Icons.pause_circle_outline
         : detected
@@ -140,7 +145,7 @@ class DashboardScreen extends StatelessWidget {
                         : 'MONITORING ${h.liveLinks} LINK DIRECTION(S)';
     final showReasons = !idle && h.reasons.isNotEmpty;
     final live = !state.settings.simulatedMode;
-    return SentryPanel(
+    return OutridePanel(
       glow: idle ? null : color,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
       child: Column(
@@ -148,13 +153,13 @@ class DashboardScreen extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text('PERIMETER STATUS', style: SentryType.section()),
+              Text('PERIMETER STATUS', style: OutrideType.section()),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  border: Border.all(color: SentryColors.border),
+                  border: Border.all(color: OutrideColors.border),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -164,15 +169,15 @@ class DashboardScreen extends StatelessWidget {
                       width: 7,
                       height: 7,
                       decoration: BoxDecoration(
-                        color: live ? SentryColors.green : SentryColors.orange,
+                        color: live ? OutrideColors.green : OutrideColors.orange,
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 7),
                     Text(
                       live ? 'LIVE' : 'SIM',
-                      style: SentryType.chip(
-                        live ? SentryColors.green : SentryColors.orange,
+                      style: OutrideType.chip(
+                        live ? OutrideColors.green : OutrideColors.orange,
                       ).copyWith(fontSize: 10),
                     ),
                   ],
@@ -188,27 +193,27 @@ class DashboardScreen extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: SentryType.readout(40, color)
+                  style: OutrideType.readout(40, color)
                       .copyWith(letterSpacing: 5),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(subtitle, style: SentryType.section(11)),
+          Text(subtitle, style: OutrideType.section(11)),
           if (detected) ...[
             const SizedBox(height: 8),
             Text(
               disturbed.join('  ·  '),
-              style: SentryType.rowValue(SentryColors.amber)
+              style: OutrideType.rowValue(OutrideColors.amber)
                   .copyWith(fontSize: 11),
             ),
             const SizedBox(height: 6),
             Text(
               'HEURISTIC DETECTION — LINK DISTURBANCE CONFIRMED, '
               'NOT IDENTIFICATION. SIZE AND AI LABELS ARE ESTIMATES.',
-              style: SentryType.section(10).copyWith(
-                  height: 1.6, color: SentryColors.muted),
+              style: OutrideType.section(10).copyWith(
+                  height: 1.6, color: OutrideColors.muted),
             ),
           ],
           if (showReasons) ...[
@@ -218,8 +223,8 @@ class DashboardScreen extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(
                   r,
-                  style: SentryType.rowValue(
-                    blind ? SentryColors.red : SentryColors.orange,
+                  style: OutrideType.rowValue(
+                    blind ? OutrideColors.red : OutrideColors.orange,
                   ).copyWith(fontSize: 11),
                 ),
               ),
@@ -247,25 +252,63 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  /// v0.28.0 Fleet chip: one-line fleet status, tap opens the
+  /// Fleet screen. `FLEET 3 · 2 SENSING` when joined, `NOT IN A
+  /// FLEET` otherwise. Purple accent, same as the Fleet entry in
+  /// Settings.
+  Widget _fleetChip(BuildContext context) {
+    final inFleet = state.inFleet;
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => FleetScreen(state: state),
+          ),
+        );
+      },
+      child: OutridePanel(
+        child: Row(
+          children: [
+            Icon(Icons.group,
+                color:
+                    inFleet ? OutrideColors.green : OutrideColors.muted,
+                size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                state.fleetSummary,
+                style: OutrideType.chip(inFleet
+                    ? OutrideColors.green
+                    : OutrideColors.muted),
+              ),
+            ),
+            const Icon(Icons.chevron_right,
+                color: OutrideColors.purple, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// v0.27.1 soft build-age banner. Amber, plain text, no button and
   /// no dismiss — it stays until the build is updated, which is the
   /// point. It never touches detection, health, or the alert panel.
   Widget _buildAgeBanner() {
     final warning = buildAgeWarning(now: DateTime.now())!;
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'BUILD AGE',
-            style: SentryType.section().copyWith(
-              color: SentryColors.amber,
+            style: OutrideType.section().copyWith(
+              color: OutrideColors.amber,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             warning,
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
         ],
       ),
@@ -279,14 +322,14 @@ class DashboardScreen extends StatelessWidget {
   /// button below (mesh users can hunt a phone-visible emitter too).
   Widget _phoneTierBanner(BuildContext context) {
     final tier = state.phoneTier;
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '${tier.modeLabel} · ${tier.rangeLabel}',
-            style: SentryType.section().copyWith(
-              color: SentryColors.purple,
+            style: OutrideType.section().copyWith(
+              color: OutrideColors.purple,
             ),
           ),
           const SizedBox(height: 6),
@@ -302,20 +345,20 @@ class DashboardScreen extends StatelessWidget {
                 : 'PHONE SCANS ONLY — ${tier.availableSources.map((s) => s.label.toUpperCase()).join(', ')}. '
                     'NO MESH HARDWARE ATTACHED, SO THERE IS NO AREA '
                     'COVERAGE. NOTHING HEARD IS NOT NOTHING PRESENT.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           if (tier.unavailableReason != null) ...[
             const SizedBox(height: 6),
             Text(
               tier.unavailableReason!.toUpperCase(),
-              style: SentryType.section(10).copyWith(
-                color: SentryColors.orange,
+              style: OutrideType.section(10).copyWith(
+                color: OutrideColors.orange,
               ),
             ),
           ],
           const SizedBox(height: 10),
           ElevatedButton.icon(
-            icon: const Icon(Icons.whatshot, color: SentryColors.purple),
+            icon: const Icon(Icons.whatshot, color: OutrideColors.purple),
             label: const Text('OPEN HUNT — PROXIMITY ONLY'),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
@@ -330,27 +373,27 @@ class DashboardScreen extends StatelessWidget {
 
   Widget _controlRow(BuildContext context) {
     final live = !state.settings.simulatedMode;
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('SOURCE', style: SentryType.section()),
+          Text('SOURCE', style: OutrideType.section()),
           const SizedBox(height: 10),
           _dataRow(
             live ? 'RADIO' : 'MODE',
             live ? state.settings.radioIp : 'SIMULATED LINK DATA',
-            SentryColors.blue,
+            OutrideColors.blue,
           ),
           const SizedBox(height: 6),
-          _dataRow('STATUS', state.connectionLabel, SentryColors.muted),
+          _dataRow('STATUS', state.connectionLabel, OutrideColors.muted),
           if (state.cotStatusLine != null) ...[
             const SizedBox(height: 6),
-            _dataRow('COT', state.cotStatusLine!, SentryColors.purple),
+            _dataRow('COT', state.cotStatusLine!, OutrideColors.purple),
           ],
           if (state.error != null) ...[
             const SizedBox(height: 6),
             Text(state.error!,
-                style: SentryType.rowValue(SentryColors.red)),
+                style: OutrideType.rowValue(OutrideColors.red)),
           ],
           // v0.26.0: Hunt entry for everyone, not just phone-tier
           // users — a mesh operator can still hunt a phone-visible
@@ -358,7 +401,7 @@ class DashboardScreen extends StatelessWidget {
           // surface; this button is the always-visible one.
           const SizedBox(height: 10),
           OutlinedButton.icon(
-            icon: const Icon(Icons.whatshot, color: SentryColors.purple),
+            icon: const Icon(Icons.whatshot, color: OutrideColors.purple),
             label: const Text('HUNT — PROXIMITY ONLY'),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
@@ -376,32 +419,32 @@ class DashboardScreen extends StatelessWidget {
   /// and any errors. The banner above fires if ANY driver detects.
   Widget _radiosCard() {
     final statuses = state.driverStatuses;
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('RADIOS', style: SentryType.section()),
+              Text('RADIOS', style: OutrideType.section()),
               const Spacer(),
               Text(
                 state.settings.simulatedMode
                     ? 'SIMULATED'
                     : '${statuses.length} DRIVER${statuses.length == 1 ? '' : 'S'}',
-                style: SentryType.section(10).copyWith(
-                    color: SentryColors.muted),
+                style: OutrideType.section(10).copyWith(
+                    color: OutrideColors.muted),
               ),
             ],
           ),
           const SizedBox(height: 8),
           if (!state.polling)
             Text('NOT POLLING — PRESS START.',
-                style: SentryType.section(10)
-                    .copyWith(color: SentryColors.muted))
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.muted))
           else if (statuses.isEmpty)
             Text('NO RADIOS ENABLED — ADD ONE IN SETTINGS.',
-                style: SentryType.section(10)
-                    .copyWith(color: SentryColors.orange))
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.orange))
           else
             for (final s in statuses)
               Padding(
@@ -415,7 +458,7 @@ class DashboardScreen extends StatelessWidget {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: s.error != null
-                            ? SentryColors.red
+                            ? OutrideColors.red
                             : driverColor(s.driverId),
                       ),
                     ),
@@ -423,8 +466,8 @@ class DashboardScreen extends StatelessWidget {
                     Expanded(
                       child: Text(
                         s.label,
-                        style: SentryType.rowValue(
-                                SentryColors.onDark)
+                        style: OutrideType.rowValue(
+                                OutrideColors.onDark)
                             .copyWith(fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -432,10 +475,10 @@ class DashboardScreen extends StatelessWidget {
                     Text(
                       s.error ??
                           '${s.linkCount} LINKS',
-                      style: SentryType.section(10).copyWith(
+                      style: OutrideType.section(10).copyWith(
                           color: s.error != null
-                              ? SentryColors.red
-                              : SentryColors.muted),
+                              ? OutrideColors.red
+                              : OutrideColors.muted),
                     ),
                   ],
                 ),
@@ -452,10 +495,10 @@ class DashboardScreen extends StatelessWidget {
   Widget _takLinkRow() {
     final link = state.cotLinkStatus;
     final color = link == 'LINKED' || link == 'MULTICAST'
-        ? SentryColors.muted
+        ? OutrideColors.muted
         : link == 'RETRYING'
-            ? SentryColors.orange
-            : SentryColors.muted.withValues(alpha: 0.5);
+            ? OutrideColors.orange
+            : OutrideColors.muted.withValues(alpha: 0.5);
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Row(
@@ -466,23 +509,23 @@ class DashboardScreen extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: link == 'LINKED'
-                  ? SentryColors.green
+                  ? OutrideColors.green
                   : link == 'RETRYING'
-                      ? SentryColors.orange
-                      : SentryColors.muted.withValues(alpha: 0.5),
+                      ? OutrideColors.orange
+                      : OutrideColors.muted.withValues(alpha: 0.5),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               'TAK LINK',
-              style: SentryType.rowValue(SentryColors.onDark)
+              style: OutrideType.rowValue(OutrideColors.onDark)
                   .copyWith(fontSize: 12),
             ),
           ),
           Text(
             link,
-            style: SentryType.section(10).copyWith(color: color),
+            style: OutrideType.section(10).copyWith(color: color),
           ),
         ],
       ),
@@ -491,20 +534,20 @@ class DashboardScreen extends StatelessWidget {
 
   Widget _latestDetection() {
     if (state.events.isEmpty) {
-      return SentryPanel(
+      return OutridePanel(
         child: Row(
           children: [
             const Icon(Icons.radar,
-                color: SentryColors.muted, size: 28),
+                color: OutrideColors.muted, size: 28),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('LATEST DETECTION', style: SentryType.section()),
+                  Text('LATEST DETECTION', style: OutrideType.section()),
                   const SizedBox(height: 6),
                   Text('NO CROSSINGS DETECTED YET',
-                      style: SentryType.rowLabel()),
+                      style: OutrideType.rowLabel()),
                 ],
               ),
             ),
@@ -514,26 +557,26 @@ class DashboardScreen extends StatelessWidget {
     }
     final e = state.events.first;
     final sizeColor = eventSizeColor(e.sizeEstimate);
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('LATEST DETECTION', style: SentryType.section()),
+              Text('LATEST DETECTION', style: OutrideType.section()),
               const Spacer(),
-              SentryChip(label: 'SIZE ${e.sizeEstimate}', color: sizeColor),
+              OutrideChip(label: 'SIZE ${e.sizeEstimate}', color: sizeColor),
             ],
           ),
           const SizedBox(height: 12),
-          _dataRow('TIME', _fmtTime(e.timestamp), SentryColors.onDark),
+          _dataRow('TIME', _fmtTime(e.timestamp), OutrideColors.onDark),
           const SizedBox(height: 6),
-          _dataRow('LINK', shortLinkKey(e.linkKey), SentryColors.onDark),
+          _dataRow('LINK', shortLinkKey(e.linkKey), OutrideColors.onDark),
           const SizedBox(height: 6),
           _dataRow('DIP',
-              '-${e.dipDepth.toStringAsFixed(0)} EST', SentryColors.red),
+              '-${e.dipDepth.toStringAsFixed(0)} EST', OutrideColors.red),
           const SizedBox(height: 6),
-          _dataRow('LASTED', e.durationLabel, SentryColors.onDark),
+          _dataRow('LASTED', e.durationLabel, OutrideColors.onDark),
           const SizedBox(height: 6),
           _dataRow(
               'AI CLASSIFY',
@@ -542,11 +585,11 @@ class DashboardScreen extends StatelessWidget {
                   : e.aiConfidence == null
                       ? '${e.aiLabel} EST'
                       : '${e.aiLabel} ${(e.aiConfidence! * 100).toStringAsFixed(0)}% EST',
-              SentryColors.purple),
+              OutrideColors.purple),
           const SizedBox(height: 10),
           Text('SIZE AND AI LABELS ARE HEURISTIC ESTIMATES, NOT IDENTIFICATION. '
               'THE CLASSIFIER WAS TRAINED ON SYNTHETIC DATA.',
-              style: SentryType.section(9)),
+              style: OutrideType.section(9)),
         ],
       ),
     );
@@ -557,9 +600,9 @@ class DashboardScreen extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(width: 110, child: Text(label, style: SentryType.rowLabel())),
+        SizedBox(width: 110, child: Text(label, style: OutrideType.rowLabel())),
         Expanded(
-            child: Text(value, style: SentryType.rowValue(color))),
+            child: Text(value, style: OutrideType.rowValue(color))),
       ],
     );
   }
@@ -567,14 +610,14 @@ class DashboardScreen extends StatelessWidget {
   /// One compact row per link direction — health only, no charts.
   Widget _linksCompact(List<String> disturbed) {
     final keys = state.history.keys.toList()..sort();
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('MESH LINKS', style: SentryType.section()),
+          Text('MESH LINKS', style: OutrideType.section()),
           const SizedBox(height: 10),
           if (keys.isEmpty)
-            Text('NO LINK DATA YET', style: SentryType.rowLabel()),
+            Text('NO LINK DATA YET', style: OutrideType.rowLabel()),
           for (final k in keys)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 5),
@@ -585,18 +628,18 @@ class DashboardScreen extends StatelessWidget {
                     height: 8,
                     decoration: BoxDecoration(
                       color: disturbed.contains(k)
-                          ? SentryColors.amber
-                          : SentryColors.green,
+                          ? OutrideColors.amber
+                          : OutrideColors.green,
                       shape: BoxShape.circle,
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(shortLinkKey(k), style: SentryType.rowValue(SentryColors.onDark)),
+                    child: Text(shortLinkKey(k), style: OutrideType.rowValue(OutrideColors.onDark)),
                   ),
                   Text(
                     'SNR ${state.history[k]!.last.snrLabel}  ·  DIP ${state.history[k]!.last.dipLabel}',
-                    style: SentryType.rowLabel().copyWith(fontSize: 11),
+                    style: OutrideType.rowLabel().copyWith(fontSize: 11),
                   ),
                 ],
               ),
@@ -612,24 +655,24 @@ class DashboardScreen extends StatelessWidget {
   /// both land in [AppState.events].
   Widget _timelineStrip(BuildContext context) {
     final evts = timelineEvents(state.events);
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('EVENT TIMELINE', style: SentryType.section()),
+              Text('EVENT TIMELINE', style: OutrideType.section()),
               const Spacer(),
               Text(
                   evts.length < state.events.length
                       ? 'SHOWING ${evts.length} OF ${state.events.length} EVENTS'
                       : '${state.events.length} EVENTS',
-                  style: SentryType.section(10)),
+                  style: OutrideType.section(10)),
             ],
           ),
           const SizedBox(height: 10),
           if (evts.isEmpty)
-            Text('NO EVENTS YET', style: SentryType.rowLabel())
+            Text('NO EVENTS YET', style: OutrideType.rowLabel())
           else ...[
             SizedBox(
               height: 56,
@@ -657,7 +700,7 @@ class DashboardScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 5),
                           Text(_fmtTime(e.timestamp),
-                              style: SentryType.section(9)),
+                              style: OutrideType.section(9)),
                         ],
                       ),
                     ),
@@ -670,11 +713,11 @@ class DashboardScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(_fmtTime(evts.first.timestamp),
-                    style: SentryType.section(9)),
+                    style: OutrideType.section(9)),
                 Text('SIZE: S/M/L (EST)',
-                    style: SentryType.section(9)),
+                    style: OutrideType.section(9)),
                 Text(_fmtTime(evts.last.timestamp),
-                    style: SentryType.section(9)),
+                    style: OutrideType.section(9)),
               ],
             ),
           ],
@@ -686,7 +729,7 @@ class DashboardScreen extends StatelessWidget {
   void _openEvidence(BuildContext context, CrossingEvent e) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: SentryColors.surface,
+      backgroundColor: OutrideColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -696,25 +739,25 @@ class DashboardScreen extends StatelessWidget {
 
   Widget _eventsCard(BuildContext context) {
     final stats = state.triageStats;
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('CROSSING EVENTS', style: SentryType.section()),
+              Text('CROSSING EVENTS', style: OutrideType.section()),
               const Spacer(),
               Text(
                 'ACK ${stats['acked']} · FA ${stats['falseAlarm']} · '
                 'NEW ${stats['unreviewed']}',
-                style: SentryType.section(10),
+                style: OutrideType.section(10),
               ),
             ],
           ),
           const SizedBox(height: 10),
           if (state.events.isEmpty)
             Text('NO CROSSINGS DETECTED YET',
-                style: SentryType.rowLabel()),
+                style: OutrideType.rowLabel()),
           for (final e in state.events.take(30)) _eventRow(context, e),
         ],
       ),
@@ -746,7 +789,7 @@ class DashboardScreen extends StatelessWidget {
                   ? Icons.do_not_disturb_on_outlined
                   : Icons.warning_amber_rounded,
               color:
-                  falseAlarm ? SentryColors.muted : SentryColors.amber,
+                  falseAlarm ? OutrideColors.muted : OutrideColors.amber,
               size: 18,
             ),
             const SizedBox(width: 10),
@@ -756,32 +799,32 @@ class DashboardScreen extends StatelessWidget {
                 children: [
                   Text(
                     '${_fmtTime(e.timestamp)} · ${shortLinkKey(e.linkKey)} · $aiLabel',
-                    style: SentryType.rowValue(falseAlarm
-                        ? SentryColors.muted
-                        : SentryColors.onDark),
+                    style: OutrideType.rowValue(falseAlarm
+                        ? OutrideColors.muted
+                        : OutrideColors.onDark),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     'SIZE ${e.sizeEstimate} EST · ${e.direction == 'rise' ? 'RISE +' : 'DIP -'}${e.dipDepth.toStringAsFixed(0)} EST · LASTED ${e.durationLabel}',
-                    style: SentryType.rowLabel().copyWith(
+                    style: OutrideType.rowLabel().copyWith(
                         fontSize: 11,
-                        color: falseAlarm ? SentryColors.muted : null),
+                        color: falseAlarm ? OutrideColors.muted : null),
                   ),
                   const SizedBox(height: 5),
                   Row(
                     children: [
                       _triageBtn(e, AppState.triageAcked, 'ACK',
-                          SentryColors.green),
+                          OutrideColors.green),
                       const SizedBox(width: 8),
                       _triageBtn(e, AppState.triageFalseAlarm,
-                          'FALSE ALARM', SentryColors.red),
+                          'FALSE ALARM', OutrideColors.red),
                     ],
                   ),
                 ],
               ),
             ),
             const Icon(Icons.chevron_right,
-                color: SentryColors.muted, size: 18),
+                color: OutrideColors.muted, size: 18),
           ],
         ),
       ),
@@ -803,15 +846,15 @@ class DashboardScreen extends StatelessWidget {
             const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
         decoration: BoxDecoration(
           border: Border.all(
-              color: active ? color : SentryColors.border),
+              color: active ? color : OutrideColors.border),
           borderRadius: BorderRadius.circular(6),
           color:
               active ? color.withAlpha(28) : Colors.transparent,
         ),
         child: Text(
           label,
-          style: SentryType.chip(
-                  active ? color : SentryColors.muted)
+          style: OutrideType.chip(
+                  active ? color : OutrideColors.muted)
               .copyWith(fontSize: 10),
         ),
       ),
@@ -827,27 +870,27 @@ class DashboardScreen extends StatelessWidget {
     if (!state.hasSdrDriver) return const SizedBox.shrink();
     final bands = state.sdrBands;
     final disturbed = state.disturbedLinks.toSet();
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('SPECTRUM BANDS', style: SentryType.section()),
+              Text('SPECTRUM BANDS', style: OutrideType.section()),
               const Spacer(),
-              Text('ENERGY dBFS', style: SentryType.section(10)),
+              Text('ENERGY dBFS', style: OutrideType.section(10)),
             ],
           ),
           const SizedBox(height: 10),
           if (bands.isEmpty)
             Text('WAITING FOR SWEEP DATA',
-                style: SentryType.rowLabel()),
+                style: OutrideType.rowLabel()),
           for (final b in bands) _bandRow(b, disturbed),
           const SizedBox(height: 6),
           Text(
             'BAND-MEDIAN ENERGY, NOT A WATERFALL. LEVELS ARE ESTIMATES '
             '(dBFS, RECEIVER-RELATIVE — NOT dBm).',
-            style: SentryType.section(9),
+            style: OutrideType.section(9),
           ),
         ],
       ),
@@ -859,7 +902,7 @@ class DashboardScreen extends StatelessWidget {
     // agrees between the panel and the detector.
     final linkKey = 'sdr:${b.radio} → sdr:band-${b.band}';
     final hot = disturbed.contains(linkKey);
-    final color = hot ? SentryColors.amber : SentryColors.blue;
+    final color = hot ? OutrideColors.amber : OutrideColors.blue;
     // Bar scale: -100..-20 dBFS.
     double frac(double db) => ((db + 100) / 80).clamp(0.0, 1.0);
     final spanMhz = b.spanMhz ?? b.bwMhz;
@@ -872,21 +915,21 @@ class DashboardScreen extends StatelessWidget {
             children: [
               Text(b.band.toUpperCase(),
                   style:
-                      SentryType.rowValue(SentryColors.onDark)),
+                      OutrideType.rowValue(OutrideColors.onDark)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '${b.centerMhz.toStringAsFixed(1)} MHz · '
                   '${spanMhz.toStringAsFixed(1)} MHz SPAN'
                   '${b.sigHint != null ? ' · ${b.sigHint}' : ''}',
-                  style: SentryType.rowLabel()
+                  style: OutrideType.rowLabel()
                       .copyWith(fontSize: 11),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               Text(
                 '${b.energyDbfs.toStringAsFixed(1)} EST',
-                style: SentryType.rowValue(color)
+                style: OutrideType.rowValue(color)
                     .copyWith(fontSize: 11),
               ),
             ],
@@ -900,7 +943,7 @@ class DashboardScreen extends StatelessWidget {
                   children: [
                     Container(
                       decoration: BoxDecoration(
-                        color: SentryColors.surface2,
+                        color: OutrideColors.surface2,
                         borderRadius: BorderRadius.circular(5),
                       ),
                     ),
@@ -922,7 +965,7 @@ class DashboardScreen extends StatelessWidget {
                       bottom: 0,
                       child: Container(
                           width: 2,
-                          color: SentryColors.muted),
+                          color: OutrideColors.muted),
                     ),
                   ],
                 );
@@ -943,12 +986,12 @@ class _ScopeNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SentryPanel(
+    return OutridePanel(
       child: Text(
         'SCOPE — WITH 2 RADIOS THIS IS A SINGLE-LINK TRIPWIRE: CROSSING ALERTS '
         'PLUS A CRUDE SIZE ESTIMATE (S/M/L) FROM THE DIP. TYPE, HEADING, SPEED '
         'AND POSITION NEED 3+ MESH NODES; THOSE READOUTS UNLOCK AS RADIOS JOIN.',
-        style: SentryType.section(10).copyWith(height: 1.6),
+        style: OutrideType.section(10).copyWith(height: 1.6),
       ),
     );
   }

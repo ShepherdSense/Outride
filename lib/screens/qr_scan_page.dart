@@ -44,16 +44,16 @@ class _QrScanPageState extends State<QrScanPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: SentryColors.background,
+      backgroundColor: OutrideColors.background,
       appBar: AppBar(
-        backgroundColor: SentryColors.background,
+        backgroundColor: OutrideColors.background,
         title: Text('SCAN INVITE QR',
-            style: SentryType.rowValue(SentryColors.onDark)),
+            style: OutrideType.rowValue(OutrideColors.onDark)),
         actions: [
           IconButton(
             tooltip: 'TORCH',
             icon: const Icon(Icons.flashlight_on_outlined,
-                color: SentryColors.muted),
+                color: OutrideColors.muted),
             onPressed: () => _controller.toggleTorch(),
           ),
         ],
@@ -69,7 +69,7 @@ class _QrScanPageState extends State<QrScanPage> {
                 child: Text(
                   'CAMERA NOT AVAILABLE HERE — GO BACK AND PASTE THE '
                   'INVITE CODE INSTEAD.',
-                  style: SentryType.section(11).copyWith(height: 1.7),
+                  style: OutrideType.section(11).copyWith(height: 1.7),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -82,9 +82,9 @@ class _QrScanPageState extends State<QrScanPage> {
             child: Text(
               'POINT AT THE QR CODE THE HUB OPERATOR SHOWS YOU. '
               'THE CODE FILLS IN AUTOMATICALLY.',
-              style: SentryType.section(10).copyWith(
+              style: OutrideType.section(10).copyWith(
                 height: 1.6,
-                color: SentryColors.onDark,
+                color: OutrideColors.onDark,
                 shadows: const [
                   Shadow(color: Colors.black, blurRadius: 8),
                 ],

@@ -14,7 +14,7 @@ reconstruction + binarize + DBSCAN clustering for the position
 estimate; path thickness γ and sparsity α tuned by Bayesian
 optimization against ground truth.
 
-### What ports to Shepherd
+### What ports to Outride
 
 Implemented in `tools/train_disturbance_clf.py` (a separate
 section; the MLP disturbance classifier above it is untouched):
@@ -22,7 +22,7 @@ section; the MLP disturbance classifier above it is untouched):
 - `build_link_pixel_weights(nodes, pixels, gamma)` — link-pixel
   weight matrix with `w = 1 / (1 + excess_path / gamma)`, where
   γ is the path-thickness scale. A 6-node deployment yields
-  15 links, matching Shepherd's sparse regime.
+  15 links, matching Outride's sparse regime.
 - `elastic_net_reconstruct(W, y, alpha, l1_ratio=0.5)` —
   non-negative Elastic Net reconstruction (scikit-learn).
 - `binarize_image(img, size_class)` + `dbscan_blobs(...)` —
@@ -72,13 +72,13 @@ section; the MLP disturbance classifier above it is untouched):
 Kim et al. rescued few-node regimes with MPC/array
 multiplication (ray-traced paths, 8-element arrays), not with
 plain RSS — and their paper explicitly leaves the 6-node
-plain-RSS question unanswered. **Shepherd's standing 6-node /
+plain-RSS question unanswered. **Outride's standing 6-node /
 15-link imaging bound of ~1–2 m is UNCHANGED by this work.**
 This section tunes parameters for the imaging we already do;
 it claims no better imaging, and no accuracy number from Kim
 et al. is inherited (their CDFs are figure-only; their
 measurement used 4 USRP X310 nodes with rubidium sync, which
-Shepherd's tripwire layer correctly does not need).
+Outride's tripwire layer correctly does not need).
 
 ### Size-aware detection-threshold caveat (load-bearing)
 
@@ -198,11 +198,11 @@ ever receives. `--no-lte` disables the detector;
 
 The ~1.6 km bistatic figure sometimes attached to FKIE LTE450
 (Demissie & Steffes, IET Radar Sonar & Navigation 2025,
-e70092) reaches Shepherd through a SINGLE secondary source
+e70092) reaches Outride through a SINGLE secondary source
 (MiGFlug blog, Oct 2025, read in full) while the paper's full
 text remains UNREAD (bot-blocked on every host tried). It is
 documented in code comments and here as an **unvalidated
-reference only**: it is NOT a Shepherd capability, NOT a
+reference only**: it is NOT a Outride capability, NOT a
 validated target, and must never be quoted as one.
 `LteBenchLog` / `summarize_lte_bench()` exist so an operator
 can replace it with a measured detection-fraction-vs-range
@@ -217,7 +217,7 @@ range bin. Rows are written via the csv module (a comma or
 newline in a free-text field is quoted, never a broken row)
 and `summarize_lte_bench` raises ValueError for a
 non-finite or ≤ 0 bin width. Until such a curve exists,
-there is NO Shepherd LTE detection-range number to quote.
+there is NO Outride LTE detection-range number to quote.
 
 ## 3. 5G NR adapter: a documented, tested STUB
 
@@ -250,19 +250,19 @@ faking a capability.
   fill-in: a ≥ 20 MSPS capture path + SSB/structure
   recognition, feeding the same `doppler_ref` layer as LTE.
 
-**No BSense numbers are claimed anywhere for Shepherd.**
+**No BSense numbers are claimed anywhere for Outride.**
 BSense (Meng et al., arXiv:2603.29187) ran on a carrier 5G-A
-base station (4.9 GHz, 100 MHz, 128 channels) that Shepherd
+base station (4.9 GHz, 100 MHz, 128 channels) that Outride
 does not control; its 1 km / F1 95.56% figures are that
-system's results, not Shepherd's, and appear nowhere in code,
-tests, or this spec as Shepherd capabilities. (Its portable
+system's results, not Outride's, and appear nowhere in code,
+tests, or this spec as Outride capabilities. (Its portable
 lesson — layered false-alarm filtering — is tracker design,
 not an adapter claim, and is tracked separately.)
 
 ## Wire-format decision
 
 **No existing packet schema changed.** The only new packet
-kind is the additive `lte_illuminator` (older Shepherd builds
+kind is the additive `lte_illuminator` (older Outride builds
 ignore unknown kinds, per the existing protocol contract);
 `band`, `beacon`, `doppler_ref`, and all other kinds are
 byte-identical to before. No NR packet kind exists in
@@ -310,8 +310,8 @@ without reading code.
   means zero weight, and a null return is uninformative
   (tangential motion, low RCS, wrong geometry) — never
   exonerating, per the Doppler spec's never-subtractive rule.
-- No Shepherd LTE range number exists until the bench hook
-  produces a measured curve; no Shepherd NR capability exists
+- No Outride LTE range number exists until the bench hook
+  produces a measured curve; no Outride NR capability exists
   until a wideband capture path lands.
 - Kim tuning on harness data validates machinery, not field
   accuracy; per-deployment re-tuning on recorded data is

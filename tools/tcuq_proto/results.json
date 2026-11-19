@@ -1,0 +1,173 @@
+{
+  "provenance": "SYNTHETIC-ONLY",
+  "dev_n": 1000,
+  "test_n": 1000,
+  "shifted_n": 700,
+  "variants": {
+    "naive": {
+      "logistic_weights": [
+        6.054629534729897,
+        0.8348419265198287,
+        -1.531324959210115,
+        5.933559036720421
+      ],
+      "logistic_bias": -0.6571836873030107,
+      "step_failure_detection": {
+        "tcuq_r": {
+          "auroc": 0.819831463218643,
+          "auprc": 0.5300477774715884
+        },
+        "baseline_1_minus_maxprob": {
+          "auroc": 0.8489655028931298,
+          "auprc": 0.5483865666966206
+        },
+        "n_steps": 51643
+      },
+      "sequence_trouble_separation": {
+        "tcuq_mean_r": {
+          "auroc": 0.33244597701149425,
+          "auprc": 0.46437889427140183
+        },
+        "baseline_mean_1_minus_maxprob": {
+          "auroc": 0.3302620689655172,
+          "auprc": 0.45777449872607306
+        },
+        "per_signal_mean": {
+          "D": {
+            "auroc": 0.3380597701149426,
+            "auprc": 0.45932086405251443
+          },
+          "instab": {
+            "auroc": 0.4591494252873563,
+            "auprc": 0.5833373716868733
+          },
+          "incons": {
+            "auroc": 0.42825287356321834,
+            "auprc": 0.4934215016703409
+          },
+          "m": {
+            "auroc": 0.33237241379310345,
+            "auprc": 0.4598937766351861
+          }
+        },
+        "n_sequences": 935
+      },
+      "operational_rule": {
+        "threshold_dev_p90_seq_mean_r": 0.4879940829160688,
+        "flag_rate_per_class": {
+          "PASSING": 0.14054054054054055,
+          "LINGERING": 0.084,
+          "INTERFERENCE": 0.176,
+          "FAULT": 0.0
+        },
+        "kept_final_typing_accuracy": {
+          "PASSING": 0.9748427672955975,
+          "LINGERING": 0.982532751091703,
+          "INTERFERENCE": 0.9466019417475728,
+          "FAULT": 1.0
+        },
+        "reference_final_typing_accuracy_no_abstain": {
+          "PASSING": 0.952,
+          "LINGERING": 0.972,
+          "INTERFERENCE": 0.908,
+          "FAULT": 1.0
+        }
+      }
+    },
+    "transient_aware": {
+      "logistic_weights": [
+        1.6654688997269924,
+        0.8216112235576433,
+        0.8089681870526316,
+        5.0203065879760596
+      ],
+      "logistic_bias": -0.6574222572042239,
+      "step_failure_detection": {
+        "tcuq_r": {
+          "auroc": 0.8197731534616565,
+          "auprc": 0.5216751893092576
+        },
+        "baseline_1_minus_maxprob": {
+          "auroc": 0.8489655028931298,
+          "auprc": 0.5483865666966206
+        },
+        "n_steps": 51643
+      },
+      "sequence_trouble_separation": {
+        "tcuq_mean_r": {
+          "auroc": 0.33899310344827593,
+          "auprc": 0.46669256487121147
+        },
+        "baseline_mean_1_minus_maxprob": {
+          "auroc": 0.3302620689655172,
+          "auprc": 0.45777449872607306
+        },
+        "per_signal_mean": {
+          "D": {
+            "auroc": 0.3380597701149426,
+            "auprc": 0.45932086405251443
+          },
+          "instab": {
+            "auroc": 0.4591494252873563,
+            "auprc": 0.5833373716868733
+          },
+          "incons": {
+            "auroc": 0.4363908045977011,
+            "auprc": 0.4904159660508859
+          },
+          "m": {
+            "auroc": 0.33237241379310345,
+            "auprc": 0.4598937766351861
+          }
+        },
+        "n_sequences": 935
+      },
+      "operational_rule": {
+        "threshold_dev_p90_seq_mean_r": 0.49481823372049594,
+        "flag_rate_per_class": {
+          "PASSING": 0.11351351351351352,
+          "LINGERING": 0.084,
+          "INTERFERENCE": 0.18,
+          "FAULT": 0.0
+        },
+        "kept_final_typing_accuracy": {
+          "PASSING": 0.975609756097561,
+          "LINGERING": 0.982532751091703,
+          "INTERFERENCE": 0.9414634146341463,
+          "FAULT": 1.0
+        },
+        "reference_final_typing_accuracy_no_abstain": {
+          "PASSING": 0.952,
+          "LINGERING": 0.972,
+          "INTERFERENCE": 0.908,
+          "FAULT": 1.0
+        }
+      }
+    }
+  },
+  "shifted_check_transient_aware": {
+    "clean_mover_mean_seq_r": 0.3644953749439321,
+    "shifted": {
+      "gain": {
+        "n": 178,
+        "mean_seq_r": 0.342573425842581,
+        "mean_seq_baseline": 0.05889247614598603
+      },
+      "mixed": {
+        "n": 165,
+        "mean_seq_r": 0.3697983380980035,
+        "mean_seq_baseline": 0.08054507926987241
+      },
+      "spikes": {
+        "n": 163,
+        "mean_seq_r": 0.3688729599683004,
+        "mean_seq_baseline": 0.07592692992554656
+      },
+      "square": {
+        "n": 100,
+        "mean_seq_r": 0.39998955907087624,
+        "mean_seq_baseline": 0.08156267219404555
+      }
+    }
+  }
+}

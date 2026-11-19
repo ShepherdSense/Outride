@@ -18,17 +18,17 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:shepherd/screens/airframe_overlay.dart';
-import 'package:shepherd/screens/wifi_vision.dart';
-import 'package:shepherd/services/airframe_identity.dart';
-import 'package:shepherd/services/device_signatures.dart';
-import 'package:shepherd/services/hunt_tracker.dart';
-import 'package:shepherd/services/offline_map_source.dart';
-import 'package:shepherd/services/phone_tier.dart';
-import 'package:shepherd/services/remote_id.dart';
-import 'package:shepherd/services/remote_id_service.dart';
-import 'package:shepherd/services/wifi_sense.dart';
-import 'package:shepherd/state/app_state.dart';
+import 'package:outride/screens/airframe_overlay.dart';
+import 'package:outride/screens/wifi_vision.dart';
+import 'package:outride/services/airframe_identity.dart';
+import 'package:outride/services/device_signatures.dart';
+import 'package:outride/services/hunt_tracker.dart';
+import 'package:outride/services/offline_map_source.dart';
+import 'package:outride/services/phone_tier.dart';
+import 'package:outride/services/remote_id.dart';
+import 'package:outride/services/remote_id_service.dart';
+import 'package:outride/services/wifi_sense.dart';
+import 'package:outride/state/app_state.dart';
 
 import 'remote_id_test.dart' as vec;
 
@@ -297,18 +297,18 @@ void main() {
         seenUa = request.headers['User-Agent'];
         return http.Response.bytes(<int>[1, 2, 3], 200);
       });
-      final temp = Directory.systemTemp.createTempSync('shepherd_ua_');
+      final temp = Directory.systemTemp.createTempSync('outride_ua_');
       addTearDown(() {
         if (temp.existsSync()) temp.deleteSync(recursive: true);
       });
       final cache = TileCache(client: client, cacheDir: temp);
       await cache.fetch(kOsmStandard, const TileCoord(5, 1, 1));
       expect(seenUa, isNotNull);
-      expect(seenUa, contains('Shepherd'));
+      expect(seenUa, contains('Outride'));
     });
 
     test('corrupt manifest reset deletes orphaned tile files', () async {
-      final temp = Directory.systemTemp.createTempSync('shepherd_orph_');
+      final temp = Directory.systemTemp.createTempSync('outride_orph_');
       addTearDown(() {
         if (temp.existsSync()) temp.deleteSync(recursive: true);
       });

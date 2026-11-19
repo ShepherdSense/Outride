@@ -5,7 +5,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/state/app_state.dart';
+import 'package:outride/state/app_state.dart';
 
 void main() {
   test('Skydio settings round-trip through toJson/applyJson', () {

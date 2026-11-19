@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shepherd/services/radio_driver.dart';
-import 'package:shepherd/state/app_state.dart';
+import 'package:outride/services/radio_driver.dart';
+import 'package:outride/state/app_state.dart';
 
 Map<String, dynamic> bandPacket({
   double energy = -52.3,

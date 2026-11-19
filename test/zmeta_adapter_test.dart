@@ -2,13 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/models/sensor_observation.dart';
-import 'package:shepherd/services/zmeta_adapter.dart';
+import 'package:outride/models/sensor_observation.dart';
+import 'package:outride/services/zmeta_adapter.dart';
 
 final _t0 = DateTime.utc(2026, 10, 16, 22, 30, 0);
 
 Map<String, dynamic> _obs() => zmetaObservation(
-      platformId: 'shepherd-mesh-1',
+      platformId: 'outride-mesh-1',
       sensorId: 'silvus:node90550->node90551',
       ts: _t0,
       linkKey: 'silvus:node90550 → silvus:node90551',
@@ -52,7 +52,7 @@ void main() {
       expect(ev['ts'], '2026-10-16T22:30:00Z');
       expect(e['profile'], 'H');
       final src = e['source'] as Map;
-      expect(src['platform_id'], 'shepherd-mesh-1');
+      expect(src['platform_id'], 'outride-mesh-1');
       expect(src['node_role'], 'EDGE');
     });
 
@@ -67,9 +67,9 @@ void main() {
       expect(_obs().containsKey('lineage'), isFalse);
     });
 
-    test('disturbance depth stays in Shepherd-named features', () {
+    test('disturbance depth stays in Outride-named features', () {
       final features = (_obs()['payload'] as Map)['features'] as Map;
-      expect(features['shepherd_dip_depth_db'], 14.2);
+      expect(features['outride_dip_depth_db'], 14.2);
       expect(features['center_freq_hz'], 2440000000);
       expect(features['bandwidth_hz'], 10000000);
     });
@@ -90,7 +90,7 @@ void main() {
       final features = (e['payload'] as Map)['features'] as Map;
       expect(features['bandwidth_hz'], 0.0);
       expect(features['center_freq_hz'], 2442000000);
-      expect(features['shepherd_disturbance'], 'rise');
+      expect(features['outride_disturbance'], 'rise');
     });
 
     test('power_dbm is the documented sentinel, flagged in quality', () {
@@ -98,7 +98,7 @@ void main() {
       final features = (e['payload'] as Map)['features'] as Map;
       final quality = (e['payload'] as Map)['quality'] as Map;
       expect(features['power_dbm'], 0.0);
-      expect(quality['shepherd_power_sentinel'], isTrue);
+      expect(quality['outride_power_sentinel'], isTrue);
       expect(quality['calibration_state'], 'UNCALIBRATED');
     });
 
@@ -127,8 +127,8 @@ void main() {
         energyDbfs: -70.2,
       );
       final features = (e['payload'] as Map)['features'] as Map;
-      expect(features['shepherd_sig_hint'], 'fhss-2g4');
-      expect(features['shepherd_energy_dbfs'], -70.2);
+      expect(features['outride_sig_hint'], 'fhss-2g4');
+      expect(features['outride_energy_dbfs'], -70.2);
     });
 
     test('degraded timing stays visible without PPS', () {
@@ -142,7 +142,7 @@ void main() {
     test('envelope confidence required, lineage genuine', () {
       final obsId = (_obs()['event'] as Map)['event_id'] as String;
       final e = zmetaInference(
-        platformId: 'shepherd-mesh-1',
+        platformId: 'outride-mesh-1',
         observationId: obsId,
         ts: _t0,
         label: 'PASSING',
@@ -156,7 +156,7 @@ void main() {
       final payload = e['payload'] as Map;
       expect(payload['inference_type'], 'CLASSIFICATION');
       expect((payload['claim'] as Map)['label'], 'PASSING');
-      expect((payload['model'] as Map)['name'], 'shepherd-disturbance-clf');
+      expect((payload['model'] as Map)['name'], 'outride-disturbance-clf');
     });
 
     test('confidence clamps to 0..1', () {
@@ -176,14 +176,14 @@ void main() {
       final obs = _obs();
       final obsId = (obs['event'] as Map)['event_id'] as String;
       final inf = zmetaInference(
-        platformId: 'shepherd-mesh-1',
+        platformId: 'outride-mesh-1',
         observationId: obsId,
         ts: _t0.add(const Duration(seconds: 2)),
         label: 'PASSING',
         confidence: 0.82,
       );
       final sdrObs = zmetaObservation(
-        platformId: 'shepherd-mesh-1',
+        platformId: 'outride-mesh-1',
         sensorId: 'sdr:pluto->band-2g4',
         ts: _t0.add(const Duration(seconds: 5)),
         linkKey: 'sdr:pluto → sdr:band-2g4',
@@ -197,7 +197,7 @@ void main() {
         sigHint: 'fhss-2g4',
         energyDbfs: -68.5,
       );
-      final out = File('/tmp/zmeta_shepherd_sample.jsonl');
+      final out = File('/tmp/zmeta_outride_sample.jsonl');
       out.writeAsStringSync('${[obs, inf, sdrObs].map(jsonEncode).join('\n')}\n');
       expect(out.existsSync(), isTrue);
     });
@@ -205,7 +205,7 @@ void main() {
 
   group('sensor geo (ZMeta 21.8 declared-2D)', () {
     Map<String, dynamic> obsGeo() => zmetaObservation(
-          platformId: 'shepherd-mesh-1',
+          platformId: 'outride-mesh-1',
           sensorId: 'silvus:node90550->node90551',
           ts: _t0,
           linkKey: 'silvus:node90550 → silvus:node90551',
@@ -241,13 +241,13 @@ void main() {
       final e = obsGeo();
       final payload = e['payload'] as Map;
       final features = payload['features'] as Map;
-      expect(features['shepherd_sensor_alt_m'], 87.5);
+      expect(features['outride_sensor_alt_m'], 87.5);
       final quality = payload['quality'] as Map;
       expect(quality['geo_status'], 'VERTICAL_UNAVAILABLE');
-      expect(quality['shepherd_geo_source'], 'node-midpoint');
-      expect(quality['shepherd_geo_accuracy_m'], 4.0);
-      expect(quality['shepherd_geo_age_s'], 12);
-      final note = quality['shepherd_geo_note'] as String;
+      expect(quality['outride_geo_source'], 'node-midpoint');
+      expect(quality['outride_geo_accuracy_m'], 4.0);
+      expect(quality['outride_geo_age_s'], 12);
+      final note = quality['outride_geo_note'] as String;
       expect(note.contains('not target'), isTrue);
     });
 
@@ -257,14 +257,14 @@ void main() {
       expect(payload.containsKey('geo'), isFalse);
       expect((payload['quality'] as Map)['geo_status'], 'UNAVAILABLE');
       expect(
-          (payload['features'] as Map).containsKey('shepherd_sensor_alt_m'),
+          (payload['features'] as Map).containsKey('outride_sensor_alt_m'),
           isFalse);
     });
   });
 
   group('platform heartbeat (SYSTEM_EVENT / PLATFORM_STATUS)', () {
     Map<String, dynamic> hb() => zmetaPlatformStatus(
-          platformId: 'shepherd-mesh-1',
+          platformId: 'outride-mesh-1',
           ts: _t0,
           state: 'NOMINAL',
           nodeCount: 4,
@@ -286,7 +286,7 @@ void main() {
       expect(ev['event_subtype'], 'PLATFORM_STATUS');
       final src = e['source'] as Map;
       expect(src['node_role'], 'EDGE');
-      expect(src['producer'], 'rf-sensor-shepherd');
+      expect(src['producer'], 'rf-sensor-outride');
       final payload = e['payload'] as Map;
       expect(payload['system_type'], 'PLATFORM_STATUS');
       expect(payload['state'], 'NOMINAL');
@@ -295,9 +295,9 @@ void main() {
     test('metrics carry platform position honestly', () {
       final e = hb();
       final metrics = (e['payload'] as Map)['metrics'] as Map;
-      expect(metrics['shepherd_node_count'], 4);
-      expect(metrics['shepherd_detection_count'], 17);
-      expect(metrics['shepherd_heartbeat_interval_s'], 60);
+      expect(metrics['outride_node_count'], 4);
+      expect(metrics['outride_detection_count'], 17);
+      expect(metrics['outride_heartbeat_interval_s'], 60);
       final pos = metrics['position'] as Map;
       expect(pos['lat'], 35.1391);
       expect(pos['dimensionality'], '2D');
@@ -308,7 +308,7 @@ void main() {
 
     test('heartbeat without position is state-only', () {
       final e = zmetaPlatformStatus(
-        platformId: 'shepherd-mesh-1',
+        platformId: 'outride-mesh-1',
         ts: _t0,
         state: 'NOMINAL',
         nodeCount: 2,
@@ -331,7 +331,7 @@ void main() {
       );
       expect(
           zmetaSensorObservation(
-              platformId: 'shepherd-mesh-1', obs: bearing),
+              platformId: 'outride-mesh-1', obs: bearing),
           isNull);
       final spectrum = SensorObservation(
         type: SensorObsType.spectrum,
@@ -342,7 +342,7 @@ void main() {
       );
       expect(
           zmetaSensorObservation(
-              platformId: 'shepherd-mesh-1', obs: spectrum),
+              platformId: 'outride-mesh-1', obs: spectrum),
           isNull);
     });
 
@@ -355,7 +355,7 @@ void main() {
       );
       expect(
           zmetaSensorObservation(
-              platformId: 'shepherd-mesh-1', obs: obs),
+              platformId: 'outride-mesh-1', obs: obs),
           isNull);
     });
 
@@ -367,7 +367,7 @@ void main() {
         zone: '3',
       );
       final e = zmetaSensorObservation(
-          platformId: 'shepherd-mesh-1', obs: obs)!;
+          platformId: 'outride-mesh-1', obs: obs)!;
       expect((e['payload'] as Map)['modality'], 'EO');
       expect((e['event'] as Map)['event_subtype'], 'EO');
     });

@@ -1,6 +1,6 @@
 # Confidence math — the upgrade-only rule, formalized
 
-Research finding #2 (BRIEF.md). The literature gives Shepherd's
+Research finding #2 (BRIEF.md). The literature gives Outride's
 upgrade-only architecture rule its exact mathematical shape; this
 document states the formula, the basis, and — load-bearing — what the
 numbers do and do not claim.

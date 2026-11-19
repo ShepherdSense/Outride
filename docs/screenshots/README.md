@@ -1,6 +1,6 @@
 # Screenshots
 
-Interface snapshots from the live Shepherd app (Android, 2026-10-20).
+Interface snapshots from the live Outride app (Android, 2026-10-20).
 
 - `dashboard.jpg` — dashboard in live mode: radios, mesh links, event
   timeline, crossing events, honest-scope note.

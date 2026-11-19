@@ -1,4 +1,4 @@
-/// Data models for the Shepherd tripwire.
+/// Data models for the Outride tripwire.
 ///
 /// Honest-units note: Silvus reports signal metrics in radio-internal units
 /// (e.g. an SNR of "96" is not dB). Absolute values are therefore meaningless;

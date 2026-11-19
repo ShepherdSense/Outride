@@ -38,11 +38,11 @@ Color airframeAffiliationColor(String affiliationLabel) {
   switch (affiliationLabel) {
     case 'FRIENDLY':
     case 'FRIENDLY (FEED)':
-      return SentryColors.green;
+      return OutrideColors.green;
     case 'FRIENDLY (claimed)':
-      return SentryColors.cyan;
+      return OutrideColors.cyan;
     default:
-      return SentryColors.amber;
+      return OutrideColors.amber;
   }
 }
 
@@ -104,7 +104,7 @@ List<Widget> airframeLayer({
     // as a non-cooperative mesh track at a glance.
     out.add(_AirMarker(
       pos: project(lat, lon),
-      color: SentryColors.amber,
+      color: OutrideColors.amber,
       operator: false,
       label: c.serial ?? 'RID · NO ID',
       cooperativeLabel: c.cooperativeSourceLabel,
@@ -114,7 +114,7 @@ List<Widget> airframeLayer({
     if (oLat != null && oLon != null) {
       out.add(_AirMarker(
         pos: project(oLat, oLon),
-        color: SentryColors.amber,
+        color: OutrideColors.amber,
         operator: true,
         label: c.operatorLabel,
       ));

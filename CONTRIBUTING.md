@@ -1,6 +1,6 @@
-# Contributing to Shepherd
+# Contributing to Outride
 
-Thanks for wanting to help. Shepherd is GPLv3-licensed — fork the repo,
+Thanks for wanting to help. Outride is GPLv3-licensed — fork the repo,
 branch, and open a pull request. Small, focused PRs merge fastest.
 
 ## What we're looking for
@@ -14,7 +14,7 @@ branch, and open a pull request. Small, focused PRs merge fastest.
 
 ## Hard boundaries (non-negotiable)
 
-Shepherd is a **defensive-only** sensing tool. It detects; it never
+Outride is a **defensive-only** sensing tool. It detects; it never
 transmits to disrupt.
 
 - No jamming, deauthentication, spoofing, or any transmit-to-disrupt
@@ -27,7 +27,7 @@ transmits to disrupt.
 
 - `flutter analyze` clean, full test suite green.
 - New drivers need at least a bench-level demonstration (see
-  `docs/shepherd_cot_output_spec.md` for the pattern).
+  `docs/outride_cot_output_spec.md` for the pattern).
 - Keep the dark-mode, minimal UI language; advanced settings go behind
   the gear.
 

@@ -8,7 +8,7 @@ library;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/remote_id_service.dart';
+import 'package:outride/services/remote_id_service.dart';
 
 import 'remote_id_test.dart' as vec;
 

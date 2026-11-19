@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/wifi_rtt.dart';
+import 'package:outride/services/wifi_rtt.dart';
 import 'package:wifi_ftm/wifi_ftm.dart';
 
 /// Regression tests for the field report of 2026-10-21: the RTT card

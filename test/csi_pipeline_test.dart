@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/confidence_merger.dart';
-import 'package:shepherd/services/generic_sensor_driver.dart';
-import 'package:shepherd/services/sensor_protocol.dart';
+import 'package:outride/services/confidence_merger.dart';
+import 'package:outride/services/generic_sensor_driver.dart';
+import 'package:outride/services/sensor_protocol.dart';
 
 final _now = DateTime(2026, 1, 1, 12);
 

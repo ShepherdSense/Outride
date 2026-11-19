@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthetic Shepherd record data for the Stone Soup tracker bench.
+"""Synthetic Outride record data for the Stone Soup tracker bench.
 
 Generates one 60 s run at 4 Hz: two crossing targets (A: west->east,
 B: south->north, crossing mid-run) plus one distractor walker (C, small
@@ -7,7 +7,7 @@ signature, random walk). Four mesh nodes, six links. Each link's dip is
 the sum of per-target Gaussian proximity dips plus noise and rare
 clutter spikes.
 
-Output schema (Shepherd record CSV):
+Output schema (Outride record CSV):
   t_iso,link_key,from_node,to_node,snr_db,dip_db,truth_x,truth_y,truth_id
 
 truth_* columns are the DOMINANT contributor on that link at that time

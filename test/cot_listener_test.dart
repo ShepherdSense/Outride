@@ -1,5 +1,5 @@
-/// Tests for the Shepherd CoT ingest listener
-/// (docs/predator_integration_spec.md — Shepherd side only).
+/// Tests for the Outride CoT ingest listener
+/// (docs/predator_integration_spec.md — Outride side only).
 ///
 /// Load-bearing invariants:
 ///  1. Sample Predator-style CoT -> emitter observation extracted.
@@ -16,9 +16,9 @@ library;
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/confidence_merger.dart';
-import 'package:shepherd/services/cot_listener.dart';
-import 'package:shepherd/services/geo_projection.dart';
+import 'package:outride/services/confidence_merger.dart';
+import 'package:outride/services/cot_listener.dart';
+import 'package:outride/services/geo_projection.dart';
 
 final DateTime t0 = DateTime.utc(2026, 10, 18, 19, 35, 0);
 

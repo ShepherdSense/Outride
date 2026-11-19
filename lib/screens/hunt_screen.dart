@@ -1,4 +1,4 @@
-/// Hunt session screen (Shepherd v0.26.0, Fieldwatch-borrow item 3).
+/// Hunt session screen (Outride v0.26.0, Fieldwatch-borrow item 3).
 ///
 /// Opt-in walk-around proximity mode for one selected emitter: RSSI
 /// samples accumulate into a heat grid, motion-sensor steps carry
@@ -226,7 +226,7 @@ class _HuntScreenState extends State<HuntScreen> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               border: Border.all(
-                color: _flash ? SentryColors.amber : SentryColors.border,
+                color: _flash ? OutrideColors.amber : OutrideColors.border,
                 width: _flash ? 2 : 1,
               ),
               borderRadius: BorderRadius.circular(8),
@@ -236,8 +236,8 @@ class _HuntScreenState extends State<HuntScreen> {
               children: [
                 Text(
                   'PROXIMITY ONLY — NOT A POSITION FIX',
-                  style: SentryType.section().copyWith(
-                    color: SentryColors.amber,
+                  style: OutrideType.section().copyWith(
+                    color: OutrideColors.amber,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -248,14 +248,14 @@ class _HuntScreenState extends State<HuntScreen> {
                   'BUILD, SO THERE IS NO DEDICATED TONE). STEP '
                   'DISTANCE USES AN ASSUMED 0.75 m STEP — AN ESTIMATE, '
                   'NOT A MEASUREMENT.',
-                  style: SentryType.section(10).copyWith(height: 1.6),
+                  style: OutrideType.section(10).copyWith(height: 1.6),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'TILE: $_tileStatus · '
                   '${widget.state.selectedTileSource.attribution}',
-                  style: SentryType.section(10).copyWith(
-                    color: SentryColors.muted,
+                  style: OutrideType.section(10).copyWith(
+                    color: OutrideColors.muted,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -267,7 +267,7 @@ class _HuntScreenState extends State<HuntScreen> {
                   'THIS BUILD — NO LIVE RSSI/GPS FEED IS WIRED IN. '
                   'STEPS ARE INFORMATIONAL ONLY: WITH NO HEADING '
                   'SOURCE, STEP DISTANCE NEVER PLACES SAMPLES.',
-                  style: SentryType.section(10).copyWith(height: 1.6),
+                  style: OutrideType.section(10).copyWith(height: 1.6),
                 ),
                 // v0.26.0 fix-pass: surface the step source's last
                 // error (previously written and read by nothing).
@@ -276,8 +276,8 @@ class _HuntScreenState extends State<HuntScreen> {
                   Text(
                     'MOTION SENSOR UNAVAILABLE — '
                     '${widget.state.huntSensorError}',
-                    style: SentryType.section(10).copyWith(
-                      color: SentryColors.orange,
+                    style: OutrideType.section(10).copyWith(
+                      color: OutrideColors.orange,
                       height: 1.6,
                     ),
                   ),
@@ -318,7 +318,7 @@ class _HuntScreenState extends State<HuntScreen> {
           const SizedBox(height: 12),
           TextField(
             controller: _emitter,
-            style: SentryType.rowValue(SentryColors.onDark),
+            style: OutrideType.rowValue(OutrideColors.onDark),
             decoration: const InputDecoration(
               labelText: 'SELECTED EMITTER (LABEL ONLY — NOT AN IDENTITY)',
             ),
@@ -333,7 +333,7 @@ class _HuntScreenState extends State<HuntScreen> {
                     signed: true,
                     decimal: true,
                   ),
-                  style: SentryType.rowValue(SentryColors.onDark),
+                  style: OutrideType.rowValue(OutrideColors.onDark),
                   decoration: const InputDecoration(
                     labelText: 'RSSI (dBm)',
                   ),
@@ -347,7 +347,7 @@ class _HuntScreenState extends State<HuntScreen> {
                     signed: true,
                     decimal: true,
                   ),
-                  style: SentryType.rowValue(SentryColors.onDark),
+                  style: OutrideType.rowValue(OutrideColors.onDark),
                   decoration: const InputDecoration(
                     labelText: 'EAST (m, hunt-local)',
                   ),
@@ -361,7 +361,7 @@ class _HuntScreenState extends State<HuntScreen> {
                     signed: true,
                     decimal: true,
                   ),
-                  style: SentryType.rowValue(SentryColors.onDark),
+                  style: OutrideType.rowValue(OutrideColors.onDark),
                   decoration: const InputDecoration(
                     labelText: 'NORTH (m, hunt-local)',
                   ),
@@ -398,13 +398,13 @@ class _HuntScreenState extends State<HuntScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Text(_note, style: SentryType.rowValue(SentryColors.onDark)),
+          Text(_note, style: OutrideType.rowValue(OutrideColors.onDark)),
           const SizedBox(height: 6),
           Text(
             'SAMPLES ACCEPTED: ${session?.acceptedSamples ?? 0} · '
             'REJECTED: ${grid?.rejectedCount ?? 0} · '
             'CELLS: ${grid?.cellCount ?? 0}',
-            style: SentryType.section(10),
+            style: OutrideType.section(10),
           ),
           Text(
             'STEPS SINCE MANUAL POSITION: '
@@ -412,7 +412,7 @@ class _HuntScreenState extends State<HuntScreen> {
             'EST. DISTANCE: '
             '${(session?.walker.distanceSinceFix ?? 0).toStringAsFixed(1)} m '
             '· INFORMATIONAL ONLY — DOES NOT PLACE SAMPLES',
-            style: SentryType.section(10),
+            style: OutrideType.section(10),
           ),
           if (loudest != null)
             Text(
@@ -421,8 +421,8 @@ class _HuntScreenState extends State<HuntScreen> {
               '${loudest.centerY.toStringAsFixed(0)} m N) · '
               'BEST ${loudest.bestRssi.toStringAsFixed(0)} dBm · '
               '${loudest.sampleCount} SAMPLES',
-              style: SentryType.section(10).copyWith(
-                color: SentryColors.amber,
+              style: OutrideType.section(10).copyWith(
+                color: OutrideColors.amber,
               ),
             ),
           const SizedBox(height: 6),
@@ -430,8 +430,8 @@ class _HuntScreenState extends State<HuntScreen> {
             'COORDINATES ARE HUNT-LOCAL METERS FROM THE HUNT START '
             'POINT. THE TILE BACKDROP IS THE ORIGIN TILE ONLY — THE '
             'GRID IS NOT GEOGRAPHY.',
-            style: SentryType.section(10).copyWith(
-              color: SentryColors.muted,
+            style: OutrideType.section(10).copyWith(
+              color: OutrideColors.muted,
             ),
           ),
         ],
@@ -469,7 +469,7 @@ class _HeatPainter extends CustomPainter {
         (2 * halfExtentMeters);
     // Start-point crosshair.
     final axisPaint = Paint()
-      ..color = SentryColors.muted
+      ..color = OutrideColors.muted
       ..strokeWidth = 1.0;
     canvas.drawLine(Offset(0, cy), Offset(size.width, cy), axisPaint);
     canvas.drawLine(Offset(cx, 0), Offset(cx, size.height), axisPaint);
@@ -477,8 +477,8 @@ class _HeatPainter extends CustomPainter {
       final strength =
           ((cell.bestRssi + 100.0) / 60.0).clamp(0.0, 1.0);
       final color = Color.lerp(
-        SentryColors.purple,
-        SentryColors.red,
+        OutrideColors.purple,
+        OutrideColors.red,
         strength,
       )!;
       // Cell square sized from the grid's actual cellSizeMeters,
@@ -498,7 +498,7 @@ class _HeatPainter extends CustomPainter {
         canvas.drawRect(
           rect,
           Paint()
-            ..color = SentryColors.amber
+            ..color = OutrideColors.amber
             ..style = PaintingStyle.stroke
             ..strokeWidth = 2.0,
         );

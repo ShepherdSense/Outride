@@ -1,7 +1,7 @@
 # Device auto-connect spec — v0.19.0
 
 **Ask (Draco, 2026-10-19):** once a device family is integrated (Silvus, MPU5,
-…), plugging it in should auto-connect it to Shepherd. Same for the ATAK/TAK
+…), plugging it in should auto-connect it to Outride. Same for the ATAK/TAK
 CoT link. No SCAN button, no manual IP entry — it just appears.
 
 ## Current state (surveyed 2026-10-19)

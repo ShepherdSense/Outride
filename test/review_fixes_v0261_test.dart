@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/models/link_sample.dart';
-import 'package:shepherd/models/tracking.dart';
-import 'package:shepherd/services/offline_map_source.dart';
-import 'package:shepherd/services/tracker.dart';
+import 'package:outride/models/link_sample.dart';
+import 'package:outride/models/tracking.dart';
+import 'package:outride/services/offline_map_source.dart';
+import 'package:outride/services/tracker.dart';
 
 void main() {
   test('tilesForBounds returns unique tiles, in a sane count', () {

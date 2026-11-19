@@ -132,7 +132,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
   }
 
   Widget _mapCard(List<NodePosition> nodes, bool live) {
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -144,12 +144,12 @@ class _TrackingScreenState extends State<TrackingScreen> {
           // 2026-10-20).
           Row(
             children: [
-              Text('FIELD MAP', style: SentryType.section()),
+              Text('FIELD MAP', style: OutrideType.section()),
               const Spacer(),
               IconButton(
                 tooltip: 'FULLSCREEN',
                 icon: const Icon(Icons.fullscreen,
-                    color: SentryColors.muted, size: 20),
+                    color: OutrideColors.muted, size: 20),
                 onPressed: () =>
                     setState(() => _mapFullscreen = true),
               ),
@@ -198,9 +198,9 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Text(
                   live ? 'LIVE LAYOUT' : 'SIMULATED LAYOUT',
-                  style: SentryType.section(10).copyWith(
+                  style: OutrideType.section(10).copyWith(
                     color:
-                        live ? SentryColors.green : SentryColors.orange,
+                        live ? OutrideColors.green : OutrideColors.orange,
                   ),
                 ),
               ),
@@ -211,14 +211,14 @@ class _TrackingScreenState extends State<TrackingScreen> {
             'DRAG NODES TO THEIR REAL SPOTS. DRAG THE RED MARKER TO MOVE THE DEFENDED POINT. '
             'THE SHADOW IS WHERE THE RF FIELD DIMS — WHAT THE WAVES ARE HITTING. '
             'SCROLL OR USE +/− TO ZOOM. ONE MAP, EVERY RADIO: NODE COLORS MARK THE DRIVER.',
-            style: SentryType.section(10),
+            style: OutrideType.section(10),
           ),
           const SizedBox(height: 6),
           Text(
             'FUSED IMAGE: $rtiImageLabel — PROBABILITY MASS OVER THE GROUND PLANE FROM THE '
             'DIRECTION-SPLIT, AREA-NORMALIZED RTI LAYER. AN ESTIMATE OF WHERE THE FIELD IS '
             'DISTURBED — NEVER A POSITION FIX, NEVER AN IDENTIFICATION.',
-            style: SentryType.section(10),
+            style: OutrideType.section(10),
           ),
           const SizedBox(height: 8),
           if (_showHealth) _healthLegend() else _driverLegend(nodes),
@@ -325,7 +325,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
             Positioned(
               right: 4,
               top: 4,
-              child: SentryZoomControls(
+              child: OutrideZoomControls(
                 onZoomIn: () => _bumpMapZoom(1.25),
                 onZoomOut: () => _bumpMapZoom(1 / 1.25),
                 onReset: () => setState(() => _mapZoom = 1.0),
@@ -412,7 +412,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
               ),
               const SizedBox(width: 5),
               Text(d.isEmpty ? 'UNKNOWN' : d.toUpperCase(),
-                  style: SentryType.section(10)),
+                  style: OutrideType.section(10)),
             ],
           ),
       ],
@@ -422,10 +422,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
   /// Legend for the node-health overlay: dot color = link freshness.
   Widget _healthLegend() {
     const items = [
-      (SentryColors.green, 'ALL LINKS LIVE'),
-      (SentryColors.amber, 'SOME STALE'),
-      (SentryColors.red, 'ALL STALE'),
-      (SentryColors.muted, 'NO LINKS'),
+      (OutrideColors.green, 'ALL LINKS LIVE'),
+      (OutrideColors.amber, 'SOME STALE'),
+      (OutrideColors.red, 'ALL STALE'),
+      (OutrideColors.muted, 'NO LINKS'),
     ];
     return Wrap(
       spacing: 14,
@@ -444,7 +444,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 ),
               ),
               const SizedBox(width: 5),
-              Text(label, style: SentryType.section(10)),
+              Text(label, style: OutrideType.section(10)),
             ],
           ),
       ],
@@ -454,7 +454,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
   /// Floating exit-fullscreen chip shown over fullscreen views.
   Widget _fullscreenChip() {
     return Material(
-      color: SentryColors.surface2.withAlpha(220),
+      color: OutrideColors.surface2.withAlpha(220),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
@@ -466,11 +466,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.fullscreen_exit,
-                  color: SentryColors.onDark, size: 16),
+                  color: OutrideColors.onDark, size: 16),
               const SizedBox(width: 6),
               Text('EXIT FULLSCREEN',
-                  style: SentryType.section(10)
-                      .copyWith(color: SentryColors.onDark)),
+                  style: OutrideType.section(10)
+                      .copyWith(color: OutrideColors.onDark)),
             ],
           ),
         ),
@@ -494,11 +494,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
       return s < 2 ? 'NOW' : '${s}s AGO';
     }
 
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('CONTACTS', style: SentryType.section()),
+          Text('CONTACTS', style: OutrideType.section()),
           const SizedBox(height: 8),
           if (records.isEmpty && contacts.isEmpty && ground.isEmpty)
             Text(
@@ -507,7 +507,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
               '(PRC-163 PLI) VIA THE SAME TAK FEED; CIVIL DRONES VIA '
               'REMOTE ID BROADCAST WHEN THE RECEIVER IS ON '
               '(SETTINGS → DRONES).',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
           for (final r in records) ...[
             _row(
@@ -525,14 +525,14 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 c.serial ?? 'RID · NO ID',
                 'UNKNOWN · CLASS C · BROADCAST CONTACT (${c.sourceKind}) '
                     '· ${ageText(c.lastSeen)}',
-                SentryColors.amber,
+                OutrideColors.amber,
               ),
               const SizedBox(height: 4),
             ],
           if (ground.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text('GROUND TRACKS — FRIENDLY PLI VIA THE TAK FEED',
-                style: SentryType.section()),
+                style: OutrideType.section()),
             const SizedBox(height: 6),
             for (final g in ground) ...[
               _row(
@@ -550,7 +550,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
               'REPORTS WHERE ITS CARRIER IS (PLI) OVER THE TAK FEED. '
               'IT IS NOT A SENSING NODE — NO LINK METRICS EXIST FOR '
               'IT, AND ITS SILENCE REMOVES NOTHING.',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             const SizedBox(height: 4),
           ],
@@ -561,7 +561,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
             'UNTIL A COOPERATIVE FEED CORROBORATES IT. BROADCAST-ONLY '
             'COVERAGE: MILITARY D-MODEL AIRCRAFT MAY TRANSMIT NO '
             'REMOTE ID AT ALL — NO CONTACT NEVER MEANS NO DRONE.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
         ],
       ),
@@ -570,13 +570,13 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   Widget _readoutCard() {
     final t = state.track;
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('TRACK ESTIMATE', style: SentryType.section()),
+              Text('TRACK ESTIMATE', style: OutrideType.section()),
               const Spacer(),
               if (t != null) _relationChip(t.relation),
             ],
@@ -589,48 +589,48 @@ class _TrackingScreenState extends State<TrackingScreen> {
                       'PLACE IT. LOCALIZING NEEDS 3+ NODES WITH POSITIONS '
                       '(SPECTRUM-BAND ALERTS NEVER LOCALIZE).'
                   : 'NO ACTIVE TARGET. DISTURB A LINK AND THE ESTIMATE APPEARS HERE.',
-              style: SentryType.rowLabel(),
+              style: OutrideType.rowLabel(),
             )
           else ...[
-            _row('POSITION', t.positionLabel, SentryColors.onDark),
-            _row('ALTITUDE', '', SentryColors.muted),
+            _row('POSITION', t.positionLabel, OutrideColors.onDark),
+            _row('ALTITUDE', '', OutrideColors.muted),
             _altitudeBody(t),
             _row(
                 'SPEED',
                 t.speedMps == null
                     ? '—'
                     : '${t.speedMps!.toStringAsFixed(1)} M/S EST',
-                SentryColors.blue),
+                OutrideColors.blue),
             _row(
                 'HEADING',
                 t.headingDeg == null
                     ? '—  TARGET NOT MOVING YET'
                     : '${t.headingCompass} ${t.headingDeg!.toStringAsFixed(0)}° EST',
-                SentryColors.blue),
-            _row('SIZE', '${t.sizeClass} EST', SentryColors.onDark),
+                OutrideColors.blue),
+            _row('SIZE', '${t.sizeClass} EST', OutrideColors.onDark),
             _row('TYPE GUESS', '${t.typeGuess} — LOW CONFIDENCE',
-                SentryColors.muted),
-            _row('LINKS USED', '${t.linksUsed}', SentryColors.muted),
+                OutrideColors.muted),
+            _row('LINKS USED', '${t.linksUsed}', OutrideColors.muted),
             if (state.trackConfidence != null)
               _row(
                 'CONFIDENCE',
                 '${(state.trackConfidence!.displayed * 100).toStringAsFixed(0)}% EST'
                 ' — RF ${(state.trackConfidence!.base * 100).toStringAsFixed(0)}%'
                 '${state.trackConfidence!.upgrade > 0.005 ? ' +${(state.trackConfidence!.upgrade * 100).toStringAsFixed(0)}% ${state.trackConfidence!.applied.length} SENSOR${state.trackConfidence!.applied.length == 1 ? '' : 'S'}' : ''}',
-                SentryColors.green,
+                OutrideColors.green,
               ),
             if (state.trackConsistency != null &&
                 !state.trackConsistency!.consistent)
               _row(
                 'TRACK STATE',
                 'INCONSISTENT — ${state.trackConsistency!.reason ?? 'fix jumps exceed the motion model'}',
-                SentryColors.red,
+                OutrideColors.red,
               ),
             if (t.stitchLabel != null)
               _row(
                   'STITCH',
                   '${t.stitchLabel} — AI ${(t.stitchConfidence! * 100).toStringAsFixed(0)}% SAME MOVER EST',
-                  SentryColors.purple),
+                  OutrideColors.purple),
           ],
         ],
       ),
@@ -643,7 +643,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         padding: const EdgeInsets.only(left: 116, bottom: 4),
         child: Text(
           'UNKNOWN — NODES ARE COPLANAR. PUT ONE RADIO ON A MAST, ROOF OR HILL TO UNLOCK ALTITUDE.',
-          style: SentryType.section(10).copyWith(height: 1.6),
+          style: OutrideType.section(10).copyWith(height: 1.6),
         ),
       );
     }
@@ -656,15 +656,15 @@ class _TrackingScreenState extends State<TrackingScreen> {
         children: [
           Text(
             '≈ ${t.altitudeM!.toStringAsFixed(1)} M ABOVE GROUND — EST, $qual',
-            style: SentryType.readout(16, SentryColors.green),
+            style: OutrideType.readout(16, OutrideColors.green),
           ),
           const SizedBox(height: 6),
           SizedBox(
             width: 180,
             child: LinearProgressIndicator(
               value: conf,
-              color: SentryColors.green,
-              backgroundColor: SentryColors.surface2,
+              color: OutrideColors.green,
+              backgroundColor: OutrideColors.surface2,
               minHeight: 3,
             ),
           ),
@@ -675,10 +675,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   Widget _relationChip(String relation) {
     final color = switch (relation) {
-      'INBOUND' || 'OVERHEAD' => SentryColors.red,
-      'OUTBOUND' => SentryColors.green,
-      'TRANSITING' => SentryColors.amber,
-      _ => SentryColors.muted,
+      'INBOUND' || 'OVERHEAD' => OutrideColors.red,
+      'OUTBOUND' => OutrideColors.green,
+      'TRANSITING' => OutrideColors.amber,
+      _ => OutrideColors.muted,
     };
     final icon = switch (relation) {
       'INBOUND' => Icons.arrow_downward,
@@ -688,14 +688,14 @@ class _TrackingScreenState extends State<TrackingScreen> {
       'HOLDING' => Icons.pause,
       _ => Icons.help_outline,
     };
-    return SentryChip(label: relation, color: color, icon: icon);
+    return OutrideChip(label: relation, color: color, icon: icon);
   }
 
   Widget _row(String label, String value, Color color) {
     if (value.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Text(label, style: SentryType.rowLabel()),
+        child: Text(label, style: OutrideType.rowLabel()),
       );
     }
     return Padding(
@@ -703,8 +703,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 108, child: Text(label, style: SentryType.rowLabel())),
-          Expanded(child: Text(value, style: SentryType.rowValue(color))),
+          SizedBox(width: 108, child: Text(label, style: OutrideType.rowLabel())),
+          Expanded(child: Text(value, style: OutrideType.rowValue(color))),
         ],
       ),
     );
@@ -718,22 +718,22 @@ class _TrackingScreenState extends State<TrackingScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
-          backgroundColor: SentryColors.surface2,
+          backgroundColor: OutrideColors.surface2,
           title: Text('CALLSIGN — ${n.nodeId}',
-              style: SentryType.rowValue(SentryColors.onDark)),
+              style: OutrideType.rowValue(OutrideColors.onDark)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('SHOWN OVER THIS NODE ON THE MAP. A-Z 0-9 DASH, UP TO 16 CHARACTERS. EMPTY CLEARS IT.',
-                  style: SentryType.section(10)),
+                  style: OutrideType.section(10)),
               const SizedBox(height: 10),
               TextField(
                 controller: ctl,
                 autofocus: true,
                 textCapitalization: TextCapitalization.characters,
                 maxLength: 16,
-                style: SentryType.rowValue(SentryColors.onDark),
+                style: OutrideType.rowValue(OutrideColors.onDark),
                 decoration: InputDecoration(
                   hintText: 'e.g. RAPTOR-1',
                   errorText: error,
@@ -745,7 +745,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text('CURRENTLY FROM THE NODE\u2019S BEACON — TYPING YOUR OWN OVERRIDES IT.',
-                      style: SentryType.section(10)),
+                      style: OutrideType.section(10)),
                 ),
             ],
           ),
@@ -792,30 +792,30 @@ class _TrackingScreenState extends State<TrackingScreen> {
   /// are labeled as such, never silently trusted.
   Widget _gpsCard(List<NodePosition> nodes) {
     final origin = state.gpsOrigin;
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Title alone on its row: title + button shared a row and
           // overflowed phone-width cards (same class as the FIELD
           // MAP header). Both capture buttons live in one wrap below.
-          Text('GPS POSITIONING', style: SentryType.section()),
+          Text('GPS POSITIONING', style: OutrideType.section()),
           const SizedBox(height: 6),
           Text(
             'WALK TO EACH NODE WITH THIS DEVICE AND TAP THE TARGET BUTTON ON ITS ROW — ITS MAP POSITION IS SET FROM THE GPS FIX. '
             'THE FIRST CAPTURE SETS THE ORIGIN. ON WINDOWS, ENABLE LOCATION IN SETTINGS → PRIVACY & SECURITY → LOCATION.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 8),
           Row(
             children: [
-              Text('ORIGIN  ', style: SentryType.rowLabel()),
+              Text('ORIGIN  ', style: OutrideType.rowLabel()),
               Expanded(
                 child: Text(
                   origin?.label ?? 'NOT SET — FIRST CAPTURE SETS IT',
-                  style: SentryType.rowValue(origin == null
-                      ? SentryColors.muted
-                      : SentryColors.green),
+                  style: OutrideType.rowValue(origin == null
+                      ? OutrideColors.muted
+                      : OutrideColors.green),
                 ),
               ),
             ],
@@ -848,13 +848,13 @@ class _TrackingScreenState extends State<TrackingScreen> {
                     width: 88,
                     child: Text(n.callsign ?? shortNodeId(n.nodeId),
                         style:
-                            SentryType.rowValue(SentryColors.onDark)
+                            OutrideType.rowValue(OutrideColors.onDark)
                                 .copyWith(fontSize: 12),
                         overflow: TextOverflow.ellipsis),
                   ),
                   Expanded(
                     child: Text(n.gpsLabel,
-                        style: SentryType.rowValue(SentryColors.muted)
+                        style: OutrideType.rowValue(OutrideColors.muted)
                             .copyWith(fontSize: 11),
                         overflow: TextOverflow.ellipsis),
                   ),
@@ -862,12 +862,12 @@ class _TrackingScreenState extends State<TrackingScreen> {
                     width: 118,
                     child: Text(
                         '${n.x.toStringAsFixed(1)}, ${n.y.toStringAsFixed(1)} M',
-                        style: SentryType.rowLabel(),
+                        style: OutrideType.rowLabel(),
                         textAlign: TextAlign.right),
                   ),
                   IconButton(
                     icon: const Icon(Icons.gps_fixed, size: 18),
-                    color: SentryColors.green,
+                    color: OutrideColors.green,
                     tooltip:
                         'Capture GPS position for ${n.nodeId}',
                     onPressed: state.gpsBusy
@@ -876,7 +876,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.badge, size: 18),
-                    color: SentryColors.purple,
+                    color: OutrideColors.purple,
                     tooltip: 'Set callsign for ${n.nodeId}',
                     onPressed: () => _editCallsign(context, state, n),
                   ),
@@ -899,11 +899,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
                     state.gpsBusy
                         ? 'ACQUIRING GPS FIX…'
                         : (state.gpsMessage ?? ''),
-                    style: SentryType.section(10).copyWith(
+                    style: OutrideType.section(10).copyWith(
                       height: 1.6,
                       color: state.gpsBusy
-                          ? SentryColors.blue
-                          : SentryColors.amber,
+                          ? OutrideColors.blue
+                          : OutrideColors.amber,
                     ),
                   ),
                 ),
@@ -915,16 +915,16 @@ class _TrackingScreenState extends State<TrackingScreen> {
     );
   }
 
-  Widget _nodeHeightsCard(List<NodePosition> nodes) {    return SentryPanel(
+  Widget _nodeHeightsCard(List<NodePosition> nodes) {    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('NODE HEIGHTS + ANTENNAS', style: SentryType.section()),
+          Text('NODE HEIGHTS + ANTENNAS', style: OutrideType.section()),
           const SizedBox(height: 6),
           Text(
             'HEIGHT ABOVE GROUND PER NODE. ALTITUDE NEEDS NODES AT DIFFERENT HEIGHTS — A MAST OR ROOFTOP NODE UNLOCKS IT. '
             'SET EACH NODE\'S ANTENNA TYPE FOR THE 3D BEAM VIEW (PANEL AIM AUTO-POINTS AT THE NEAREST NODE).',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 8),
           for (final n in nodes)
@@ -935,7 +935,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                   SizedBox(
                     width: 96,
                     child: Text(n.callsign ?? shortNodeId(n.nodeId),
-                        style: SentryType.rowValue(SentryColors.onDark)
+                        style: OutrideType.rowValue(OutrideColors.onDark)
                             .copyWith(fontSize: 12),
                         overflow: TextOverflow.ellipsis),
                   ),
@@ -945,8 +945,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
                       value: n.antenna,
                       isDense: true,
                       underline: const SizedBox(),
-                      dropdownColor: SentryColors.surface2,
-                      style: SentryType.rowValue(SentryColors.blue)
+                      dropdownColor: OutrideColors.surface2,
+                      style: OutrideType.rowValue(OutrideColors.blue)
                           .copyWith(fontSize: 12),
                       items: const [
                         DropdownMenuItem(
@@ -973,7 +973,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                   SizedBox(
                     width: 52,
                     child: Text('${n.height.toStringAsFixed(0)} M',
-                        style: SentryType.rowLabel(),
+                        style: OutrideType.rowLabel(),
                         textAlign: TextAlign.right),
                   ),
                 ],
@@ -990,13 +990,13 @@ class _TrackScopeNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SentryPanel(
+    return OutridePanel(
       child: Text(
         'TRACKING HONESTY — ONE TARGET AT A TIME (TWO SIMULTANEOUS MOVERS BLEND INTO ONE ESTIMATE). '
         'POSITION COMES FROM A COARSE 3D TOMOGRAPHIC GRID SEARCH OVER THE DISTURBED LINKS — AN ESTIMATE, NOT A FIX. '
         'ALTITUDE IS THE WEAKEST AXIS AND STAYS "UNKNOWN" UNTIL NODES SIT AT DIFFERENT HEIGHTS. '
         'TYPE GUESSES ARE HEURISTICS, NEVER IDENTIFICATION.',
-        style: SentryType.section(10).copyWith(height: 1.7),
+        style: OutrideType.section(10).copyWith(height: 1.7),
       ),
     );
   }
@@ -1083,7 +1083,7 @@ class _TrackingMapPainter extends CustomPainter {
 
     // Faint 10 m grid.
     final gridPaint = Paint()
-      ..color = SentryColors.border.withAlpha(80)
+      ..color = OutrideColors.border.withAlpha(80)
       ..strokeWidth = 1;
     final x0 = tr.toWorldX(0), x1 = tr.toWorldX(size.width);
     final y0 = tr.toWorldY(size.height), y1 = tr.toWorldY(0);
@@ -1103,13 +1103,13 @@ class _TrackingMapPainter extends CustomPainter {
           convexHull([for (final n in nodes) math.Point(n.x, n.y)]);
       final pts = [for (final h in hull) tr.toScreen(h.x, h.y)];
       final halo = Paint()
-        ..color = SentryColors.purple.withAlpha(45)
+        ..color = OutrideColors.purple.withAlpha(45)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 12
         ..strokeJoin = StrokeJoin.round
         ..strokeCap = StrokeCap.round;
       final edge = Paint()
-        ..color = SentryColors.purple.withAlpha(190)
+        ..color = OutrideColors.purple.withAlpha(190)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.5
         ..strokeJoin = StrokeJoin.round
@@ -1146,7 +1146,7 @@ class _TrackingMapPainter extends CustomPainter {
             p,
             r,
             Paint()
-              ..color = SentryColors.amber
+              ..color = OutrideColors.amber
                   .withAlpha((c.v * 130 * fall).round()));
       }
       // Hot core: redraw the strongest cells brighter for definition.
@@ -1158,7 +1158,7 @@ class _TrackingMapPainter extends CustomPainter {
             tr.toScreen(c.x, c.y),
             r * 0.55,
             Paint()
-              ..color = SentryColors.orange
+              ..color = OutrideColors.orange
                   .withAlpha((c.v * 150 * fall).round()));
       }
     }
@@ -1175,7 +1175,7 @@ class _TrackingMapPainter extends CustomPainter {
             rr,
             Paint()
               ..color =
-                  SentryColors.purple.withAlpha((c.v * 110).round()));
+                  OutrideColors.purple.withAlpha((c.v * 110).round()));
       }
       for (final c in rti) {
         if (c.v < 0.55) continue;
@@ -1184,16 +1184,16 @@ class _TrackingMapPainter extends CustomPainter {
             rr * 0.55,
             Paint()
               ..color =
-                  SentryColors.purple.withAlpha((c.v * 170).round()));
+                  OutrideColors.purple.withAlpha((c.v * 170).round()));
       }
     }
 
     // Links between every pair of nodes.
     final faintLink = Paint()
-      ..color = SentryColors.border
+      ..color = OutrideColors.border
       ..strokeWidth = 1.5;
     final hotLink = Paint()
-      ..color = SentryColors.amber.withAlpha(220)
+      ..color = OutrideColors.amber.withAlpha(220)
       ..strokeWidth = 3;
     for (var i = 0; i < nodes.length; i++) {
       for (var j = i + 1; j < nodes.length; j++) {
@@ -1208,7 +1208,7 @@ class _TrackingMapPainter extends CustomPainter {
     // Defended point: red crosshair.
     final dp = tr.toScreen(defended.x, defended.y);
     final dpPaint = Paint()
-      ..color = SentryColors.red
+      ..color = OutrideColors.red
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
     canvas.drawCircle(dp, 11, dpPaint);
@@ -1225,7 +1225,7 @@ class _TrackingMapPainter extends CustomPainter {
           dp,
           tp,
           Paint()
-            ..color = SentryColors.red.withAlpha(100)
+            ..color = OutrideColors.red.withAlpha(100)
             ..strokeWidth = 1.5);
     }
 
@@ -1240,22 +1240,22 @@ class _TrackingMapPainter extends CustomPainter {
       final p = tr.toScreen(n.x, n.y);
       final hot = disturbedNodes.contains(n.nodeId);
       final healthColor = switch (nodeHealth[n.nodeId]) {
-        NodeHealthStatus.ok => SentryColors.green,
-        NodeHealthStatus.degraded => SentryColors.amber,
-        NodeHealthStatus.dead => SentryColors.red,
-        _ => SentryColors.muted,
+        NodeHealthStatus.ok => OutrideColors.green,
+        NodeHealthStatus.degraded => OutrideColors.amber,
+        NodeHealthStatus.dead => OutrideColors.red,
+        _ => OutrideColors.muted,
       };
       final base =
           showHealth ? healthColor : driverColor(driverOf(n.nodeId));
-      final color = hot ? SentryColors.amber : base;
+      final color = hot ? OutrideColors.amber : base;
       canvas.drawCircle(p, 14, Paint()..color = color.withAlpha(45));
       canvas.drawCircle(p, 8, Paint()..color = color.withAlpha(140));
       canvas.drawCircle(p, 4.5, Paint()..color = color);
       _label(canvas, n.callsign ?? shortNodeId(n.nodeId), p + const Offset(16, -24),
-          SentryColors.onDark);
+          OutrideColors.onDark);
       if (n.height >= 0.5) {
         _label(canvas, '${n.height.toStringAsFixed(0)}m',
-            p + const Offset(16, -10), SentryColors.muted);
+            p + const Offset(16, -10), OutrideColors.muted);
       }
     }
 
@@ -1263,12 +1263,12 @@ class _TrackingMapPainter extends CustomPainter {
     if (t != null) {
       final p = tr.toScreen(t.x, t.y);
       canvas.drawCircle(
-          p, 18, Paint()..color = SentryColors.amber.withAlpha(50));
+          p, 18, Paint()..color = OutrideColors.amber.withAlpha(50));
       canvas.drawCircle(
-          p, 10, Paint()..color = SentryColors.amber.withAlpha(160));
+          p, 10, Paint()..color = OutrideColors.amber.withAlpha(160));
       canvas.drawCircle(p, 5, Paint()..color = Colors.white);
       _label(canvas, 'TRACK', p + const Offset(16, 6),
-          SentryColors.amber);
+          OutrideColors.amber);
       // Heading arrow — points along the track's compass heading
       // (0° = N = screen-up). Drawn only once the target has moved
       // enough for a heading estimate to exist.
@@ -1277,7 +1277,7 @@ class _TrackingMapPainter extends CustomPainter {
         final a = hd * math.pi / 180;
         final dir = Offset(math.sin(a), -math.cos(a));
         final arrowPaint = Paint()
-          ..color = SentryColors.amber
+          ..color = OutrideColors.amber
           ..strokeWidth = 2.5
           ..strokeCap = StrokeCap.round;
         final tip = p + dir * 30;
@@ -1299,7 +1299,7 @@ class _TrackingMapPainter extends CustomPainter {
           style: TextStyle(
             color: color,
             fontSize: 10,
-            fontFamily: SentryType.mono,
+            fontFamily: OutrideType.mono,
             letterSpacing: 1.2,
           )),
       textDirection: TextDirection.ltr,
@@ -1325,8 +1325,8 @@ class _CompassRose extends StatelessWidget {
       height: 60,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: SentryColors.surface2.withAlpha(210),
-        border: Border.all(color: SentryColors.border, width: 1),
+        color: OutrideColors.surface2.withAlpha(210),
+        border: Border.all(color: OutrideColors.border, width: 1),
       ),
       child: CustomPaint(painter: _CompassRosePainter()),
     );
@@ -1341,7 +1341,7 @@ class _CompassRosePainter extends CustomPainter {
 
     // Tick marks every 45°; cardinal ticks run longer.
     final tickPaint = Paint()
-      ..color = SentryColors.muted
+      ..color = OutrideColors.muted
       ..strokeWidth = 1.5;
     for (var i = 0; i < 8; i++) {
       final a = i * math.pi / 4;
@@ -1351,7 +1351,7 @@ class _CompassRosePainter extends CustomPainter {
     }
 
     // North pointer triangle.
-    final northPaint = Paint()..color = SentryColors.amber;
+    final northPaint = Paint()..color = OutrideColors.amber;
     canvas.drawPath(
       Path()
         ..moveTo(c.dx, c.dy - r + 2)
@@ -1361,10 +1361,10 @@ class _CompassRosePainter extends CustomPainter {
       northPaint,
     );
 
-    _cardinal(canvas, c, r, 'N', 0, SentryColors.amber);
-    _cardinal(canvas, c, r, 'E', 90, SentryColors.onDark);
-    _cardinal(canvas, c, r, 'S', 180, SentryColors.muted);
-    _cardinal(canvas, c, r, 'W', 270, SentryColors.muted);
+    _cardinal(canvas, c, r, 'N', 0, OutrideColors.amber);
+    _cardinal(canvas, c, r, 'E', 90, OutrideColors.onDark);
+    _cardinal(canvas, c, r, 'S', 180, OutrideColors.muted);
+    _cardinal(canvas, c, r, 'W', 270, OutrideColors.muted);
   }
 
   void _cardinal(Canvas canvas, Offset c, double r, String label,
@@ -1377,7 +1377,7 @@ class _CompassRosePainter extends CustomPainter {
           color: color,
           fontSize: 10,
           fontWeight: FontWeight.bold,
-          fontFamily: SentryType.mono,
+          fontFamily: OutrideType.mono,
         ),
       ),
       textDirection: TextDirection.ltr,

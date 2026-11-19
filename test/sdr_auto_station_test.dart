@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/state/app_state.dart';
+import 'package:outride/state/app_state.dart';
 
 /// AUTO station for the passive-Doppler correlator (field ask
 /// 2026-10-20): station position from the device GPS fix, eNB always

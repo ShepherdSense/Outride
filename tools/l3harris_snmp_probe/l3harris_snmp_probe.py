@@ -17,7 +17,7 @@ Usage (PowerShell):
 
 Output: prints a summary and writes l3harris_snmp_walk_<ip>_<time>.txt
 in the current folder. Send that file back to Spark — it shows exactly
-which OIDs exist, and the Shepherd driver gets built from the ones that
+which OIDs exist, and the Outride driver gets built from the ones that
 carry signal/link data.
 
 If the radio doesn't answer at all, its SNMP agent is probably disabled:
@@ -386,7 +386,7 @@ def main():
 
     say("")
     say("DONE. Send %s back to Spark." % fname)
-    say("The Shepherd L3Harris driver gets built from whichever of these")
+    say("The Outride L3Harris driver gets built from whichever of these")
     say("OIDs carry per-link signal data (RSSI/SNR/neighbor quality).")
     log.close()
     return 0

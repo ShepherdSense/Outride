@@ -1,7 +1,7 @@
 # LoRa Nodes Spec — two paths, one goal
 
 Warfighter constraint: whatever LoRa hardware is on hand must work as a
-Shepherd node, plug-and-play. Two independent paths cover the two
+Outride node, plug-and-play. Two independent paths cover the two
 hardware realities.
 
 ## Path 1 — Meshtastic driver (app side)
@@ -11,7 +11,7 @@ RAK, …). Zero new firmware, zero flashing — point the app at the mesh.
 
 **How:** `lib/services/meshtastic_driver.dart` (driverId `meshtastic`).
 TCP to any node's client API (port 4403), `want_config` handshake,
-NodeDB tracking. Each mesh node becomes a Shepherd node:
+NodeDB tracking. Each mesh node becomes a Outride node:
 
 - GPS position → auto-placed on the tracking map (dragged nodes keep
   manual positions; `NodePosition.userPlaced` guards this).
@@ -39,7 +39,7 @@ them — ~$15 class) and needs real tripwire sensing at LoRa range.
 **Architecture (star topology):**
 
 ```
-[SLN-XXXX tripwire node]  --LoRa-->  [SLG-XXXX gateway]  --UDP 49160-->  Shepherd app
+[SLN-XXXX tripwire node]  --LoRa-->  [SLG-XXXX gateway]  --UDP 49160-->  Outride app
    WiFi RSSI sensing                          re-emits standard
    (edge tripwire,                            beacons/events +
     LoRa backhaul)                            mDNS discovery
@@ -48,38 +48,14 @@ them — ~$15 class) and needs real tripwire sensing at LoRa range.
 - `field_kit/esp32/lora_node/lora_node.ino` — ESP32 + SX1276. Senses
   with WiFi (promiscuous RSSI + MAD edge tripwire, same approach as the
   WiFi node); **LoRa is the backhaul, not the sensor**. Sends compact
-  binary packets: beacons and events, 22 B each in codec v1, sent
-  every 30 s (beacons) or immediately (events). Node IDs `SLN-XXXX`.
+  binary packets: beacons (~20 B every 30 s) + events (~16–20 B,
+  immediate). Node IDs `SLN-XXXX`.
 - `field_kit/esp32/lora_gateway/lora_gateway.ino` — ESP32 + SX1276.
-  Hosts AP `Shepherd-LoRa-XXXX` (password `shepherd-field`); the
-  Shepherd PC joins it. Decodes LoRa packets and re-emits byte-
+  Hosts AP `Outride-LoRa-XXXX` (password `outride-field`); the
+  Outride PC joins it. Decodes LoRa packets and re-emits byte-
   compatible UDP 49160 JSON beacons/events with the *original* node IDs,
-  plus its own `SLG-XXXX` beacon, mDNS `_shepherd-node._udp`, and a
+  plus its own `SLG-XXXX` beacon, mDNS `_outride-node._udp`, and a
   status page of recently heard nodes.
-
-**Wire encryption (codec v2, PSK):** v1 put the node ID in plaintext
-in every packet header — the exact handle Aras et al. (MobiQuitous
-2017) used for ~€100 per-node selective jamming. Codec v2 wraps the
-v1 payload in AES-128-CCM under a per-deployment pre-shared key set
-once on each status page: 34 B on air (schema byte + nonce stay
-readable so the gateway's schema gate still fires before decryption;
-everything else, node ID included, is ciphertext + auth tag). The
-gateway decrypts after the gate and feeds the *unchanged* decode path,
-so app-visible JSON is byte-identical to v1. A device with no PSK set
-stays on v1 plaintext and says so loudly on its status page — there is
-no default key. Migration order: gateways first, then node keys.
-Full spec: `docs/lora_psk_codec_spec.md`; test vectors:
-`field_kit/esp32/tests/`.
-
-**Key refresh / rotation (prototype, 2026-10-23):** the deployment
-PSK can now be rotated without re-visiting devices by hand —
-ML-KEM-512 refresh (new key derived from a post-quantum exchange
-authenticated by the current PSK) or gateway-pushed rotation (new
-key wrapped in the existing codec wrap), both over the devices'
-Wi-Fi link (nodes have no LoRa receive path), both through one
-stage → confirm → commit machine with a monotonic key counter and
-a dual-key acceptance window. Gateway UDP JSON stays byte-identical
-throughout. Full spec: `docs/lora_key_refresh_spec.md`.
 
 **App side:** `lib/services/esp32_driver.dart` (driverId `esp32`) is a
 passive UDP-49160 listener. It reconstructs each sensor's disturbance
@@ -87,16 +63,15 @@ from the node's reported `depth_db` as a virtual link
 `esp32:<node> → esp32:<node>:<sensor>` (0 baseline, drops by depth for
 the event duration), so the app tripwire detects with its own adaptive
 threshold. Beacon lat/lon auto-places nodes. This driver also ingests
-WiFi-direct `shepherd_node` beacons — one driver for both node kinds,
+WiFi-direct `outride_node` beacons — one driver for both node kinds,
 no config: add radio → ESP32 NODE → it listens.
 
 **Range (honest):** km-class line-of-sight at SF7/125 kHz; hundreds of
 meters in clutter/urban. Higher spreading factor = more range, less
 duty-cycle headroom. See the sketch headers for the full table.
 
-**Bandwidth (honest):** beacons 30 s cadence (~57 ms airtime each in
-v1, ~77 ms in v2-PSK — far under 1% duty cycle where regulated);
-events are rare and immediate.
+**Bandwidth (honest):** beacons 30 s cadence (~40 ms airtime each — far
+under 1% duty cycle where regulated); events are rare and immediate.
 This link carries detections only: no firmware updates, no streaming,
 no mesh LoRa-to-LoRa (star to the gateway).
 
@@ -127,3 +102,12 @@ no link-key collisions.
 - SX1276: per-region RX sensitivity, tripwire threshold tuning in real
   RF environments, multi-node Aloha collision behavior at the gateway,
   actual vs. modeled range.
+
+## Key handling — forward rules
+
+The PSK never leaves the node/gateway status pages today, and Outride
+has no public dashboard. If one is ever built, it must follow
+`docs/dashboard_key_rules.md` first: project key material out of every
+API response (`pskSet: boolean` only), admin-gate key endpoints, never
+pre-generate or clone keys into firmware images, and rotate — don't
+just patch — if a key ever leaks.

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/models/link_sample.dart';
-import 'package:shepherd/models/tracking.dart';
-import 'package:shepherd/services/tracker.dart';
+import 'package:outride/models/link_sample.dart';
+import 'package:outride/models/tracking.dart';
+import 'package:outride/services/tracker.dart';
 
 final _now = DateTime(2026, 1, 1, 12);
 

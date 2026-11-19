@@ -12,7 +12,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:universal_ble/universal_ble.dart';
 
-import 'package:shepherd/services/ble_scan.dart';
+import 'package:outride/services/ble_scan.dart';
 
 class _FakeBlePlatform extends UniversalBlePlatform {
   /// Ordered call log, e.g. 'requestPermissions:true', 'startScan'.

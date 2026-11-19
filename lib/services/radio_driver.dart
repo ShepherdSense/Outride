@@ -17,12 +17,14 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../models/link_sample.dart';
+import '../models/spectrum_sweep.dart';
 import '../models/tracking.dart';
 import 'silvus_api.dart';
 import 'simulated.dart';
 import 'kraken_driver.dart';
 import 'meshtastic_driver.dart';
 import 'esp32_driver.dart';
+import 'fetch_driver.dart';
 import 'generic_sensor_driver.dart';
 import 'camera_driver.dart';
 
@@ -107,6 +109,17 @@ abstract class RadioDriver {
   /// Shown on the radio card when a poll succeeds but returns no links.
   String get emptyHint =>
       'Radio reachable but reports no RF links (radios unmeshed?)';
+
+  /// True when an empty poll (no LinkSamples) means "this driver is
+  /// broken or idle" and must surface as a health error via
+  /// [emptyHint]. Display-only drivers that never emit LinkSamples
+  /// (Fetch, Camera) override this to false — their silence is
+  /// normal, not a fault. Defaults true: for RF drivers an empty
+  /// poll really does read as "radio broken" downstream (see the SDR
+  /// driver comment), and a display-only driver left at true would
+  /// permanently poison deployment health (dashboard red, coverage
+  /// degraded or blind) even while its own data is flowing.
+  bool get emptyPollIsError => true;
 
   /// Longest a sample from this driver may age before it stops counting
   /// as live evidence. Null = derive from the poll interval (default).
@@ -1035,6 +1048,13 @@ class PmrReading {
   }
 }
 
+/// SDR bridge driver (UDP JSON, port 49161) — additive detection
+/// intelligence: the bridge feeds per-band energy as virtual tripwire
+/// samples plus signature hints (ELRS-style chirp/PMR/WPP/Doppler)
+/// that enrich the fusion pipeline without driving the tripwire.
+/// In `--wideband` survey mode the bridge instead sends sweep_step
+/// packets: those are stored in a display-only sweep store (see
+/// [latestSweepSteps]) and never become LinkSamples.
 class SdrDriver extends RadioDriver {
   SdrDriver({required this.host, required this.port});
 
@@ -1099,6 +1119,30 @@ class SdrDriver extends RadioDriver {
   /// PMR observation window (120 s, like the other additive paths).
   static const Duration pmrWindow = Duration(seconds: 120);
 
+  /// Latest wideband survey steps, keyed by center MHz (one entry
+  /// per step of the current pass). Display-only: sweep steps never
+  /// become LinkSamples (see _handle). Bounded by the pass size
+  /// (the bridge caps plans at 2000 steps) and pruned by age.
+  final Map<double, SweepStep> _sweepByCenter = {};
+
+  /// Pass id of the steps in [_sweepByCenter] (-1 = none yet). A
+  /// step with a new sweep_id starts a new pass — and so does a
+  /// step-0 from the same id after a restart gap (see _ingestSweep):
+  /// the old pass is dropped, so the view never mixes two passes.
+  int _latestSweepId = -1;
+
+  /// When the newest sweep step arrived (receive time). Null until
+  /// the first one. Drives the state-aware [emptyPollIsError].
+  DateTime? _lastSweepAt;
+
+  int _sweepIngested = 0;
+  int _sweepMalformed = 0;
+
+  /// Steps older than this are pruned (a full V3 pass takes ~2 min;
+  /// 10 min keeps a completed pass visible while a dead bridge's
+  /// steps age out instead of freezing on screen).
+  static const Duration sweepStepMaxAge = Duration(minutes: 10);
+
   /// Operator-configured station data for the Doppler correlator
   /// (field-local meters, x east / y north): the SDR radio's position
   /// and the LTE eNB's position. Null until configured — the
@@ -1135,6 +1179,38 @@ class SdrDriver extends RadioDriver {
   List<PmrReading> get recentPmrReadings =>
       List.unmodifiable(_pmrReadings);
 
+  /// Latest sweep step per center of the current pass, LOW to HIGH
+  /// frequency. Read-only view for the Spectrum tab. Pruning happens
+  /// in poll(), never here.
+  List<SweepStep> get latestSweepSteps {
+    final out = _sweepByCenter.values.toList()
+      ..sort((a, b) => a.centerMhz.compareTo(b.centerMhz));
+    return List.unmodifiable(out);
+  }
+
+  /// Peaks of the current pass, strongest first (top 20). Energy
+  /// only — never identifications.
+  List<SweepPeak> get latestSweepPeaks {
+    final all = <SweepPeak>[];
+    for (final s in _sweepByCenter.values) {
+      all.addAll(s.peaks);
+    }
+    all.sort((a, b) => b.dbfs.compareTo(a.dbfs));
+    return List.unmodifiable(all.take(20));
+  }
+
+  int get sweepIngestedCount => _sweepIngested;
+  int get sweepMalformedCount => _sweepMalformed;
+  int get latestSweepId => _latestSweepId;
+  DateTime? get lastSweepAt => _lastSweepAt;
+
+  /// Test hook: pretend the last sweep step arrived at [t]. Lets
+  /// tests exercise the stale transition (fresh sweep -> error
+  /// after [maxBandAge]) and the restart rule (step-0 after a gap)
+  /// without waiting real seconds.
+  @visibleForTesting
+  void setLastSweepAtForTest(DateTime t) => _lastSweepAt = t;
+
   /// Most recent alerting PMR reading, or null when none is alerting.
   PmrReading? get latestPmrAlert {
     for (var i = _pmrReadings.length - 1; i >= 0; i--) {
@@ -1167,6 +1243,17 @@ class SdrDriver extends RadioDriver {
       _lastBeaconAt = DateTime.now();
       final b = j['backend'];
       if (b is String) _bridgeBackend = b;
+      return;
+    }
+    // Wideband survey steps: additive, display-only. Older bridges
+    // never send them; they never become LinkSamples (see poll()).
+    if (j['kind'] == 'sweep_step') {
+      final s = SweepStep.tryParseJson(j);
+      if (s == null) {
+        _sweepMalformed++;
+        return;
+      }
+      _ingestSweep(s);
       return;
     }
     // ELRS detector events: additive, older bridges never send them.
@@ -1257,6 +1344,49 @@ class SdrDriver extends RadioDriver {
     }
   }
 
+  void _ingestSweep(SweepStep s) {
+    _sweepIngested++;
+    final now = DateTime.now();
+    final last = _lastSweepAt;
+    // A step-0 from the SAME sweep_id after a gap with no steps at
+    // all means the bridge was restarted: it always restarts its
+    // sweep_id at 0, so id alone cannot tell a restart from the
+    // current pass. Steps arrive every ~0.1 s during a pass, so a
+    // 5 s gap is a restart, not jitter. Without this, rerunning the
+    // bridge merges the new pass into the stale old one (review B1:
+    // a full pass then a focus pass left 846 stale steps on screen).
+    final restart = s.stepIndex == 0 &&
+        s.sweepId == _latestSweepId &&
+        _sweepByCenter.isNotEmpty &&
+        last != null &&
+        now.difference(last) > sweepRestartGap;
+    if (s.sweepId != _latestSweepId || restart) {
+      // New pass: drop the old one so the view never mixes passes.
+      // Clears ONLY on a pass start (new id, or a step-0 after a
+      // restart gap) — never on a step_index > 0 step, so a late /
+      // out-of-order datagram from the old pass can only overwrite
+      // its own center, never wipe the live pass.
+      _sweepByCenter.clear();
+      _latestSweepId = s.sweepId;
+    }
+    _sweepByCenter[s.centerMhz] = s;
+    _lastSweepAt = now;
+    // probe() counts ANY bridge packet as heard: a wideband-only
+    // bridge must stay alive on sweep steps alone, not just on its
+    // 3 s beacons (review S3).
+    _lastDataAt = now;
+  }
+
+  /// A step-0 from the same sweep_id after this long with no steps
+  /// at all is a bridge restart, not a duplicate (see _ingestSweep).
+  static const Duration sweepRestartGap = Duration(seconds: 5);
+
+  void _pruneSweepsAt(DateTime now) {
+    final cutoff = now.subtract(sweepStepMaxAge);
+    _sweepByCenter.removeWhere((_, s) => s.receivedAt.isBefore(cutoff));
+    if (_sweepByCenter.isEmpty) _latestSweepId = -1;
+  }
+
   @override
   String get driverId => 'sdr';
 
@@ -1270,6 +1400,27 @@ class SdrDriver extends RadioDriver {
   String get emptyHint =>
       'No SDR bridge data — is sdr_bridge.py running and sending to '
       '$host:$port?';
+
+  /// State-aware (wideband health lesson, same B2 root cause as
+  /// Fetch/Camera): an empty poll (no band LinkSamples) is an error
+  /// ONLY when the bridge is silent on every channel — no fresh
+  /// bands AND no fresh sweep step. A wideband-only bridge sends no
+  /// band packets by design, so its empty polls are normal while
+  /// the survey runs; a dead bridge (neither fresh) still reads as
+  /// an error, exactly as before. Without this, adding SDR with a
+  /// wideband bridge would permanently poison deployment health.
+  @override
+  bool get emptyPollIsError {
+    // Defensive first branch: when bands exist, poll() returns them
+    // as LinkSamples, so _tickPoller never consults this getter on
+    // a non-empty poll. Kept because the contract ("bands present
+    // means the bridge is alive") must hold even if the getter is
+    // ever read directly.
+    if (_latest.isNotEmpty) return true;
+    final last = _lastSweepAt;
+    if (last == null) return true;
+    return DateTime.now().difference(last) > maxBandAge;
+  }
 
   // The bridge sweeps bands one after another, so each band refreshes
   // only every few seconds. Stay live as long as the driver itself
@@ -1289,6 +1440,9 @@ class SdrDriver extends RadioDriver {
     final cutoff = DateTime.now().subtract(maxBandAge);
     _latest.removeWhere((k, _) => (_arrivedAt[k] ?? cutoff).isBefore(cutoff));
     _arrivedAt.removeWhere((k, _) => !_latest.containsKey(k));
+    _pruneSweepsAt(DateTime.now());
+    // Sweep steps are display-only and deliberately NOT converted
+    // into LinkSamples here: a survey must never drive the tripwire.
     return [for (final b in _latest.values) b.toLinkSample()];
   }
 
@@ -1330,6 +1484,9 @@ class SdrDriver extends RadioDriver {
     _signatures.clear();
     _dopplerRefs.clear();
     _wppIdp.clear();
+    _sweepByCenter.clear();
+    _latestSweepId = -1;
+    _lastSweepAt = null;
   }
 }
 
@@ -1352,6 +1509,8 @@ RadioDriver driverFor(RadioConfig config) {
       return Esp32Driver();
     case 'sensor':
       return GenericSensorDriver();
+    case 'fetch':
+      return FetchDriver();
     case 'camera':
       return CameraDriver();
     default:
@@ -1367,6 +1526,7 @@ const List<({String id, String label, bool implemented})> driverTypes = [
   (id: 'meshtastic', label: 'MESHTASTIC (LoRa mesh nodes)', implemented: true),
   (id: 'esp32', label: 'ESP32 NODE (UDP beacons)', implemented: true),
   (id: 'sensor', label: 'SENSOR BUS (lidar / acoustic / PIR / …)', implemented: true),
+  (id: 'fetch', label: 'FETCH (throwable sensor ball)', implemented: true),
   (id: 'camera', label: 'CAMERA (webhook / ONVIF)', implemented: true),
   (id: 'mpu5', label: 'MPU5 (Wave Relay)', implemented: false),
   (id: 'harris', label: 'L3HARRIS', implemented: false),

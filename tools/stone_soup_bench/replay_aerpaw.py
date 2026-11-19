@@ -4,10 +4,10 @@
 CAVEAT (load-bearing -- printed by every run, required in every report):
   This harness validates the FUSION MACHINERY (data association,
   NIS-gating + range-gate + coast-on-prediction, track stitching,
-  consistency monitoring) against real trajectories -- NOT Shepherd's
+  consistency monitoring) against real trajectories -- NOT Outride's
   end-to-end detection of non-cooperative targets. The dataset's RF side
   tracked the UAV's own emission (cooperative in the RF sense);
-  Shepherd's tripwire detects non-cooperative link disturbance.
+  Outride's tripwire detects non-cooperative link disturbance.
 
 Pipeline:
   aerpaw_adapter.py (dataset drop, or labeled synthetic stand-in)
@@ -62,7 +62,7 @@ from aerpaw_adapter import (PROVENANCE_LABEL, STANDIN, load_standin,
 from bench_jpda import compute_true_nees  # true-NEES reused verbatim
 
 CAVEAT = ("CAVEAT: this replay validates the FUSION MACHINERY against real "
-          "trajectories, NOT Shepherd's end-to-end detection of "
+          "trajectories, NOT Outride's end-to-end detection of "
           "non-cooperative targets -- the dataset's RF side tracked the "
           "UAV's own emission (cooperative in the RF sense).")
 

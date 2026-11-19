@@ -41,8 +41,9 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val AWARE_METHOD = "rf_sentry/wifi_aware"
         private const val AWARE_EVENTS = "rf_sentry/wifi_aware_events"
-        private const val MCAST_METHOD = "shepherd/multicast_lock"
-        private const val WIFI_METHOD = "shepherd/wifi_sense"
+        private const val MCAST_METHOD = "outride/multicast_lock"
+        private const val WIFI_METHOD = "outride/wifi_sense"
+        private const val FLEET_METHOD = "outride/fleet_service"
         private const val WIFI_PERM_REQUEST = 9917
     }
 
@@ -115,7 +116,7 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "isAwareAvailable" -> result.success(isAwareAvailable())
                     "startDiscovery" -> {
-                        val name = call.argument<String>("serviceName") ?: "shepherd"
+                        val name = call.argument<String>("serviceName") ?: "outride"
                         result.success(startAwareDiscovery(name))
                     }
                     "stopDiscovery" -> {
@@ -135,6 +136,67 @@ class MainActivity : FlutterActivity() {
                 }
             })
         // --- AWARE block end ---
+        // v0.28.0 Fleet foreground service (fleet_foreground.dart):
+        // the fleet beacon/listener socket runs under a foreground
+        // service with a persistent "Outride Fleet — N members"
+        // notification, started when the operator opens Fleet / joins
+        // or creates, stopped on "Forget fleet". No new runtime
+        // permission: a denied Android 13+ notification permission
+        // only hides the notification — the service still runs.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FLEET_METHOD)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "start" -> {
+                        val members = call.argument<Int>("members") ?: 0
+                        result.success(startFleetService(members))
+                    }
+                    "update" -> {
+                        val members = call.argument<Int>("members") ?: 0
+                        result.success(updateFleetService(members))
+                    }
+                    "stop" -> {
+                        result.success(stopFleetService())
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun startFleetService(members: Int): Boolean {
+        return try {
+            val intent = FleetForegroundService.startIntent(this, members)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun updateFleetService(members: Int): Boolean {
+        return try {
+            val intent = FleetForegroundService.startIntent(this, members)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun stopFleetService(): Boolean {
+        return try {
+            stopService(FleetForegroundService.stopIntent(this))
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun acquireMulticastLock(): Boolean {
@@ -142,7 +204,7 @@ class MainActivity : FlutterActivity() {
             if (multicastLock?.isHeld == true) return true
             val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE)
                 as? WifiManager ?: return false
-            val lock = wifi.createMulticastLock("shepherd-cot")
+            val lock = wifi.createMulticastLock("outride-cot")
             lock.setReferenceCounted(false)
             lock.acquire()
             multicastLock = lock

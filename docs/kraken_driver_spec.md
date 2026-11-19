@@ -1,13 +1,13 @@
-# KrakenSDR bearing ingest — build spec for Shepherd (v0.15.0 candidate)
+# KrakenSDR bearing ingest — build spec for Outride (v0.15.0 candidate)
 
-Prepared 2026-10-06. Feasibility verified against the live Shepherd
+Prepared 2026-10-06. Feasibility verified against the live Outride
 codebase and current public references (KrakenRF docs, krakensdr_doa /
 krakensdr_suite sources, third-party hardware verification notes).
 
 ## Why this, why now
 
 Draco owns a KrakenSDR (5-channel coherent DF, 24 MHz–1766 MHz) alongside
-his two Silvus SC4200Ps and a CACI BEAST+. Shepherd today senses
+his two Silvus SC4200Ps and a CACI BEAST+. Outride today senses
 *disturbances* (something crossed the RF field) but cannot sense
 *emitters*. A bearing ingest driver closes that gap: tripwire crossing +
 emitter bearing at the same timestamp = detection plus direction, and
@@ -54,7 +54,7 @@ VERIFIED against source 2026-10-06; both transports survive:**
   broadcast (port configurable, default 8021). By design it is
   token-free for LAN readers (host allow-list checked, no Origin
   check). The old Node.js `web_mapper_middleware/` is deprecated and
-  no longer needed — Shepherd reads the WS directly.
+  no longer needed — Outride reads the WS directly.
 - `doapost` record schema is **byte-compatible with the V1 / Android
   app / map.krakenrf.com contract** (verified against
   `build_doapost_json` in `web_mapper.cpp`): `station_id`, `tStamp`
@@ -146,7 +146,7 @@ so a second Kraken (or the BEAST+ driver later) can never collide.
 - Bearings exist only for **emitters**. A dark drone is invisible to
   this driver — same blind spot as Remote ID.
 - **2.56 MHz instantaneous bandwidth = one band at a time.** VFO
-  selection/hopping is configured Kraken-side; Shepherd reads the
+  selection/hopping is configured Kraken-side; Outride reads the
   `frequencyHz` on each observation and groups bearings by band. It
   cannot see 900 MHz and 2.4 GHz simultaneously — and note the Kraken
   tops out at 1766 MHz, so 2.4/5.8 GHz drone links belong to the
@@ -190,7 +190,7 @@ so a second Kraken (or the BEAST+ driver later) can never collide.
 
 ## Out of scope for this spec
 
-- Driving the Kraken's VFO/squelch configuration from Shepherd
+- Driving the Kraken's VFO/squelch configuration from Outride
   (read-only ingest; Kraken UI remains the control plane).
 - The BEAST+ CoT ingest driver — same fusion pattern, separate spec,
   needs CACI interface docs.

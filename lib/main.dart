@@ -4,6 +4,8 @@ import 'package:media_kit/media_kit.dart';
 import 'screens/beam.dart';
 import 'screens/dashboard.dart';
 import 'screens/drone_tab.dart';
+import 'screens/fetch_screen.dart';
+import 'screens/spectrum_screen.dart';
 import 'screens/wifi_vision.dart';
 import 'screens/settings.dart';
 import 'screens/tracking.dart';
@@ -15,19 +17,19 @@ void main() {
   // Drone tab video (media_kit/libmpv). Required before any Player
   // is constructed; a no-op cost when the tab is never opened.
   MediaKit.ensureInitialized();
-  runApp(const RfSentryApp());
+  runApp(const OutrideApp());
 }
 
-/// Shepherd — dark-mode-only companion app for a Silvus StreamCaster
+/// Outride — dark-mode-only companion app for a Silvus StreamCaster
 /// mesh-radio tripwire.
-class RfSentryApp extends StatefulWidget {
-  const RfSentryApp({super.key});
+class OutrideApp extends StatefulWidget {
+  const OutrideApp({super.key});
 
   @override
-  State<RfSentryApp> createState() => _RfSentryAppState();
+  State<OutrideApp> createState() => _OutrideAppState();
 }
 
-class _RfSentryAppState extends State<RfSentryApp> {
+class _OutrideAppState extends State<OutrideApp> {
   final AppState _state = AppState();
   int _tab = 0;
 
@@ -41,7 +43,7 @@ class _RfSentryAppState extends State<RfSentryApp> {
   Widget build(BuildContext context) {
     final theme = buildDarkTheme();
     return MaterialApp(
-      title: 'Shepherd',
+      title: 'Outride',
       theme: theme,
       darkTheme: theme,
       // Dark mode first, always: there is no light theme by design.
@@ -51,14 +53,14 @@ class _RfSentryAppState extends State<RfSentryApp> {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('SHEPHERD',
-                  style: SentryType.section(16).copyWith(
-                    color: SentryColors.onDark,
+              Text('OUTRIDE',
+                  style: OutrideType.section(16).copyWith(
+                    color: OutrideColors.onDark,
                     letterSpacing: 5,
                     fontWeight: FontWeight.w700,
                   )),
               Text('RF MESH SENSING OBSERVATORY',
-                  style: SentryType.section(9)),
+                  style: OutrideType.section(9)),
             ],
           ),
         ),
@@ -72,9 +74,13 @@ class _RfSentryAppState extends State<RfSentryApp> {
                         ? WifiVisionScreen(state: _state)
                         : _tab == 4
                             ? DroneTab(state: _state)
-                            : SettingsScreen(state: _state),
+                            : _tab == 5
+                                ? FetchScreen(state: _state)
+                                : _tab == 6
+                                    ? SpectrumScreen(state: _state)
+                                    : SettingsScreen(state: _state),
         bottomNavigationBar: BottomNavigationBar(
-          // Six destinations: fixed type keeps every label visible
+          // Eight destinations: fixed type keeps every label visible
           // (the shifting default would hide unselected labels).
           type: BottomNavigationBarType.fixed,
           currentIndex: _tab,
@@ -90,6 +96,10 @@ class _RfSentryAppState extends State<RfSentryApp> {
                 icon: Icon(Icons.wifi), label: 'WiFi'),
             BottomNavigationBarItem(
                 icon: Icon(Icons.flight), label: 'Drone'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.pets), label: 'Fetch'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.graphic_eq), label: 'Spectrum'),
             BottomNavigationBarItem(
                 icon: Icon(Icons.settings), label: 'Settings'),
           ],

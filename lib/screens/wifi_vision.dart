@@ -58,16 +58,16 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
           return ListView(
             padding: const EdgeInsets.all(12),
             children: [
-              SentryPanel(
+              OutridePanel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('WIFI VISION', style: SentryType.section()),
+                    Text('WIFI VISION', style: OutrideType.section()),
                     const SizedBox(height: 8),
                     Text(
                       'AMBIENT DISTURBANCE SENSING VIA THIS DEVICE\'S OWN WI-FI ADAPTER. '
                       'ENABLE IT IN SETTINGS.',
-                      style: SentryType.section(10)
+                      style: OutrideType.section(10)
                           .copyWith(height: 1.6),
                     ),
                   ],
@@ -123,7 +123,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
   Widget _wifiAlertPanel(WifiVisionService wifi) {
     final detected = wifi.wifiDetected;
     final color =
-        detected ? SentryColors.amber : SentryColors.green;
+        detected ? OutrideColors.amber : OutrideColors.green;
     final icon = detected
         ? Icons.warning_amber_rounded
         : Icons.shield_outlined;
@@ -137,7 +137,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             ? 'WAITING FOR WI-FI DATA'
             : 'MONITORING $n AP(S)';
     final live = !wifi.simulated;
-    return SentryPanel(
+    return OutridePanel(
       glow: color,
       padding:
           const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
@@ -152,7 +152,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
               // its size, the title ellipsizes instead.
               Expanded(
                 child: Text('WI-FI FIELD STATUS',
-                    style: SentryType.section(),
+                    style: OutrideType.section(),
                     overflow: TextOverflow.ellipsis),
               ),
               const SizedBox(width: 8),
@@ -161,7 +161,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                     horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   border:
-                      Border.all(color: SentryColors.border),
+                      Border.all(color: OutrideColors.border),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -172,18 +172,18 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                       height: 7,
                       decoration: BoxDecoration(
                         color: live
-                            ? SentryColors.green
-                            : SentryColors.orange,
+                            ? OutrideColors.green
+                            : OutrideColors.orange,
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 7),
                     Text(
                       live ? 'LIVE' : 'SIM',
-                      style: SentryType.chip(
+                      style: OutrideType.chip(
                         live
-                            ? SentryColors.green
-                            : SentryColors.orange,
+                            ? OutrideColors.green
+                            : OutrideColors.orange,
                       ).copyWith(fontSize: 10),
                     ),
                   ],
@@ -209,7 +209,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                     title,
                     maxLines: 1,
                     softWrap: false,
-                    style: SentryType.readout(28, color)
+                    style: OutrideType.readout(28, color)
                         .copyWith(letterSpacing: 4),
                   ),
                 ),
@@ -217,14 +217,14 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(subtitle, style: SentryType.section(11)),
+          Text(subtitle, style: OutrideType.section(11)),
           if (detected) ...[
             const SizedBox(height: 8),
             Text(
               wifi.activeCrossings.values
                   .map((e) => e.ssid)
                   .join('  ·  '),
-              style: SentryType.rowValue(SentryColors.amber)
+              style: OutrideType.rowValue(OutrideColors.amber)
                   .copyWith(fontSize: 11),
             ),
           ],
@@ -242,17 +242,17 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
     final suspect =
         threats.rogueEvents.isNotEmpty || threats.bursts.isNotEmpty;
     final color =
-        suspect ? SentryColors.red : SentryColors.green;
-    return SentryPanel(
+        suspect ? OutrideColors.red : OutrideColors.green;
+    return OutridePanel(
       glow: suspect ? color : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('AIR THREATS', style: SentryType.section()),
+              Text('AIR THREATS', style: OutrideType.section()),
               const Spacer(),
-              SentryChip(
+              OutrideChip(
                   label:
                       suspect ? 'THREAT SUSPECTED' : 'NO THREATS',
                   color: color),
@@ -265,7 +265,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
               'WATCHING FOR ROGUE ACCESS POINTS AND DEAUTH PATTERNS. '
               'NOTHING SUSPICIOUS SEEN.',
               style:
-                  SentryType.section(10).copyWith(height: 1.6),
+                  OutrideType.section(10).copyWith(height: 1.6),
             ),
           for (final e in threats.rogueEvents) ...[
             _KVRow('ROGUE AP SUSPECT', e.ssid),
@@ -276,10 +276,10 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
               runSpacing: 6,
               children: [
                 for (final r in e.reasons)
-                  SentryChip(label: r, color: SentryColors.red),
-                SentryChip(
+                  OutrideChip(label: r, color: OutrideColors.red),
+                OutrideChip(
                     label: e.clockLabel,
-                    color: SentryColors.muted),
+                    color: OutrideColors.muted),
               ],
             ),
             const SizedBox(height: 6),
@@ -290,8 +290,8 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                   threats.trust(e.ssid, e.suspectBssid);
                 },
                 child: Text('TRUST THIS AP',
-                    style: SentryType.section(11)
-                        .copyWith(color: SentryColors.purple)),
+                    style: OutrideType.section(11)
+                        .copyWith(color: OutrideColors.purple)),
               ),
             ),
             const SizedBox(height: 4),
@@ -300,31 +300,31 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             Row(
               children: [
                 Text('DISCONNECT BURST',
-                    style: SentryType.section(11)
-                        .copyWith(color: SentryColors.red)),
+                    style: OutrideType.section(11)
+                        .copyWith(color: OutrideColors.red)),
                 const Spacer(),
                 Text('${b.flapCount} FLAPS · ${b.clockLabel}',
-                    style: SentryType.section(10)
-                        .copyWith(color: SentryColors.muted)),
+                    style: OutrideType.section(10)
+                        .copyWith(color: OutrideColors.muted)),
               ],
             ),
             const SizedBox(height: 2),
             Text(
               'RAPID CONNECT/DISCONNECT PATTERN — CONSISTENT WITH A DEAUTH FLOOD.',
               style:
-                  SentryType.section(10).copyWith(height: 1.6),
+                  OutrideType.section(10).copyWith(height: 1.6),
             ),
             const SizedBox(height: 6),
           ],
           const SizedBox(height: 4),
           Text(
-            'DETECT-ONLY: SHEPHERD NEVER TRANSMITS. STOCK ADAPTERS CANNOT SEE '
+            'DETECT-ONLY: OUTRIDE NEVER TRANSMITS. STOCK ADAPTERS CANNOT SEE '
             'RAW 802.11 MANAGEMENT FRAMES, SO DEAUTH IS READ FROM THE '
             'DISCONNECT PATTERN (ROAMING OR SLEEP CAN CAUSE FLAPS TOO). '
             'DUAL-BAND AND MESH APS LEGITIMATELY USE SEVERAL BSSIDS — '
             'TRUST THEM WHEN PROMPTED.',
-            style: SentryType.section(9)
-                .copyWith(height: 1.6, color: SentryColors.muted),
+            style: OutrideType.section(9)
+                .copyWith(height: 1.6, color: OutrideColors.muted),
           ),
         ],
       ),
@@ -334,19 +334,19 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
   Widget _statusCard(WifiVisionService wifi, WifiApReading? connected) {
     final srcLabel =
         wifi.simulated ? 'SIMULATED FIELD' : 'DEVICE ADAPTER';
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('WIFI VISION', style: SentryType.section()),
+              Text('WIFI VISION', style: OutrideType.section()),
               const Spacer(),
-              SentryChip(
+              OutrideChip(
                   label: connected != null ? 'SENSING' : 'NO SIGNAL',
                   color: connected != null
-                      ? SentryColors.green
-                      : SentryColors.muted),
+                      ? OutrideColors.green
+                      : OutrideColors.muted),
             ],
           ),
           const SizedBox(height: 8),
@@ -359,33 +359,33 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
               children: [
                 Text(
                   connected.rssiDbm.toStringAsFixed(0),
-                  style: SentryType.readout(
-                      44, SentryColors.blue),
+                  style: OutrideType.readout(
+                      44, OutrideColors.blue),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8, left: 6),
                   child: Text('dBm',
-                      style: SentryType.section(11)),
+                      style: OutrideType.section(11)),
                 ),
                 const Spacer(),
                 if (wifi.disturbedBssids
                     .contains(connected.bssid))
-                  const SentryChip(
+                  const OutrideChip(
                       label: 'DISTURBANCE',
-                      color: SentryColors.amber),
+                      color: OutrideColors.amber),
               ],
             ),
           ] else ...[
             Text('NOT CONNECTED TO WI-FI — JOIN A NETWORK TO SENSE.',
                 style:
-                    SentryType.section(10).copyWith(height: 1.6)),
+                    OutrideType.section(10).copyWith(height: 1.6)),
           ],
           if (wifi.error != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(wifi.error!,
-                  style: SentryType.section(10)
-                      .copyWith(color: SentryColors.red)),
+                  style: OutrideType.section(10)
+                      .copyWith(color: OutrideColors.red)),
             ),
         ],
       ),
@@ -394,15 +394,15 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
 
   Widget _traceCard(
       WifiVisionService wifi, WifiApReading? connected) {
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('LIVE RSSI — CONNECTED AP',
-              style: SentryType.section()),
+              style: OutrideType.section()),
           const SizedBox(height: 4),
           Text('90-SECOND WINDOW. DIPS = FIELD DISTURBANCE.',
-              style: SentryType.section(10)),
+              style: OutrideType.section(10)),
           const SizedBox(height: 8),
           SizedBox(
             height: 120,
@@ -417,7 +417,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
   }
 
   Widget _fieldCard(WifiVisionService wifi) {
-    return SentryPanel(
+    return OutridePanel(
       padding: const EdgeInsets.all(8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -427,12 +427,12 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             child: Row(
               children: [
                 Text('FIELD VIEW',
-                    style: SentryType.section()),
+                    style: OutrideType.section()),
                 const Spacer(),
                 IconButton(
                   tooltip: 'FULLSCREEN',
                   icon: const Icon(Icons.fullscreen,
-                      color: SentryColors.muted, size: 20),
+                      color: OutrideColors.muted, size: 20),
                   onPressed: () =>
                       setState(() => _fieldFullscreen = true),
                 ),
@@ -444,7 +444,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             child: Text(
               'DEVICE AT CENTER. AP BEARINGS UNKNOWN — PLACED BY ESTIMATED DISTANCE ONLY. '
               'AMBER = DISTURBED. DRAG TO ORBIT · SCROLL / PINCH TO ZOOM.',
-              style: SentryType.section(10)
+              style: OutrideType.section(10)
                   .copyWith(height: 1.6),
             ),
           ),
@@ -461,7 +461,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
   /// Floating exit-fullscreen chip shown over the fullscreen view.
   Widget _exitFullscreenChip() {
     return Material(
-      color: SentryColors.surface2.withAlpha(220),
+      color: OutrideColors.surface2.withAlpha(220),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
@@ -473,11 +473,11 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.fullscreen_exit,
-                  color: SentryColors.onDark, size: 16),
+                  color: OutrideColors.onDark, size: 16),
               const SizedBox(width: 6),
               Text('EXIT FULLSCREEN',
-                  style: SentryType.section(10)
-                      .copyWith(color: SentryColors.onDark)),
+                  style: OutrideType.section(10)
+                      .copyWith(color: OutrideColors.onDark)),
             ],
           ),
         ),
@@ -488,15 +488,15 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
   Widget _apListCard(WifiVisionService wifi) {
     final aps = wifi.readings.toList()
       ..sort((a, b) => b.rssiDbm.compareTo(a.rssiDbm));
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('ACCESS POINTS', style: SentryType.section()),
+          Text('ACCESS POINTS', style: OutrideType.section()),
           const SizedBox(height: 8),
           if (aps.isEmpty)
             Text('NO READINGS YET.',
-                style: SentryType.section(10)),
+                style: OutrideType.section(10)),
           for (final ap in aps)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 5),
@@ -508,21 +508,21 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                       Expanded(
                         child: Text(
                           '${ap.ssid}  ·  ${ap.bssid.substring(ap.bssid.length - 5)}',
-                          style: SentryType.rowValue(
-                                  SentryColors.onDark)
+                          style: OutrideType.rowValue(
+                                  OutrideColors.onDark)
                               .copyWith(fontSize: 12),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (wifi.disturbedBssids
                           .contains(ap.bssid))
-                        const SentryChip(
+                        const OutrideChip(
                             label: 'DISTURBED',
-                            color: SentryColors.amber),
+                            color: OutrideColors.amber),
                       const SizedBox(width: 8),
                       Text(
                           '${ap.rssiDbm.toStringAsFixed(0)} dBm',
-                          style: SentryType.rowLabel()),
+                          style: OutrideType.rowLabel()),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -532,13 +532,13 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                       value: ((ap.rssiDbm + 100) / 70)
                           .clamp(0.0, 1.0),
                       minHeight: 4,
-                      backgroundColor: SentryColors.surface2,
+                      backgroundColor: OutrideColors.surface2,
                       valueColor:
                           AlwaysStoppedAnimation<Color>(
                         wifi.disturbedBssids
                                 .contains(ap.bssid)
-                            ? SentryColors.amber
-                            : SentryColors.blue,
+                            ? OutrideColors.amber
+                            : OutrideColors.blue,
                       ),
                     ),
                   ),
@@ -556,8 +556,8 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                         padding: const EdgeInsets.only(top: 3),
                         child: Text(
                           match.hypothesisLabel,
-                          style: SentryType.section(10).copyWith(
-                            color: SentryColors.muted,
+                          style: OutrideType.section(10).copyWith(
+                            color: OutrideColors.muted,
                             height: 1.4,
                           ),
                         ),
@@ -580,13 +580,13 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
       scannedLabel =
           '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}:${at.second.toString().padLeft(2, '0')}';
     }
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('NETWORK DEVICES', style: SentryType.section()),
+              Text('NETWORK DEVICES', style: OutrideType.section()),
               const Spacer(),
               if (wifi.lanScanning)
                 const SizedBox(
@@ -599,9 +599,9 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                 TextButton(
                   onPressed: wifi.scanLan,
                   style: TextButton.styleFrom(
-                    foregroundColor: SentryColors.purple,
+                    foregroundColor: OutrideColors.purple,
                     backgroundColor:
-                        SentryColors.purple.withAlpha(28),
+                        OutrideColors.purple.withAlpha(28),
                   ),
                   child: const Text('SCAN'),
                 ),
@@ -611,26 +611,26 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
           Text(
             'ARP SWEEP OF THE LOCAL SUBNET — EVERY DEVICE THIS PC CAN REACH. '
             'NOT PER-AP: A STOCK ADAPTER CANNOT SEE WHICH ACCESS POINT A DEVICE USES.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 8),
           if (wifi.lanScanning)
             Text('SWEEPING SUBNET…',
-                style: SentryType.section(10)
-                    .copyWith(color: SentryColors.blue))
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.blue))
           else if (wifi.lanError != null)
             Text(wifi.lanError!,
-                style: SentryType.section(10)
-                    .copyWith(color: SentryColors.red))
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.red))
           else if (devices.isEmpty)
             Text('NO SCAN YET — TAP SCAN.',
-                style: SentryType.section(10))
+                style: OutrideType.section(10))
           else ...[
             Text(
               '${wifi.lanSubnet ?? ''} · ${devices.length} DEVICE${devices.length == 1 ? '' : 'S'}'
               '${scannedLabel == null ? '' : ' · $scannedLabel'}',
-              style: SentryType.section(10)
-                  .copyWith(color: SentryColors.muted),
+              style: OutrideType.section(10)
+                  .copyWith(color: OutrideColors.muted),
             ),
             const SizedBox(height: 6),
             for (final d in devices)
@@ -642,25 +642,25 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                     SizedBox(
                       width: 108,
                       child: Text(d.ip,
-                          style: SentryType.rowValue(
-                                  SentryColors.onDark)
+                          style: OutrideType.rowValue(
+                                  OutrideColors.onDark)
                               .copyWith(fontSize: 12)),
                     ),
                     Expanded(
                       child: Text(d.mac,
-                          style: SentryType.rowValue(
-                                  SentryColors.muted)
+                          style: OutrideType.rowValue(
+                                  OutrideColors.muted)
                               .copyWith(fontSize: 12),
                           overflow: TextOverflow.ellipsis),
                     ),
                     if (d.isSelf)
-                      const SentryChip(
+                      const OutrideChip(
                           label: 'THIS DEVICE',
-                          color: SentryColors.blue),
+                          color: OutrideColors.blue),
                     if (d.isGateway)
-                      const SentryChip(
+                      const OutrideChip(
                           label: 'GATEWAY',
-                          color: SentryColors.green),
+                          color: OutrideColors.green),
                   ],
                 ),
               ),
@@ -679,11 +679,11 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
     final report =
         state.fieldActivity.report(state.wifi, state.wifi.ble);
     final color = report.level == 'ACTIVE'
-        ? SentryColors.red
+        ? OutrideColors.red
         : report.level == 'STIRRING'
-            ? SentryColors.amber
-            : SentryColors.green;
-    return SentryPanel(
+            ? OutrideColors.amber
+            : OutrideColors.green;
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -696,23 +696,23 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
               // on this screen.
               Expanded(
                 child: Text('FIELD ACTIVITY',
-                    style: SentryType.section(),
+                    style: OutrideType.section(),
                     overflow: TextOverflow.ellipsis),
               ),
               const SizedBox(width: 8),
-              SentryChip(label: report.level, color: color),
+              OutrideChip(label: report.level, color: color),
             ],
           ),
           const SizedBox(height: 6),
           Text(report.detail,
-              style: SentryType.rowValue(SentryColors.onDark)
+              style: OutrideType.rowValue(OutrideColors.onDark)
                   .copyWith(fontSize: 12)),
           const SizedBox(height: 4),
           Text(
             'FUSED WI-FI DISTURBANCES + BLE SIGHTINGS. ACTIVITY LEVEL IS '
             'COMBINED SENSOR AGITATION — NOT A PERSON COUNT. PHONE MACS '
             'RANDOMIZE, SO ONE PHONE CAN LOOK LIKE SEVERAL ADVERTISERS.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
         ],
       ),
@@ -724,14 +724,14 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
   Widget _rttCard() {
     if (!Platform.isAndroid) return const SizedBox.shrink();
     final rtt = state.wifiRtt;
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Text('WI-FI RANGING (802.11mc)',
-                  style: SentryType.section()),
+                  style: OutrideType.section()),
               const Spacer(),
               if (rtt.ranging)
                 const SizedBox(
@@ -744,9 +744,9 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                 TextButton(
                   onPressed: () => _runRtt(),
                   style: TextButton.styleFrom(
-                    foregroundColor: SentryColors.purple,
+                    foregroundColor: OutrideColors.purple,
                     backgroundColor:
-                        SentryColors.purple.withAlpha(28),
+                        OutrideColors.purple.withAlpha(28),
                   ),
                   child: const Text('RANGE'),
                 ),
@@ -757,23 +757,23 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             'TRUE ROUND-TRIP-TIME DISTANCE TO RESPONDER ACCESS POINTS — '
             'NOT AN RSSI GUESS. NEEDS ANDROID 9+, RTT HARDWARE, AND APS '
             'THAT ANSWER FTM REQUESTS.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 8),
           if (rtt.supported == null)
             Text('NOT CHECKED — TAP RANGE.',
-                style: SentryType.section(10))
+                style: OutrideType.section(10))
           else if (rtt.supported == false)
             Text('NOT SUPPORTED ON THIS DEVICE.',
-                style: SentryType.section(10)
-                    .copyWith(color: SentryColors.muted))
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.muted))
           else if (rtt.error != null)
             Text(rtt.error!,
-                style: SentryType.section(10)
-                    .copyWith(color: SentryColors.red))
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.red))
           else if (rtt.readings.isEmpty)
             Text('NO RANGINGS YET — TAP RANGE.',
-                style: SentryType.section(10))
+                style: OutrideType.section(10))
           else
             for (final e in rtt.readings.entries)
               Padding(
@@ -784,8 +784,8 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                     Expanded(
                       child: Text(
                         e.key,
-                        style: SentryType.rowValue(
-                                SentryColors.onDark)
+                        style: OutrideType.rowValue(
+                                OutrideColors.onDark)
                             .copyWith(fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -794,8 +794,8 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                       '${e.value.meters.toStringAsFixed(1)} m '
                       '±${e.value.stddevMeters.toStringAsFixed(1)}'
                       '${e.value.is80211az ? ' · 11az' : ''}',
-                      style: SentryType.rowLabel().copyWith(
-                          color: SentryColors.blue),
+                      style: OutrideType.rowLabel().copyWith(
+                          color: OutrideColors.blue),
                     ),
                   ],
                 ),
@@ -824,18 +824,18 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
   Widget _awareCard() {
     if (!Platform.isAndroid) return const SizedBox.shrink();
     final aware = state.wifiAware;
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Text('NEARBY WI-FI (AWARE)',
-                  style: SentryType.section()),
+                  style: OutrideType.section()),
               const SizedBox(width: 8),
-              const SentryChip(
+              const OutrideChip(
                   label: 'EXPERIMENTAL',
-                  color: SentryColors.orange),
+                  color: OutrideColors.orange),
               const Spacer(),
               if (aware.discovering)
                 TextButton(
@@ -846,9 +846,9 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                 TextButton(
                   onPressed: () => _startAware(),
                   style: TextButton.styleFrom(
-                    foregroundColor: SentryColors.purple,
+                    foregroundColor: OutrideColors.purple,
                     backgroundColor:
-                        SentryColors.purple.withAlpha(28),
+                        OutrideColors.purple.withAlpha(28),
                   ),
                   child: const Text('DISCOVER'),
                 ),
@@ -859,28 +859,28 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             'WI-FI AWARE PEER DISCOVERY. COOPERATIVE ONLY — SEES DEVICES '
             'RUNNING THE SAME SERVICE, NOT PASSIVE STRANGERS. NATIVE '
             'CODE UNVERIFIED: IF THE APP MISBEHAVES, STOP DISCOVERY.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 8),
           if (aware.available == false)
             Text('NOT SUPPORTED ON THIS DEVICE.',
-                style: SentryType.section(10)
-                    .copyWith(color: SentryColors.muted))
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.muted))
           else if (aware.error != null)
             Text(aware.error!,
-                style: SentryType.section(10)
-                    .copyWith(color: SentryColors.red))
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.red))
           else if (aware.peers.isEmpty)
             Text(
                 aware.discovering
                     ? 'DISCOVERING…'
                     : 'NO PEERS — TAP DISCOVER.',
-                style: SentryType.section(10))
+                style: OutrideType.section(10))
           else
             Text(
               '${aware.peers.length} PEER${aware.peers.length == 1 ? '' : 'S'} '
-              'ON SERVICE "shepherd"',
-              style: SentryType.rowValue(SentryColors.onDark)
+              'ON SERVICE "outride"',
+              style: OutrideType.rowValue(OutrideColors.onDark)
                   .copyWith(fontSize: 12),
             ),
         ],
@@ -918,7 +918,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
       scannedLabel =
           '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}:${at.second.toString().padLeft(2, '0')}';
     }
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -929,7 +929,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             children: [
               Expanded(
                 child: Text('NEARBY WIRELESS (BLE)',
-                    style: SentryType.section(),
+                    style: OutrideType.section(),
                     overflow: TextOverflow.ellipsis),
               ),
               const SizedBox(width: 8),
@@ -949,7 +949,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
               if (ble.monitoring)
                 TextButton(
                   onPressed: () => ble.stopMonitoring(),
-                  style: _bleBtnStyle(SentryColors.red),
+                  style: _bleBtnStyle(OutrideColors.red),
                   child: const Text('STOP'),
                 )
               else
@@ -958,14 +958,14 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                       ? null
                       : () => ble.startMonitoring(
                           simulate: wifi.simulated),
-                  style: _bleBtnStyle(SentryColors.purple),
+                  style: _bleBtnStyle(OutrideColors.purple),
                   child: const Text('MONITOR'),
                 ),
               if (!ble.monitoring && !ble.scanning)
                 TextButton(
                   onPressed: () =>
                       ble.scan(simulate: wifi.simulated),
-                  style: _bleBtnStyle(SentryColors.purple),
+                  style: _bleBtnStyle(OutrideColors.purple),
                   child: const Text('SCAN'),
                 ),
             ],
@@ -975,7 +975,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             'PASSIVE SCAN — PHONES, EARBUDS, BEACONS AND WEARABLES THAT BROADCAST, '
             'ROUGHLY 10–30 M. NEVER CONNECTS TO ANYTHING. '
             'NOT BLUETOOTH CLASSIC: PAIRED HEADPHONES AND MICE WILL NOT APPEAR.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 6),
           Text(
@@ -984,7 +984,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             'BETWEEN YOU IS A DISTURBANCE. A DIP MEANS THE SIGNAL WEAKENED — THE '
             'DEVICE MOVED, SOMETHING PASSED BETWEEN YOU, OR AN OBSTRUCTION '
             'APPEARED. RSSI CANNOT TELL THOSE APART. ESTIMATES ONLY.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 8),
           if (ble.monitoring) ...[
@@ -993,22 +993,22 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
           ],
           if (ble.scanning)
             Text('SCANNING…',
-                style: SentryType.section(10)
-                    .copyWith(color: SentryColors.blue))
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.blue))
           else if (ble.error != null)
             Text(ble.error!,
-                style: SentryType.section(10)
-                    .copyWith(color: SentryColors.red))
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.red))
           else if (devices.isEmpty && !ble.monitoring)
             Text('NO SCAN YET — TAP SCAN, OR MONITOR FOR THE TRIPWIRE.',
-                style: SentryType.section(10))
+                style: OutrideType.section(10))
           else ...[
             Text(
               '${devices.length} DEVICE${devices.length == 1 ? '' : 'S'}'
               '${scannedLabel == null ? '' : ' · $scannedLabel'}'
               '${ble.simulated ? ' · SIMULATED' : ''}',
-              style: SentryType.section(10)
-                  .copyWith(color: SentryColors.muted),
+              style: OutrideType.section(10)
+                  .copyWith(color: OutrideColors.muted),
             ),
             const SizedBox(height: 6),
             for (final d in devices)
@@ -1023,32 +1023,32 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                         Expanded(
                           child: Text(
                             '${d.name}  ·  ${d.id.length > 5 ? d.id.substring(d.id.length - 5) : d.id}',
-                            style: SentryType.rowValue(
-                                    SentryColors.onDark)
+                            style: OutrideType.rowValue(
+                                    OutrideColors.onDark)
                                 .copyWith(fontSize: 12),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        SentryChip(
+                        OutrideChip(
                             label: d.proximityLabel,
-                            color: SentryColors.blue),
+                            color: OutrideColors.blue),
                         const SizedBox(width: 8),
                         Text(
                             '${d.rssiDbm.toStringAsFixed(0)} dBm',
-                            style: SentryType.rowLabel()),
+                            style: OutrideType.rowLabel()),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
                       d.decoded.summary,
-                      style: SentryType.section(10).copyWith(
-                          color: SentryColors.purple),
+                      style: OutrideType.section(10).copyWith(
+                          color: OutrideColors.purple),
                     ),
                     if (d.decoded.serviceLabels.isNotEmpty)
                       Text(
                         d.decoded.serviceLabels.join(' · '),
-                        style: SentryType.section(9).copyWith(
-                            color: SentryColors.muted),
+                        style: OutrideType.section(9).copyWith(
+                            color: OutrideColors.muted),
                       ),
                     const SizedBox(height: 4),
                     ClipRRect(
@@ -1058,11 +1058,11 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                             .clamp(0.0, 1.0),
                         minHeight: 4,
                         backgroundColor:
-                            SentryColors.surface2,
+                            OutrideColors.surface2,
                         valueColor:
                             const AlwaysStoppedAnimation<
                                     Color>(
-                                SentryColors.blue),
+                                OutrideColors.blue),
                       ),
                     ),
                   ],
@@ -1071,12 +1071,12 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             if (ble.monitoring || ble.bleEvents.isNotEmpty) ...[
               const SizedBox(height: 10),
               Text('BLE DISTURBANCE LOG',
-                  style: SentryType.section()),
+                  style: OutrideType.section()),
               const SizedBox(height: 6),
               if (activeDips.isEmpty && ble.bleEvents.isEmpty)
                 Text('MONITORING — NO DIPS YET.',
-                    style: SentryType.section(10)
-                        .copyWith(color: SentryColors.muted))
+                    style: OutrideType.section(10)
+                        .copyWith(color: OutrideColors.muted))
               else ...[
                 for (final e in activeDips)
                   _bleEventRow(e, true),
@@ -1101,13 +1101,13 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: detected
-              ? SentryColors.amber
-              : SentryColors.green,
+              ? OutrideColors.amber
+              : OutrideColors.green,
           width: 1.5,
         ),
         color: (detected
-                ? SentryColors.amber
-                : SentryColors.green)
+                ? OutrideColors.amber
+                : OutrideColors.green)
             .withAlpha(18),
       ),
       child: Row(
@@ -1115,8 +1115,8 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
           Icon(
             detected ? Icons.warning_amber : Icons.shield_outlined,
             color: detected
-                ? SentryColors.amber
-                : SentryColors.green,
+                ? OutrideColors.amber
+                : OutrideColors.green,
             size: 28,
           ),
           const SizedBox(width: 12),
@@ -1125,10 +1125,10 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             children: [
               Text(
                 detected ? 'DETECTED' : 'CLEAR',
-                style: SentryType.rowValue(
+                style: OutrideType.rowValue(
                   detected
-                      ? SentryColors.amber
-                      : SentryColors.green,
+                      ? OutrideColors.amber
+                      : OutrideColors.green,
                 ).copyWith(
                     fontSize: 20, fontWeight: FontWeight.w800),
               ),
@@ -1136,7 +1136,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                 detected
                     ? 'BLE SIGNAL DIP IN PROGRESS (EST.)'
                     : 'MONITORING BLE SIGNALS',
-                style: SentryType.section(10),
+                style: OutrideType.section(10),
               ),
             ],
           ),
@@ -1156,24 +1156,24 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: active
-                  ? SentryColors.amber
-                  : SentryColors.green,
+                  ? OutrideColors.amber
+                  : OutrideColors.green,
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               '${e.deviceName} · DIP -${e.peakDipDb.toStringAsFixed(0)} dB EST · ${e.durationLabel}',
-              style: SentryType.rowValue(SentryColors.onDark)
+              style: OutrideType.rowValue(OutrideColors.onDark)
                   .copyWith(fontSize: 12),
               overflow: TextOverflow.ellipsis,
             ),
           ),
           Text(active ? 'DIPPING' : 'CLOSED',
-              style: SentryType.section(10).copyWith(
+              style: OutrideType.section(10).copyWith(
                   color: active
-                      ? SentryColors.amber
-                      : SentryColors.muted)),
+                      ? OutrideColors.amber
+                      : OutrideColors.muted)),
         ],
       ),
     );
@@ -1185,16 +1185,16 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
   Widget _crossingsCard(WifiVisionService wifi) {
     final active = wifi.activeCrossings.values.toList();
     final closed = wifi.crossings;
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('DISTURBANCE LOG',
-              style: SentryType.section()),
+              style: OutrideType.section()),
           const SizedBox(height: 8),
           if (active.isEmpty && closed.isEmpty)
             Text('NO DISTURBANCES RECORDED.',
-                style: SentryType.section(10)),
+                style: OutrideType.section(10)),
           for (final e in active)
             _crossingRow(e,
                 ongoing: true,
@@ -1211,7 +1211,7 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
   Widget _crossingRow(WifiCrossingEvent e,
       {required bool ongoing, String? witness}) {
     final color =
-        ongoing ? SentryColors.amber : SentryColors.muted;
+        ongoing ? OutrideColors.amber : OutrideColors.muted;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
@@ -1222,15 +1222,15 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
               children: [
                 Text(
                   e.ssid,
-                  style: SentryType.rowValue(
-                          SentryColors.onDark)
+                  style: OutrideType.rowValue(
+                          OutrideColors.onDark)
                       .copyWith(fontSize: 12),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
                   e.characterLabel,
-                  style: SentryType.rowLabel()
+                  style: OutrideType.rowLabel()
                       .copyWith(
                           fontSize: 11, color: color),
                 ),
@@ -1239,29 +1239,29 @@ class _WifiVisionScreenState extends State<WifiVisionScreen> {
                   ongoing
                       ? 'ONGOING · ${e.durationSecs.toStringAsFixed(0)}s SO FAR'
                       : 'LASTED ${e.durationSecs.toStringAsFixed(0)}s · ${e.clockLabel}',
-                  style: SentryType.rowLabel()
+                  style: OutrideType.rowLabel()
                       .copyWith(fontSize: 11),
                 ),
                 if (witness != null) ...[
                   const SizedBox(height: 2),
                   Text(
                     'BLE WITNESS: $witness VERY CLOSE DURING EVENT',
-                    style: SentryType.rowLabel().copyWith(
+                    style: OutrideType.rowLabel().copyWith(
                         fontSize: 11,
-                        color: SentryColors.blue),
+                        color: OutrideColors.blue),
                   ),
                 ],
               ],
             ),
           ),
           if (ongoing)
-            const SentryChip(
+            const OutrideChip(
                 label: 'DISTURBED',
-                color: SentryColors.amber),
+                color: OutrideColors.amber),
           const SizedBox(width: 8),
           Text(
             '−${e.peakDipDb.toStringAsFixed(0)} dB',
-            style: SentryType.readout(13, color),
+            style: OutrideType.readout(13, color),
           ),
         ],
       ),
@@ -1283,10 +1283,10 @@ class _KVRow extends StatelessWidget {
         children: [
           SizedBox(
               width: 128,
-              child: Text(k, style: SentryType.rowLabel())),
+              child: Text(k, style: OutrideType.rowLabel())),
           Expanded(
             child: Text(v,
-                style: SentryType.rowValue(SentryColors.onDark),
+                style: OutrideType.rowValue(OutrideColors.onDark),
                 overflow: TextOverflow.ellipsis),
           ),
         ],
@@ -1300,7 +1300,7 @@ class _WifiScopeNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SentryPanel(
+    return OutridePanel(
       child: Text(
         'SCOPE — STOCK WI-FI ADAPTERS EXPOSE ONLY COARSE RSSI (NO CSI), SO THIS DETECTS '
         'DISTURBANCES IN THE AMBIENT WI-FI FIELD. IT CANNOT IMAGE OBJECTS, MEASURE SHAPES, '
@@ -1315,7 +1315,7 @@ class _WifiScopeNote extends StatelessWidget {
         'DESCRIBE THE DIP, NEVER THE OBJECT. '
         'NEARBY WIRELESS SEES BLE ADVERTISERS ONLY: NOT BLUETOOTH CLASSIC, NOT AN IMAGE. '
         'TRUE 3D WI-FI IMAGING NEEDS CSI-CAPABLE HARDWARE SUCH AS AN ESP32.',
-        style: SentryType.section(10).copyWith(height: 1.7),
+        style: OutrideType.section(10).copyWith(height: 1.7),
       ),
     );
   }
@@ -1338,7 +1338,7 @@ class _RssiTracePainter extends CustomPainter {
 
     // Gridlines every 10 dB.
     final grid = Paint()
-      ..color = SentryColors.border.withAlpha(120)
+      ..color = OutrideColors.border.withAlpha(120)
       ..strokeWidth = 1;
     for (var db = -90.0; db <= -40; db += 10) {
       final yy = y(db);
@@ -1360,7 +1360,7 @@ class _RssiTracePainter extends CustomPainter {
     canvas.drawPath(
         path,
         Paint()
-          ..color = SentryColors.blue
+          ..color = OutrideColors.blue
           ..strokeWidth = 1.5
           ..style = PaintingStyle.stroke);
     // Last-value dot.
@@ -1368,7 +1368,7 @@ class _RssiTracePainter extends CustomPainter {
     canvas.drawCircle(
         Offset(lx, y(history.last.clamp(minDb, maxDb))),
         3,
-        Paint()..color = SentryColors.blue);
+        Paint()..color = OutrideColors.blue);
   }
 
   @override
@@ -1447,7 +1447,7 @@ class _WifiFieldViewState extends State<_WifiFieldView> {
             Positioned(
               right: 4,
               top: 4,
-              child: SentryZoomControls(
+              child: OutrideZoomControls(
                 onZoomIn: () => _bumpZoom(1.25),
                 onZoomOut: () => _bumpZoom(1 / 1.25),
                 onReset: _resetView,
@@ -1535,7 +1535,7 @@ class _WifiFieldPainter extends CustomPainter {
 
     // Ground grid.
     final gridPaint = Paint()
-      ..color = SentryColors.border.withAlpha(100)
+      ..color = OutrideColors.border.withAlpha(100)
       ..strokeWidth = 1;
     final g = (maxR / 10).ceil() * 10.0;
     for (var gx = -g; gx <= g; gx += 10) {
@@ -1555,10 +1555,10 @@ class _WifiFieldPainter extends CustomPainter {
     final dev = project(const _W3(0, 0, 1));
     if (dev != null) {
       canvas.drawCircle(
-          dev, 11, Paint()..color = SentryColors.blue.withAlpha(60));
+          dev, 11, Paint()..color = OutrideColors.blue.withAlpha(60));
       canvas.drawCircle(
-          dev, 6, Paint()..color = SentryColors.blue);
-      _label(canvas, dev, 'THIS DEVICE', SentryColors.blue);
+          dev, 6, Paint()..color = OutrideColors.blue);
+      _label(canvas, dev, 'THIS DEVICE', OutrideColors.blue);
     }
 
     // Disturbance halo: something is moving in the WiFi field.
@@ -1569,12 +1569,12 @@ class _WifiFieldPainter extends CustomPainter {
             dev,
             rr,
             Paint()
-              ..color = SentryColors.amber.withAlpha(70)
+              ..color = OutrideColors.amber.withAlpha(70)
               ..style = PaintingStyle.stroke
               ..strokeWidth = 1.5);
       }
       _label(canvas, dev + const Offset(0, 56),
-          'DISTURBANCE — BEARING UNKNOWN', SentryColors.amber);
+          'DISTURBANCE — BEARING UNKNOWN', OutrideColors.amber);
     }
 
     // APs: link line device→AP, dot, label.
@@ -1590,8 +1590,8 @@ class _WifiFieldPainter extends CustomPainter {
             s,
             Paint()
               ..color = (hot
-                      ? SentryColors.amber
-                      : SentryColors.border)
+                      ? OutrideColors.amber
+                      : OutrideColors.border)
                   .withAlpha(hot ? 220 : 130)
               ..strokeWidth = hot ? 2.5 : 1);
         if (hot) {
@@ -1605,13 +1605,13 @@ class _WifiFieldPainter extends CustomPainter {
                 mid,
                 rr,
                 Paint()
-                  ..color = SentryColors.amber.withAlpha(70)
+                  ..color = OutrideColors.amber.withAlpha(70)
                   ..style = PaintingStyle.stroke
                   ..strokeWidth = 2);
           }
         }
       }
-      final c = hot ? SentryColors.amber : SentryColors.muted;
+      final c = hot ? OutrideColors.amber : OutrideColors.muted;
       canvas.drawCircle(
           s, hot ? 9 : 6, Paint()..color = c.withAlpha(50));
       canvas.drawCircle(s, hot ? 5 : 3.5, Paint()..color = c);
@@ -1631,7 +1631,7 @@ class _WifiFieldPainter extends CustomPainter {
           style: TextStyle(
             color: color,
             fontSize: 10,
-            fontFamily: SentryType.mono,
+            fontFamily: OutrideType.mono,
             letterSpacing: 1.0,
           )),
       textDirection: TextDirection.ltr,

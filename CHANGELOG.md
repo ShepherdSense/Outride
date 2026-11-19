@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.28.0 — 2026-11-17 — Automatic EUD-to-EUD meshing (Fleet)
+
+- **Renamed — Shepherd is now Outride.** Same product, same mission, new name: another company already ships a product called Shepherd, so the name had to go. "Outrider" was considered and rejected — already an autonomous yard-truck company. Tagline: **"First out. First to know."** — the outrider rides ahead of the herd, first to scout, first to spot trouble, first to warn the camp. Renamed all the way through: app display name, Dart package (`outride`), Windows binary (`outride.exe`), CoT callsign prefix (`OUTRIDE-`), ZMeta feature keys (`outride_*`), docs, repo (`ShepherdSense/Outride`), web sim (`ShepherdSense.github.io/Outride/sim/`). Deliberately unchanged: Android applicationId (`com.example.rf_sentry` — changing it would make it a different app on the device and break upgrades), on-device SharedPreferences keys (`rf_sentry_*_v1` — renaming wipes saved settings), and the `ShepherdSense` org name.
+- **Fleet auto-mesh — EUDs form one Outride fleet by proximity, no manual IP entry, no manual pairing.** The lead creates a fleet with four digits on a dialer pad; every other EUD on the same Wi-Fi hears the beacon and joins by dialing the same four digits; after that Outride remembers the fleet and auto-rejoins on sight. Fleet screen reached from Settings (8 tabs already fill the nav bar) with a one-line fleet chip on the Alerts tab (`FLEET 3 · 2 SENSING` or `NOT IN A FLEET`). Dark mode, purple accents. See `docs/auto_mesh_fleet_spec.md`.
+- **Discovery:** dedicated multicast group `239.2.3.2:6970` (TTL 1 — kept off the CoT group `239.2.3.1:6969` so TAK/Predator parsers never see fleet JSON), beacons every 5 s, peer gone after 15 s silence, 64-peer cap. Beacons are plaintext by design (fleet id, salt, node id, callsign, role, member count) — nothing secret is ever in a beacon. Receivers reject beacons with |clock skew| > 30 s.
+- **Crypto honesty:** the 4-digit PIN is an ADMISSION CODE, never the encryption key. Fleet key = Argon2id(PIN, salt), 64 MiB, 3 iterations, 32-byte output (PBKDF2-HMAC-SHA256 600k fallback ships, recorded in the stored record's `kdf` field); admission is an HMAC-SHA256 proof checked live by a member holding the fleet key; traffic is AES-256-GCM under per-pair X25519 session keys (HKDF-SHA256, info `outride-fleet-v1`, AAD = fleet_id, fresh 12-byte nonce per datagram, replayed nonces dropped). Brute-force defense: 5 failed joins/IP/60 s then exponential lockout 30/60/120/300 s, plus a global 10-failures/min fleet freeze (60 s). The UI shows only "Wrong PIN — try again" — no oracle, no counts, no timers.
+- **No single point of failure:** every member beacons the fleet and ANY member can admit a late joiner; the lead leaving or dying changes nothing. Fleet record in SharedPreferences + derived key in flutter_secure_storage; the raw PIN is never stored anywhere (asserted by test); "Forget fleet" in Settings and on the Fleet screen deletes both stores, stops beaconing, drops all peers.
+- **Roles + peer data:** live Silvus radio = SENSING node, otherwise FUSION PEER — the label follows the live `has_silvus` beacon field and flips within one interval when a radio is unplugged. Peer observations arrive as encrypted `fleet_data` envelopes on the existing UDP 49160 hub, are decrypted and fed straight into the existing `SensorProtocol.parseUdpJson` path with the sender callsign prefixed to the sensor id (no collisions), and land in the shared sensor-observation store as corroboration-only — the RF tripwire stays detection authority; a peer can never create a track alone or veto one. A sensing node shares its sensor-bus observations with joined peers (encrypted, per pair).
+- **Foreground service:** fleet beaconing/listening runs under a new Android foreground service (`FleetForegroundService`, persistent "Outride Fleet — N members" notification), started when the operator opens Fleet / joins or creates, stopped on "Forget fleet". No new runtime permission. **Not compile-verified:** the Kotlin service + manifest entries were written without an Android SDK in this sandbox (Gradle is broken here; no APK was built) — same standing as the Wi-Fi Aware block in MainActivity.kt. If `flutter build apk` fails, that file plus the FLEET block in MainActivity are the first suspects. Also note: dart:io exposes no multicast-TTL setter, so TTL 1 relies on the OS default (which is 1); if a platform ever defaults higher, a native setter is needed.
+- **Degraded networks:** Wi-Fi off → "Wi-Fi off — fleet unavailable", beaconing/listening stop, peers expire after 15 s, re-enabling resumes automatically. 15 s of listening with zero beacons → "No fleet heard — this network may block device discovery (AP isolation)". No cloud relay, no IP scan fallback.
+- **Verified in this workspace:** `flutter analyze` clean, full suite 726 baseline + 55 new fleet tests (23 crypto incl. KDF determinism + PBKDF2 fallback, 22 service incl. rate-limit behavior, beacon round-trip + skew rejection, persistence round-trip + PIN absence + forget, role labeling + live flip, dedup/expiry + 64-peer cap, join handshake right/wrong PIN, envelope round-trip + tamper/wrong-AAD/replay, 8 dialer state + pad widget, 2 Fleet screen create flow) = 781/781 passing, then 788/788 after the independent-review fix pass (7 new: join-reply HMAC proof accepted/rejected incl. missing proof, session rotation on rejoin with a fresh key, socket-death rebind on the beacon tick + in-fleet direct rebind + backoff schedule + stop disarms). No new dependencies. NOT verified on-device/EUD — field validation is operational only: two real EUDs on one Wi-Fi network create, join, auto-rejoin after restart, and survive the lead's EUD leaving.
+
+## Unreleased — The Fetch visualizer (EXPERIMENTAL, not yet published)
+
+- **Fetch voice alerts (EXPERIMENTAL).** Outride speaks short Fetch trip alerts through the EUD's audio output into the operator's hearing protection, so nobody looks at a screen while clearing a structure. On-device TTS only (flutter_tts, works offline); Settings → "Fetch voice alerts — EXPERIMENTAL", default OFF, with speech-rate control, a "Test voice" button, and a fast mute toggle on the Fetch tab. Phrases: mmWave (person-class) speaks "Possible person", accel "Movement", mic "Sound", BLE "New radio", Wi-Fi "New Wi-Fi", plus direction/distance when a position exists. Direction comes from GPS positions ONLY — live ball fix vs operator fix, or the recorded throw point ("from throw point") — never from the ball's sensors, which cannot give a bearing; with no position the alert speaks the trip alone rather than guessing. Under ~10 m the alert speaks the sensor phrase only, with no direction or distance — at CQB ranges the bearing is dominated by GPS error, so a confident direction there would be noise presented as fact. One channel per event: a multi-sensor event speaks only its highest-priority unsuppressed channel, never one utterance per tripped sensor. Indoors GPS usually dies, so indoor alerts are direction-free. Wording rule: the Fetch senses movement/presence — it never identifies anyone as enemy, friendly, or civilian, and never states armed status; the operator decides what a detection is. Repeats of the same sensor are suppressed for 10 s; a different sensor breaks through immediately; utterances serialize through a bounded queue of 3 (oldest dropped), and a hung speak times out after 20 s with the service recovering. "Test voice" is disabled while muted, and the throw point clears when Fetch polling stops or the FETCH driver is removed (no time expiry — an all-day stakeout keeps it while polling runs). The "about N meters" call is made on the true distance, so a true 22.4 m speaks "about 20 meters", not "twenty meters". Reach is this EUD only — whole-team distribution needs a radio bridge and is out of scope. No RSSI ranging: the event wire format carries no RSSI fields (ble_nearby/wifi_beacons are counts only). Compass heading is DEFERRED — no verified heading ships in v1, so phrases use cardinal directions ("north-east") instead of relative terms ("ahead left") until compass validation on the EUD. Voice alerts read Fetch events only; the driver stays display-only and never drives the tripwire. NOT verified on-device/EUD — live speech is unverified until his hardware (sandbox has no audio output).
+- **Fetch tab: live view of "The Fetch" throwable sensor ball.** Five tripwires (accel / mic / mmWave / BLE / Wi-Fi), live mag_g (1.0 g rest baseline) and mic_rms (150k trip line) gauges, GPS fix/sats/lat/lon panel, and a newest-first event feed (last 100) with BLE/Wi-Fi corroboration per event. Labeled EXPERIMENTAL; presence/movement only, never identity, never a camera feed, never fire-control.
+- **Fetch driver** (`fetch` in Settings → Radios, opt-in like the sensor bus): listens on the shared UDP 49160 hub for the ball's fused-event JSON + GPS heartbeat. Corroboration/display only — it emits no tripwire links, so it can never drive detection. Bench bridge at `tools/fetch_serial_bridge/` forwards the ball's serial JSON to UDP 49160 (stdlib + pyserial; `--file` replay mode needs no hardware).
+- **BLE/Wi-Fi are tripwires now, not just context** (2026-11-12 scope update): the sketch learns nearby transmitters in the first two radio scans after boot (~10 s) and trips on a new transmitter or an RSSI jump > 15 dB. Listen-only throughout.
+- Verified in this workspace: `flutter analyze` clean, full suite 726/726 (705 baseline before this review round + 21 new: 5 phrase/boundary, 1 speak-timeout, 6 operator pose, 9 AppState announce/throw-point); bridge bench check forwards 6 real sample events as canonical compact JSON (including a mag_g −1.0 failed-accel event, ingested with its trip) and skips 7 non-event lines (incl. a NaN line). NOT verified on-device/EUD — that happens on his hardware.
+- **Review:** independent reviewer verdict SHIP-AFTER-FIXES; all 2 blocking + 6 should-fix items applied (failed-accel events keep their trip; display-only drivers no longer poison deployment health; (0,0) drops the fix claim; no-fix clears position in both paths; bridge rejects NaN/Infinity; gauge + hint widget tests; setup hint names the Start step; §10 item 2 deviations recorded). The new widget test also caught and fixed a header Row overflow at phone width.
+- **Review (voice alerts, second round):** independent reviewer verdict SHIP-AFTER-FIXES; all 1 blocking + 6 should-fix items applied (no direction/distance under ~10 m, incl. coincident positions; 20 s speak timeout with recovery; throw point clears on Fetch stop / FETCH removal; sample alert uses cardinal "north"; settings-test drains are counted per symptom with the two known pre-existing layout issues filed in the test comment; new tests for operator pose + AppState announce gates; "about N meters" decided on the true distance; GPS-failure debugPrint). Notes applied too: one channel per event (§10), Test voice disabled while muted, Settings re-copies voice flags on state change.
+- **Spectrum tab: wideband survey from the RTL-SDR Blog V3 (EXPERIMENTAL).** The SDR bridge's new `--wideband` mode steps the dongle across 24–1766 MHz (~2 MHz steps, 872-step full pass) and ships one `sweep_step` packet per step (median energy, adaptive noise floor, 32 max-pooled bins, peaks above noise + margin) to UDP 49161. Outride stores steps in the SdrDriver's display-only sweep store — they never become LinkSamples, so a survey can never drive the tripwire, tracker, or merger. New Spectrum tab (7th): per-step energy bars (full passes downsampled to 60 rows, hottest step per bucket) + strongest-peaks list with allocation band labels. Labeled EXPERIMENTAL; a peak is energy, never an identification; single antenna, no direction-finding; no 2.4/5.8 GHz on the V3; a full pass takes ~1–2 min so a fast hopper can slip between visits. A wideband-only bridge no longer poisons deployment health (`emptyPollIsError` is now state-aware: an empty poll is an error only when there are neither fresh bands nor a fresh sweep step). Focus sweeps: `--wideband-focus 88-108,902-928,1090`. Bench: `--simulate --wideband` synthesizes scripted peaks (FM / 2 m / 915 MHz / ADS-B 1090); `--replay <file>` replays recorded output with no radio. NOT verified on a live dongle — that happens on his PC (Zadig WinUSB + `pip install pyrtlsdr` + `RUN_SDR_BRIDGE.bat --backend rtlsdr --wideband`).
+
 ## v0.27.2 — 2026-11-10 — BLE scan permission fix
 
 - **BLE scanning actually works now (Android 12+).** The scan never asked the OS for the runtime permissions: `startScan` requests them internally, but without the location grant, and this manifest declares `BLUETOOTH_SCAN` without the `neverForLocation` flag — so the OS withheld scan results and the scan silently found nothing. The scan and the continuous monitor now request the permissions up front (with fine location) before starting; a denial shows a plain message pointing at Settings > Apps > Permissions instead of an empty list. Regression tests in `test/ble_scan_test.dart` (3 new) fail with the request removed. Also fixed an adjacent leak: if `startScan()` throws after the monitor subscription is created, the subscription is now cancelled.
@@ -9,14 +32,14 @@ Verified in this workspace: `flutter analyze` clean, full suite 592/592 (589 v0.
 
 ## v0.27.1 — 2026-11-05 — Soft build-age warning
 
-- **Soft build-age warning** — once a build is 90+ days old, the dashboard shows an amber BUILD AGE banner ("THIS BUILD IS N DAYS OLD — PLEASE UPDATE TO THE LATEST SHEPHERD"). A nudge only: sensing, detection, and alerts are unaffected, nothing ever locks or shuts down. Build date lives in `lib/services/build_age.dart` and must be updated at every version bump. No network check; the device clock is the only input.
+- **Soft build-age warning** — once a build is 90+ days old, the dashboard shows an amber BUILD AGE banner ("THIS BUILD IS N DAYS OLD — PLEASE UPDATE TO THE LATEST OUTRIDE"). A nudge only: sensing, detection, and alerts are unaffected, nothing ever locks or shuts down. Build date lives in `lib/services/build_age.dart` and must be updated at every version bump. No network check; the device clock is the only input.
 - **License: GPLv3** — see the 2026-11-05 entry below; this version ships under GPLv3.
 
 Verified in this workspace: `flutter analyze` clean, full suite 589/589 (583 v0.27.0 baseline + 6 new build-age tests).
 
 ## 2026-11-05 — License change to GPLv3
 
-Shepherd is now licensed under GPLv3 (see LICENSE), replacing MIT from this version onward. Versions already released under MIT remain MIT — the change applies to future versions only. Copyright (c) 2026 Draco. No code changes in this entry.
+Outride is now licensed under GPLv3 (see LICENSE), replacing MIT from this version onward. Versions already released under MIT remain MIT — the change applies to future versions only. Copyright (c) 2026 Draco. No code changes in this entry.
 
 ## v0.27.0 — 2026-10-28 — PMR preamble-jamming monitor (EXPERIMENTAL)
 
@@ -155,7 +178,7 @@ wiring is deferred to a follow-up, see below).
 - **BSense tracker gating (lane 2, Meng et al. 2026, portable parts
   only).** (a) Per-spatial-cell Gaussian clutter fingerprint +
   Mahalanobis gating replaces global thresholds for link-shadow
-  false alarms (adapted to link dips — Shepherd has no point
+  false alarms (adapted to link dips — Outride has no point
   clouds; cell size/refresh mapped from the paper's 40 m cubes /
   700 frames and documented in
   `docs/bsense_tracker_gating_spec.md`). (b) Decayed (0.9)
@@ -164,8 +187,8 @@ wiring is deferred to a follow-up, see below).
   in code and docs: tangential-flight blindness, 50–100 m-style
   occlusion gaps, and Doppler/continuity assumptions exploitable
   by a knowledgeable operator. BSense's 1 km range and F1 95.56%
-  are NEVER claimed for Shepherd — they belong to carrier 5G-A
-  hardware Shepherd does not control. TrajFormer (the paper's
+  are NEVER claimed for Outride — they belong to carrier 5G-A
+  hardware Outride does not control. TrajFormer (the paper's
   stage 3) was deliberately not ported.
 - **MilaGro gate pattern (lane 1, Picazo-Martinez et al. 2025).**
   The sharpest/shortest-range channel gates (prunes) the
@@ -192,7 +215,7 @@ wiring is deferred to a follow-up, see below).
   Presence is shape-only — never identity, never position, no
   payload bits touched. FKIE LTE450's ~1.6 km bistatic figure is
   CLAIMED (single secondary source, full text UNREAD) and is NOT
-  a Shepherd capability; the bridge ships a bench log (hits AND
+  a Outride capability; the bridge ships a bench log (hits AND
   misses) so a measured curve can replace it. LTE sweep presence
   is bridge-only pending an app consumer; the stare path surfaces
   via the existing `doppler_ref` parser.
@@ -274,21 +297,21 @@ what the deterministic tripwire found, and never suppresses alerts.
 Icon-only release: no code or behavior changes.
 
 - **New launcher icon.** A photorealistic black tricolor
-  Australian shepherd wearing an olive Comtac headset with
+  Australian outride wearing an olive Comtac headset with
   boom mic on a dark background — chosen by the operator from
   his own photo. Regenerated across the full set from that
-  photo: `assets/icon/shepherd_icon_1024.png` master, all five
+  photo: `assets/icon/outride_icon_1024.png` master, all five
   Android mipmap densities (`ic_launcher.png`), and the
   Windows `app_icon.ico`.
 - Replaces the v0.22.0 icon, which is backed up at
-  `docs/shepherd_icon_v0220_backup.png`.
+  `docs/outride_icon_v0220_backup.png`.
 
 ## v0.23.0 — 2026-10-21 — PRC-163 friendly ground tracks (published)
 
 Friendly GROUND tracks per `docs/prc163_ground_tracks_spec.md`:
 the dismounts join the aircraft on the map — as positions, with
 honest labels, and with no change to what the 163 is (and is not)
-to Shepherd.
+to Outride.
 
 - **Ground ingest on the existing CoT path.** Friendly-ground
   events (`a-f-G*` — a PRC-163 carrier's PLI out of an ATAK EUD)
@@ -334,7 +357,7 @@ to Shepherd.
 ## v0.22.0 — 2026-10-21 — Skydio integration P1–P3 (published)
 
 Friendly-airframe support per `docs/skydio_integration_spec.md`:
-Shepherd now knows his own drones, classifies every airframe by the
+Outride now knows his own drones, classifies every airframe by the
 evidence that actually arrives, and can watch their video — while
 staying ingest-only (no new transmit/control surface of any kind).
 
@@ -397,7 +420,7 @@ staying ingest-only (no new transmit/control surface of any kind).
   auto-retries on a bounded 10 s cadence (plus tap-to-retry)
   instead of sitting at NO SIGNAL until the operator poked the tab.
 - **New app icon**: the cartoon mark is replaced by a photoreal
-  portrait — the same black tricolor Australian shepherd wearing
+  portrait — the same black tricolor Australian outride wearing
   Comtacs, serious expression, dark background — as the icon
   master and across the Android launcher set.
 - New tests: Remote ID vectors (hand-built from the F3411 encoding,
@@ -495,7 +518,7 @@ should-fixes addressed. 356/356 tests (32 new). Highlights:
   renders the whole WiFi Vision tab at phone width
   (`test/wifi_vision_header_test.dart`). 323/323 tests.
 - **Hub: MAKE_TUNNEL_QR.bat** (field ask) — renders a filled
-  `shepherd-mesh.conf` as a QR the EUD scans in the WireGuard app
+  `outride-mesh.conf` as a QR the EUD scans in the WireGuard app
   (+ → Scan from QR code) to import the tunnel. Comment-stripped
   payload (1,153 → 242 bytes) so the QR stays scannable; refuses
   unfilled templates; prints the tunnel Address for confirmation
@@ -549,7 +572,7 @@ Three operator asks from the first full EUD day, in one build:
 The phone in your pocket is now an actual WiFi sensor, not a demo:
 
 - **Android WiFi source** (`AndroidWifiSource` in `lib/services/wifi_sense.dart`
-  + the `shepherd/wifi_sense` channel in `MainActivity.kt`): WiFi Vision
+  + the `outride/wifi_sense` channel in `MainActivity.kt`): WiFi Vision
   previously fell back to simulated data on Android. It now reads the real
   adapter — the connected AP's RSSI polled every second (the live tripwire)
   plus the system scan-results cache for the neighbor survey, with per-AP
@@ -597,7 +620,7 @@ Plug-and-play radios, and an eagerly-connected TAK link:
 ## v0.18.0 — 2026-10-18 — Predator-RF CoT integration
 
 Bilateral integration with Predator RF (see `docs/predator_integration_spec.md`):
-Shepherd publishes its tracks as CoT (`SHEPHERD-` callsigns) and ingests
+Outride publishes its tracks as CoT (`OUTRIDE-` callsigns) and ingests
 Predator's emitter tracks (`PREDATOR-`) as upgrade-only corroboration via the
 gated confidence merger. Wire-protocol-only across the GPL-3.0/MIT boundary —
 no shared code.
@@ -722,7 +745,7 @@ usage, reviewed by inspection; not yet compiled into an APK.
   (`tools/stone_soup_bench/replay_aerpaw.py`): replays public
   AERPAW flight-test data through the fusion machinery (gated
   merger, innovation monitor, track stitcher). It validates the
-  *fusion machinery*, not Shepherd's sensing — AERPAW has no
+  *fusion machinery*, not Outride's sensing — AERPAW has no
   RF-shadowing ground truth.
 - **ESP32 500 fps bench mode**: a one-measurement go/no-go test for
   CSI frame-rate feasibility on the node firmware, run before the
@@ -734,7 +757,7 @@ usage, reviewed by inspection; not yet compiled into an APK.
 - RX-only, defensive-only: every feature in this release listens,
   measures, and scores. Nothing transmits, jams, deauths, spoofs,
   or probes.
-- Paper accuracy numbers are NOT transferred to Shepherd's regime
+- Paper accuracy numbers are NOT transferred to Outride's regime
   (6 nodes, dismounted, on the move, Group 2–3 UAS targets) — the
   specs cite them with their original regimes attached. Features
   are implemented per spec and bench-tested; **field validation is
@@ -843,7 +866,7 @@ configs (50-51% flash / 19-20% RAM), ZMeta samples pass
 
 - Per-observation **declared-2D geo** (21.8): the SENSOR position,
   never zero-filled, never fake HAE — device altitude rides in
-  `features.shepherd_sensor_alt_m` as labeled metadata. Required the
+  `features.outride_sensor_alt_m` as labeled metadata. Required the
   v1.1 lane (`kZmetaVersion` 1.0 → 1.1.0).
 - Opt-in **PLATFORM_STATUS heartbeat** (default off, 15–600 s,
   fail-closed, never during replay). PEERS.md gains position columns.
@@ -857,7 +880,7 @@ configs (50-51% flash / 19-20% RAM), ZMeta samples pass
 
 ### Universal sensor ingestion
 
-- **Shepherd Sensor Protocol**: typed messages (RANGE/BEARING/
+- **Outride Sensor Protocol**: typed messages (RANGE/BEARING/
   SPECTRUM/BINARY/PIR/ENERGY/MOTION) over UART + UDP 49160; generic
   driver with bounded store; map overlay (range arcs, bearing wedges,
   motion markers); upgrade-only corroboration — sensors can only ever
@@ -915,10 +938,10 @@ firmware compiles in all 5 flag configs (50-51% flash / 19-20% RAM).
   `tools/validate.py --strict`: 3/3 pass.
 - Documented `power_dbm: 0.0` sentinel (passive link sensors don't
   measure emitter power — follows ZMeta's own sentinel precedent),
-  flagged in `quality.shepherd_power_sentinel`.
+  flagged in `quality.outride_power_sentinel`.
 - **Secured transport (required):** WireGuard hub-and-spoke package in
   `field_kit/zmeta_secure/` (double-click keygen, mesh/gateway configs,
-  peer registry). Architecture: Shepherd at the tactical level, ZMeta
+  peer registry). Architecture: Outride at the tactical level, ZMeta
   fusing at the operational/strategic level. Full doc:
   `docs/zmeta_deployment.md`. Settings gains a link-secured
   acknowledgment with an honest warning on unsecured non-local targets.
@@ -949,7 +972,7 @@ firmware compiles in all 5 flag configs (50-51% flash / 19-20% RAM).
   (DVB-T-like illuminator, ECA clutter cancel, CAF + CFAR) — synthetic
   target detected at 0.0% range/Doppler error; honest-scope README.
 - `tools/stone_soup_bench/`: Stone Soup tracker prototyping against
-  Shepherd-schema CSVs (24/28 tracks matched, purity 0.86 on synthetic).
+  Outride-schema CSVs (24/28 tracks matched, purity 0.86 on synthetic).
 
 ## 0.14.5 — review pass
 

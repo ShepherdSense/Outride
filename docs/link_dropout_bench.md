@@ -1,6 +1,6 @@
 # Link-Dropout Bench — disturbance_clf under node/link loss
 
-*2026-10-23, for Shepherd v0.24.0. Tool: `tools/bench_link_dropout.py`
+*2026-10-23, for Outride v0.24.0. Tool: `tools/bench_link_dropout.py`
 (masking: `apply_link_dropout_features` in `tools/train_disturbance_clf.py`).
 Motivation: WiFi-JEPA (Kim et al., arXiv:2607.11064) — link-masking during
 training beat random masking (97.1 vs 105.1 mm MPJPE); we bench the same
@@ -132,12 +132,12 @@ comparison.
 ```sh
 ~/workspace/.mlvenv/bin/python tools/train_disturbance_clf.py   # seed 7
 ~/workspace/.mlvenv/bin/python tools/bench_link_dropout.py \
-    --old /tmp/shepherd_old_clf/disturbance_clf.json.orig
+    --old /tmp/outride_old_clf/disturbance_clf.json.orig
 
 # Ablation column (NEW without link-dropout augmentation):
 ~/workspace/.mlvenv/bin/python tools/train_disturbance_clf.py \
     --no-aug --out /tmp/disturbance_clf_noaug.json
 ~/workspace/.mlvenv/bin/python tools/bench_link_dropout.py \
-    --old /tmp/shepherd_old_clf/disturbance_clf.json.orig \
+    --old /tmp/outride_old_clf/disturbance_clf.json.orig \
     --new /tmp/disturbance_clf_noaug.json
 ```

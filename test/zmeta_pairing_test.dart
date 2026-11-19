@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/zmeta_pairing.dart';
+import 'package:outride/services/zmeta_pairing.dart';
 
 final String _k1 = base64.encode(List<int>.filled(32, 1));
 final String _k2 = base64.encode(List<int>.filled(32, 2));
@@ -90,14 +90,14 @@ void main() {
 
   group('platform id', () {
     test('accepts valid ids', () {
-      expect(zmetaIsValidPlatformId('shepherd-mesh-1'), isTrue);
+      expect(zmetaIsValidPlatformId('outride-mesh-1'), isTrue);
       expect(zmetaIsValidPlatformId('a'), isTrue);
       expect(zmetaIsValidPlatformId('team-42-north'), isTrue);
     });
 
     test('rejects invalid ids', () {
       expect(zmetaIsValidPlatformId(''), isFalse);
-      expect(zmetaIsValidPlatformId('Shepherd-Mesh'), isFalse);
+      expect(zmetaIsValidPlatformId('Outride-Mesh'), isFalse);
       expect(zmetaIsValidPlatformId('mesh 1'), isFalse);
       expect(zmetaIsValidPlatformId('mesh_1'), isFalse);
       expect(zmetaIsValidPlatformId('a' * 33), isFalse);
@@ -275,7 +275,7 @@ void main() {
     });
 
     test('extracts the code from labeled text', () {
-      expect(zmetaInviteCodeFromScan('Shepherd invite: ${_code()}'),
+      expect(zmetaInviteCodeFromScan('Outride invite: ${_code()}'),
           _code());
     });
 

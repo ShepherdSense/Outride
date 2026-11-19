@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/models/tracking.dart';
-import 'package:shepherd/services/adaptive_baseline.dart';
+import 'package:outride/models/tracking.dart';
+import 'package:outride/services/adaptive_baseline.dart';
 
 NodePosition _n(String id, double x, double y) =>
     NodePosition(nodeId: id, x: x, y: y);

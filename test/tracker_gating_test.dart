@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/models/link_sample.dart';
-import 'package:shepherd/models/tracking.dart';
-import 'package:shepherd/services/tracker.dart';
-import 'package:shepherd/services/tracker_gating.dart';
+import 'package:outride/models/link_sample.dart';
+import 'package:outride/models/tracking.dart';
+import 'package:outride/services/tracker.dart';
+import 'package:outride/services/tracker_gating.dart';
 
 final _t0 = DateTime(2026, 1, 1, 12);
 

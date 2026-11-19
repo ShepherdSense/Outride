@@ -9,10 +9,10 @@ metrics (RSSI / SNR / neighbor quality) live — if the radio publishes
 them. It changes NOTHING on the radio.
 
 WHY
-Shepherd talks to radios through small "driver" modules. The Silvus
+Outride talks to radios through small "driver" modules. The Silvus
 driver was built from Silvus's telemetry API. For the PRC-163 there is
 no public telemetry doc, so this probe discovers empirically what the
-radio exposes. The walk file you send back is what the Shepherd
+radio exposes. The walk file you send back is what the Outride
 L3Harris driver gets built from.
 
 HOW TO RUN

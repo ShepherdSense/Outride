@@ -87,7 +87,7 @@ address. Documented here so the failure is actionable, not silent.
 - **Tripwire-grade sensing is Path 2** (SX1276 LoRa backhaul nodes with
   edge tripwires); see `docs/lora_nodes_spec.md`.
 - Encrypted meshes: the client API decrypts locally, so telemetry still
-  flows — same physical-layer argument as the rest of Shepherd.
+  flows — same physical-layer argument as the rest of Outride.
 - `probe()` validates the handshake; `emptyHint` covers "connected but
   no nodes yet".
 

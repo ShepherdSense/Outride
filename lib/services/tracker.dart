@@ -749,7 +749,7 @@ class ImagingBandParams {
   /// Starting estimates — placeholders, not paper values, not truth.
   ///
   /// The paper's b^δ (≈0.21/0.50 m) was fit for 2–5 m indoor links.
-  /// Shepherd's field links are 30–60 m; at that length a 0.2 m
+  /// Outride's field links are 30–60 m; at that length a 0.2 m
   /// excess-path ellipse is a razor that covers almost no pixel, and
   /// the image fragments into link-crossing artifacts instead of
   /// localizing the disturbance. The starting b is therefore scaled

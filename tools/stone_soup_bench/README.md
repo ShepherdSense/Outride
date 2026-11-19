@@ -4,7 +4,7 @@
 the app.
 
 Purpose: prototype tracker / data-association designs in Python against
-Shepherd-recorded (or synthetic) link-disturbance data, compare them on
+Outride-recorded (or synthetic) link-disturbance data, compare them on
 hard metrics, then port the winner to Dart (`lib/services/tracker.dart`).
 
 ## Layout
@@ -75,9 +75,9 @@ real accelerations, real outliers, real dropouts.
 **CAVEAT (load-bearing — every run prints it, every report must carry
 it):** this harness validates the FUSION MACHINERY (data association,
 NIS-gating + range-gate + coast-on-prediction, track stitching,
-consistency monitoring) against real trajectories — NOT Shepherd's
+consistency monitoring) against real trajectories — NOT Outride's
 end-to-end detection of non-cooperative targets. The dataset's RF side
-tracked the UAV's own emission (cooperative in the RF sense); Shepherd's
+tracked the UAV's own emission (cooperative in the RF sense); Outride's
 tripwire detects non-cooperative link disturbance. A report without this
 caveat is not releasable.
 
@@ -118,7 +118,7 @@ caveat is not releasable.
 Measured hexacopter RCS at Ku-band: **0.0066–0.549 m², mean 0.12 m²**
 (Dickerson et al., full read). Documented here as a radar-RCS reference
 for back-of-the-envelope detection-range math — NOT a claim about
-Shepherd's link-shadowing depth at 2.4 GHz and NOT about Shahed-class
+Outride's link-shadowing depth at 2.4 GHz and NOT about Shahed-class
 targets. It bounds expectations; it does not set them.
 
 ### Layout

@@ -13,7 +13,7 @@
 /// extraction through media_kit is not practical (no demuxed-metadata
 /// API surface for RTSP KLV tracks), so the tab overlays position
 /// from the Class B telemetry track (CoT) instead — the telemetry
-/// Shepherd already has — and says so on screen.
+/// Outride already has — and says so on screen.
 library;
 
 /// Which camera stream the viewer is watching.

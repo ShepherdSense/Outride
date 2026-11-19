@@ -1,5 +1,5 @@
 /// Universal sensor observation model — "if it can sense something, it
-/// feeds Shepherd."
+/// feeds Outride."
 ///
 /// A [SensorObservation] is one timestamped measurement from any
 /// non-RF-tripwire sensor: lidar / time-of-flight / ultrasonic range,
@@ -21,7 +21,7 @@ import 'dart:math' as math;
 
 import 'tracking.dart';
 
-/// The six observation types on the Shepherd sensor bus.
+/// The six observation types on the Outride sensor bus.
 enum SensorObsType {
   /// Lidar / time-of-flight / ultrasonic: distance (+ optional angle).
   range,
@@ -294,7 +294,7 @@ class SensorObservation {
         return {
           'modality': 'EO',
           'features': {
-            'shepherd_obs_type': 'MOTION',
+            'outride_obs_type': 'MOTION',
             'camera_id': sensorId,
             if (zone != null) 'zone': zone,
             if (zoneLabel != null) 'zone_label': zoneLabel,

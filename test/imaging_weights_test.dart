@@ -2,10 +2,10 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/models/link_sample.dart';
-import 'package:shepherd/models/tracking.dart';
-import 'package:shepherd/screens/tracking.dart' show rtiImageLabel;
-import 'package:shepherd/services/tracker.dart';
+import 'package:outride/models/link_sample.dart';
+import 'package:outride/models/tracking.dart';
+import 'package:outride/screens/tracking.dart' show rtiImageLabel;
+import 'package:outride/services/tracker.dart';
 
 NodePosition _n(String id, double x, double y) =>
     NodePosition(nodeId: id, x: x, y: y);

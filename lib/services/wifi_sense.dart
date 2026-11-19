@@ -146,7 +146,7 @@ class WifiCrossingEvent {
 }
 
 /// Source of ambient WiFi readings. Windows uses netsh, Android uses
-/// the `shepherd/wifi_sense` platform channel (connected-AP RSSI +
+/// the `outride/wifi_sense` platform channel (connected-AP RSSI +
 /// scan-results cache); anything else falls back to simulation.
 abstract class WifiRssiSource {
   /// Fast poll: connected AP RSSI (cheap).
@@ -275,7 +275,7 @@ class NetshWifiSource extends WifiRssiSource {
   }
 }
 
-/// Android implementation over the `shepherd/wifi_sense` platform
+/// Android implementation over the `outride/wifi_sense` platform
 /// channel (MainActivity.kt): connected-AP RSSI for the fast poll, the
 /// system scan-results cache for the survey.
 ///
@@ -292,7 +292,7 @@ class NetshWifiSource extends WifiRssiSource {
 /// surveys come back empty.
 class AndroidWifiSource extends WifiRssiSource {
   AndroidWifiSource({MethodChannel? channel})
-      : _channel = channel ?? const MethodChannel('shepherd/wifi_sense');
+      : _channel = channel ?? const MethodChannel('outride/wifi_sense');
 
   final MethodChannel _channel;
 
@@ -324,11 +324,11 @@ class AndroidWifiSource extends WifiRssiSource {
         throw StateError(e.code == 'NO_FINE_LOCATION'
             ? 'Connected-AP sensing needs full Location permission — '
                 'Nearby Wi-Fi alone leaves the connection info hidden. '
-                'Allow Location in Android Settings, Apps, Shepherd, '
+                'Allow Location in Android Settings, Apps, Outride, '
                 'Permissions.'
             : 'WiFi sensing needs the Location permission — '
                 'allow it when prompted, or in Android Settings, Apps, '
-                'Shepherd, Permissions.');
+                'Outride, Permissions.');
       }
       return fallback;
     } on MissingPluginException {

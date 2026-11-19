@@ -1,9 +1,9 @@
-/// Tests for the Shepherd CoT emit publisher (docs/shepherd_cot_output_spec.md,
-/// docs/predator_integration_spec.md — Shepherd side only).
+/// Tests for the Outride CoT emit publisher (docs/outride_cot_output_spec.md,
+/// docs/predator_integration_spec.md — Outride side only).
 ///
 /// Load-bearing invariants:
 ///  1. XML GOLDEN: fixed track + fixed timestamp -> byte-exact CoT event.
-///  2. Callsign contract: `SHEPHERD-<trackId>` (hyphen, no space).
+///  2. Callsign contract: `OUTRIDE-<trackId>` (hyphen, no space).
 ///  3. Type-code table: drone/fixed-wing/rotary @ >= 0.5 -> a-u-A.
 ///  4. Affiliation is ALWAYS 'u' (never h/f).
 ///  5. Throttle: 10 updates in 200 ms -> exactly 1 datagram.
@@ -13,8 +13,8 @@ library;
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/cot_publisher.dart';
-import 'package:shepherd/services/geo_projection.dart';
+import 'package:outride/services/cot_publisher.dart';
+import 'package:outride/services/geo_projection.dart';
 
 GeoProjection _proj() => GeoProjection(originLat: 35.0, originLon: -78.0);
 
@@ -49,7 +49,7 @@ CotTrackInput _track({
 
 /// Golden track: fixed everything, fixed timestamp.
 String _goldenEvent() {
-  const prefix = 'SHEPHERD-';
+  const prefix = 'OUTRIDE-';
   return '<event version="2.0"'
       ' uid="${prefix}T0042"'
       ' type="a-u-A"'
@@ -85,16 +85,16 @@ void main() {
       expect(xml, _goldenEvent());
     });
 
-    test('callsign format: SHEPHERD-<trackId> (hyphen, no space)', () {
+    test('callsign format: OUTRIDE-<trackId> (hyphen, no space)', () {
       final xml = buildEventXml(
         _track(trackId: 'T0042'),
         DateTime.utc(2026, 10, 18, 19, 35, 0, 123),
         projection: _proj(),
       );
-      expect(xml, contains('uid="SHEPHERD-T0042"'));
-      expect(xml, contains('callsign="SHEPHERD-T0042"'));
-      expect(xml, isNot(contains('SHEPHERD T0042')));
-      expect(xml, isNot(contains('SHEPHERD.T0042')));
+      expect(xml, contains('uid="OUTRIDE-T0042"'));
+      expect(xml, contains('callsign="OUTRIDE-T0042"'));
+      expect(xml, isNot(contains('OUTRIDE T0042')));
+      expect(xml, isNot(contains('OUTRIDE.T0042')));
     });
 
     test('type-code table', () {
@@ -142,7 +142,7 @@ void main() {
         DateTime.utc(2026, 10, 18, 19, 35, 0),
         projection: _proj(),
       );
-      expect(xml, contains('uid="SHEPHERD-T&amp;&lt;1&gt;"'));
+      expect(xml, contains('uid="OUTRIDE-T&amp;&lt;1&gt;"'));
       expect(xml, contains('drone &amp; "quad"'));
     });
 
@@ -175,7 +175,7 @@ void main() {
       sw.stop();
       expect(sw.elapsedMilliseconds, lessThan(5000));
       expect(sent.length, 1);
-      expect(utf8.decode(sent.single), contains('uid="SHEPHERD-T0042"'));
+      expect(utf8.decode(sent.single), contains('uid="OUTRIDE-T0042"'));
       pub.dispose();
     });
 

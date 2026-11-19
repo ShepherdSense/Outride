@@ -42,7 +42,7 @@ class RecordingService {
     if (isRecording) return _file!.path;
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final recDir = Directory('${dir.path}/shepherd_recordings');
+      final recDir = Directory('${dir.path}/outride_recordings');
       if (!await recDir.exists()) await recDir.create(recursive: true);
       final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
       _file = File('${recDir.path}/recording_$stamp.csv');
@@ -97,7 +97,7 @@ class RecordingService {
   Future<void> _ensureJsonSink() async {
     if (_jsonSink != null) return;
     final dir = await getApplicationDocumentsDirectory();
-    final recDir = Directory('${dir.path}/shepherd_recordings');
+    final recDir = Directory('${dir.path}/outride_recordings');
     if (!await recDir.exists()) await recDir.create(recursive: true);
     final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
     _jsonFile = File('${recDir.path}/telemetry_$stamp.jsonl');
@@ -129,17 +129,22 @@ class RecordingService {
     return '$rows samples, ${secs}s → $path';
   }
 
-  /// List existing recordings, newest first.
+  /// List existing recordings, newest first. Scans the current
+  /// `outride_recordings` dir and the pre-rename `shepherd_recordings`
+  /// legacy dir, so recordings made before the rename stay listed.
   static Future<List<File>> listRecordings() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final recDir = Directory('${dir.path}/shepherd_recordings');
-      if (!await recDir.exists()) return [];
-      final files = await recDir
-          .list()
-          .where((e) => e is File && e.path.endsWith('.csv'))
-          .cast<File>()
-          .toList();
+      final files = <File>[];
+      for (final name in ['outride_recordings', 'shepherd_recordings']) {
+        final recDir = Directory('${dir.path}/$name');
+        if (!await recDir.exists()) continue;
+        files.addAll(await recDir
+            .list()
+            .where((e) => e is File && e.path.endsWith('.csv'))
+            .cast<File>()
+            .toList());
+      }
       files.sort((a, b) => b.path.compareTo(a.path));
       return files;
     } catch (_) {

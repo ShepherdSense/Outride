@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/confidence_merger.dart';
-import 'package:shepherd/services/radio_driver.dart';
+import 'package:outride/services/confidence_merger.dart';
+import 'package:outride/services/radio_driver.dart';
 
 WppIdpDoppler _w({
   double dopplerHz = 40.0,

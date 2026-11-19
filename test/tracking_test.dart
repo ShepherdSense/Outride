@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/models/tracking.dart';
-import 'package:shepherd/state/app_state.dart';
+import 'package:outride/models/tracking.dart';
+import 'package:outride/state/app_state.dart';
 
 void main() {
   group('callsign validation', () {

@@ -1,5 +1,5 @@
 /// Generic sensor-bus driver: "if it can sense something, it feeds
-/// Shepherd."
+/// Outride."
 ///
 /// Listens on the shared UDP 49160 hub ([NodeUdpHub]) for
 /// `{"type":"sensor_obs",...}` datagrams (see [SensorProtocol]) and
@@ -21,8 +21,8 @@
 ///    no link geometry).
 ///
 /// HONEST SCOPE: a virtual link is the SENSOR's reported value
-/// re-detected by Shepherd's tripwire — threshold and classification
-/// are Shepherd's, the measurement is the sensor's. PIR-class binary
+/// re-detected by Outride's tripwire — threshold and classification
+/// are Outride's, the measurement is the sensor's. PIR-class binary
 /// sensors are crude presence hints, not identification.
 library;
 

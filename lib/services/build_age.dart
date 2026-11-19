@@ -1,7 +1,7 @@
 /// Soft build-age warning (v0.27.1).
 ///
 /// After [buildAgeWarningDays] days this build shows a dashboard banner
-/// telling the operator to update to the latest Shepherd. That is all it
+/// telling the operator to update to the latest Outride. That is all it
 /// does: a nudge, never a lockout. Sensing, detection, alerts, and the
 /// tracker keep running exactly as before — a stale build must never go
 /// dark in the field, and anyone rebuilding from the GPLv3 source can
@@ -16,7 +16,7 @@ library;
 
 /// Date this version was cut. Update at every version bump.
 /// (DateTime has no const constructor, so this is final, not const.)
-final DateTime buildDate = DateTime(2026, 11, 10);
+final DateTime buildDate = DateTime(2026, 11, 17);
 
 /// Days after the build date before the banner appears.
 const int buildAgeWarningDays = 90;
@@ -34,5 +34,5 @@ String? buildAgeWarning({required DateTime now, DateTime? build}) {
   final days = buildAgeDays(now: now, build: build);
   if (days < buildAgeWarningDays) return null;
   return 'THIS BUILD IS $days DAYS OLD — PLEASE UPDATE TO THE LATEST '
-      'SHEPHERD. SENSING AND ALERTS ARE UNAFFECTED.';
+      'OUTRIDE. SENSING AND ALERTS ARE UNAFFECTED.';
 }

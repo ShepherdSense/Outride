@@ -1,6 +1,6 @@
-# Shepherd Sensor Protocol
+# Outride Sensor Protocol
 
-**"If it can sense something, it feeds Shepherd."**
+**"If it can sense something, it feeds Outride."**
 
 One wire protocol for every non-RF-tripwire sensor: lidar, time-of-flight,
 ultrasonic, acoustic arrays, PIR / break-beams, generic RF-energy taps, and
@@ -220,7 +220,7 @@ Validated against `tools/validate.py --profile H --strict` (EO sample:
 
 | type | modality | notes |
 |---|---|---|
-| MOTION | EO | zone/label; `snapshot_ref` is local-only. Producer `eo-sensor-shepherd` per the governed producer pattern |
+| MOTION | EO | zone/label; `snapshot_ref` is local-only. Producer `eo-sensor-outride` per the governed producer pattern |
 | BEARING | — | **not exported**: the 1.1.0 ACOUSTIC arm *requires* `center_freq_hz` plus a level (`spl_db`, or `pressure_pa` + `pressure_statistic`). A bearing is a direction with no level — fabricating one would be exactly the lie the schema guards against |
 | SPECTRUM | — | **not exported**: bins are uncalibrated magnitudes, not a sound pressure |
 | RANGE | — | **not exported**: no LIDAR modality; shoehorning into EO/IR would misstate the measurement |

@@ -10,7 +10,7 @@ library;
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/cot_listener.dart';
+import 'package:outride/services/cot_listener.dart';
 
 CotListenerConfig cfg() => const CotListenerConfig(
       enabled: true,

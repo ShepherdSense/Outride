@@ -1,4 +1,4 @@
-/// Phone-only tier (Shepherd v0.26.0, Fieldwatch-borrow item 4).
+/// Phone-only tier (Outride v0.26.0, Fieldwatch-borrow item 4).
 ///
 /// Detects "no mesh / SDR hardware attached" and gates a
 /// phone-scans-only mode: phone BLE scan + phone Wi-Fi survey +

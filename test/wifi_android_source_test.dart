@@ -1,14 +1,14 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shepherd/services/wifi_sense.dart';
+import 'package:outride/services/wifi_sense.dart';
 
-/// AndroidWifiSource over a mocked `shepherd/wifi_sense` channel —
+/// AndroidWifiSource over a mocked `outride/wifi_sense` channel —
 /// the same contract MainActivity.kt implements.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const channel = MethodChannel('shepherd/wifi_sense');
+  const channel = MethodChannel('outride/wifi_sense');
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 

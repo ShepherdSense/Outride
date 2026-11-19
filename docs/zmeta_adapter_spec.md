@@ -1,43 +1,43 @@
-# Shepherd → ZMeta adapter spec
+# Outride → ZMeta adapter spec
 
-Emit-only bridge from Shepherd's detection pipeline to a
+Emit-only bridge from Outride's detection pipeline to a
 [ZMeta](https://github.com/JTC-byte/zmeta-spec) gateway (v1.1 lane —
 declared-2D geo and `PLATFORM_STATUS` require v1.1; the v1.0 schema
 rejects both),
-so ZMeta can see Shepherd detection data and fuse across multiple
-Shepherd mesh networks. One Shepherd instance = one ZMeta `platform_id`;
+so ZMeta can see Outride detection data and fuse across multiple
+Outride mesh networks. One Outride instance = one ZMeta `platform_id`;
 the gateway correlates and fuses across meshes.
 
 ## Why ZMeta fits
 
-ZMeta's adapter contract machine-checks the same honesty rules Shepherd
+ZMeta's adapter contract machine-checks the same honesty rules Outride
 is built on: no fabricated bearings for omnidirectional sensors, no
 invented quality metrics, degraded timing stays visible, and a line of
 bearing is not a track. Its reference deployment history already
 includes KrakenSDR DoA and PSD-sweep sensors feeding RF observations
-into downstream fusion — the same shape as Shepherd's outputs.
+into downstream fusion — the same shape as Outride's outputs.
 
 ## Event mapping
 
-| Shepherd | ZMeta event | Notes |
+| Outride | ZMeta event | Notes |
 |---|---|---|
 | Tripwire `CrossingEvent` | `OBSERVATION_EVENT` / `RF` | One per confirmed crossing |
 | Embedded classifier label | `INFERENCE_EVENT` / `CLASSIFICATION` | Genuine `based_on` lineage to its observation |
 | Mesh heartbeat (opt-in) | `SYSTEM_EVENT` / `PLATFORM_STATUS` | "Alive, here is the platform" for teams on the move; default off |
 
 Fused tracks are deliberately NOT emitted as `FUSION_EVENT` in v1:
-cross-mesh fusion is the gateway's job, and Shepherd's internal tracks
+cross-mesh fusion is the gateway's job, and Outride's internal tracks
 are its own estimate. The gateway builds tracks from observations.
 
 ## Field mapping (observation)
 
 - `event.event_id`: UUIDv7. `event.ts`: UTC with trailing `Z`.
 - `source.platform_id`: the mesh's platform ID (Settings → ZMeta export,
-  default `shepherd-mesh-1`). This is what distinguishes meshes at the
+  default `outride-mesh-1`). This is what distinguishes meshes at the
   gateway — give each mesh a unique ID.
-- `source.node_role`: `EDGE`. `source.producer`: `rf-sensor-shepherd`
+- `source.node_role`: `EDGE`. `source.producer`: `rf-sensor-outride`
   (matches the gateway's producer-authority policy).
-- `source.sensor_id`: the Shepherd link key.
+- `source.sensor_id`: the Outride link key.
 - `payload.modality`: `RF`.
 - `payload.features.center_freq_hz`: measurement channel center —
   Silvus/sim 2440 MHz, SDR band center from the bridge, KrakenSDR tuned
@@ -47,19 +47,19 @@ are its own estimate. The gateway builds tracks from observations.
   receiver-class sensors).
 - `payload.features.power_dbm`: **documented sentinel `0.0`.** The schema
   requires this field, but a passive link-disturbance sensor measures
-  channel disturbance, not emitter power, and Shepherd's dip depth is in
+  channel disturbance, not emitter power, and Outride's dip depth is in
   radio-internal units, not dBm. Following ZMeta's documented-sentinel
   precedent, the adapter emits the fixed sentinel and flags it in
-  `quality.shepherd_power_sentinel: true` with
+  `quality.outride_power_sentinel: true` with
   `quality.calibration_state: UNCALIBRATED`. The real measurement —
   disturbance depth in dB (radio units) — is in the explicitly-named
-  `features.shepherd_dip_depth_db`. Never read `power_dbm` as received
-  power on Shepherd events.
-- `payload.features.shepherd_link` / `shepherd_driver` /
-  `shepherd_disturbance` (`dip`|`rise`) / `shepherd_duration_s` /
-  `shepherd_size_est` (S/M/L heuristic) / `shepherd_via_variance`
-  (VRTI channel) / `shepherd_energy_dbfs` (SDR, dBFS — not dBm) /
-  `shepherd_sig_hint` (SDR signature hint, future).
+  `features.outride_dip_depth_db`. Never read `power_dbm` as received
+  power on Outride events.
+- `payload.features.outride_link` / `outride_driver` /
+  `outride_disturbance` (`dip`|`rise`) / `outride_duration_s` /
+  `outride_size_est` (S/M/L heuristic) / `outride_via_variance`
+  (VRTI channel) / `outride_energy_dbfs` (SDR, dBFS — not dBm) /
+  `outride_sig_hint` (SDR signature hint, future).
 - KrakenSDR DoA travels array-relative in
   `features.kraken_doa_array_relative_deg`. The canonical `bearing` block
   is omitted until a surveyed array heading is configured (ZMeta contract
@@ -82,35 +82,35 @@ are its own estimate. The gateway builds tracks from observations.
   or omit"). The device-reported altitude is platform-dependent —
   Android documents WGS-84 ellipsoid, iOS documents MSL — and is never
   verified HAE, so it is **excluded** from canonical geo and carried
-  explicitly in `features.shepherd_sensor_alt_m` instead. Substituting
+  explicitly in `features.outride_sensor_alt_m` instead. Substituting
   a non-HAE altitude into `alt_m` was rejected on the ZMeta record
   (doctrine A1-02); a 2-D position is the honest complete statement of
   what the sensor measured.
 - **This is the SENSOR (platform) position, never the target's** —
-  stated in `quality.shepherd_geo_note`. Source hierarchy
+  stated in `quality.outride_geo_note`. Source hierarchy
   (`AppState.bestKnownGeoFor`): (1) midpoint of the two link endpoints
   when both are mesh nodes with surveyed GPS positions (static, trusted
   until re-captured); (2) the phone's last GPS fix, if younger than 10
   minutes (a moving team outruns a stale fix); else omitted.
 - `quality.geo_status`: `VERTICAL_UNAVAILABLE` with 2-D geo (21.1:
   a 2-D geo must not claim `AVAILABLE`), `UNAVAILABLE` when omitted.
-  `quality.shepherd_geo_source` = `node-midpoint` | `phone-gps` |
+  `quality.outride_geo_source` = `node-midpoint` | `phone-gps` |
   `node-centroid`; accuracy and age ride in
-  `quality.shepherd_geo_accuracy_m` / `shepherd_geo_age_s` when known.
+  `quality.outride_geo_accuracy_m` / `outride_geo_age_s` when known.
 - Node positions themselves carry no altitude (operator-surveyed
   lat/lon); the phone fix's altitude is what populates
-  `features.shepherd_sensor_alt_m`.
+  `features.outride_sensor_alt_m`.
 
 ## Inference mapping
 
 - `event_subtype`: `CLASSIFICATION`. `node_role`: `GATEWAY` (the roles
   policy permits `INFERENCE_EVENT` only from `GATEWAY` — same convention
   as ZMeta's own eo-cv/sapient adapters, whose inference also runs on
-  the edge device). `producer`: `classifier-shepherd`.
+  the edge device). `producer`: `classifier-outride`.
 - Envelope `confidence` = the classifier's confidence (required on
   inference). `claim.label` = PASSING/LINGERING/INTERFERENCE/FAULT with
   a `confidence_hint` (high/medium/low).
-- `model`: `shepherd-disturbance-clf` v1.0.0 — heuristic, synthetic-trained.
+- `model`: `outride-disturbance-clf` v1.0.0 — heuristic, synthetic-trained.
 - `lineage.based_on` = the genuine parent observation's `event_id`.
 
 ## Transport
@@ -122,7 +122,7 @@ socket closed on dispose).
 
 ## Deployment security
 
-Shepherd operates at the **tactical** level and reports to ZMeta at
+Outride operates at the **tactical** level and reports to ZMeta at
 the **operational/strategic** level. That connection crosses networks
 by design, so it is **always secured** — see `docs/zmeta_deployment.md`
 and `field_kit/zmeta_secure/` for the full package.
@@ -130,7 +130,7 @@ and `field_kit/zmeta_secure/` for the full package.
 - **WireGuard** hub-and-spoke: the gateway is the hub, each mesh a
   spoke with its own keypair. Authenticated encryption
   (confidentiality + integrity + peer authentication) at the OS layer.
-- **No Shepherd code changes needed**: the adapter already targets a
+- **No Outride code changes needed**: the adapter already targets a
   host:port — it becomes the gateway's *tunnel* address
   (e.g. `10.99.0.1:5555`). The gateway binds ingest to the tunnel
   address, never `0.0.0.0`.
@@ -167,7 +167,7 @@ and `field_kit/zmeta_secure/` for the full package.
 
 - `zmetaSensorObservation()` wraps `SensorObservation.toZMetaPayload()`
   in the standard envelope (same UUIDv7/ts/source/profile, fail-closed
-  gate, never during replay). Producer `eo-sensor-shepherd` matches the
+  gate, never during replay). Producer `eo-sensor-outride` matches the
   governed EO producer pattern (producer-authority.yaml).
 - **Only MOTION exports (EO).** BEARING/SPECTRUM stay local: the 1.1.0
   ACOUSTIC arm requires `center_freq_hz` plus a level (`spl_db`, or

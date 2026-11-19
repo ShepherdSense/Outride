@@ -1,26 +1,26 @@
-# ZMeta deployment architecture: tactical Shepherd → operational/strategic ZMeta
+# ZMeta deployment architecture: tactical Outride → operational/strategic ZMeta
 
 ## Tiers
 
 ```
 TACTICAL (edge)                    OPERATIONAL / STRATEGIC
 ┌────────────────┐                  ┌─────────────────────────┐
-│ Shepherd mesh A│──┐               │ ZMeta gateway           │
+│ Outride mesh A│──┐               │ ZMeta gateway           │
 │ 6 nodes, trip- │  │ WireGuard     │  • validates events     │
 │ wire + tracks  │  │ (one tunnel   │  • fuses across meshes  │
 └────────────────┘  │  per mesh)    │  • projects STATE → COP │
 ┌────────────────┐  │               │    / ATAK (CoT egress)  │
-│ Shepherd mesh B│──┤               └─────────────────────────┘
+│ Outride mesh B│──┤               └─────────────────────────┘
 │ platform:      │  │
-│ shepherd-mesh-b│  │
+│ outride-mesh-b│  │
 └────────────────┘  │
 ┌────────────────┐  │
-│ Shepherd mesh C│──┘
+│ Outride mesh C│──┘
 │ (another party)│
 └────────────────┘
 ```
 
-- **Tactical:** each Shepherd mesh detects and tracks locally. It is
+- **Tactical:** each Outride mesh detects and tracks locally. It is
   the authority on its own detections — nothing above it re-decides
   whether a crossing happened.
 - **Operational/strategic:** ZMeta ingests every mesh's
@@ -31,11 +31,11 @@ TACTICAL (edge)                    OPERATIONAL / STRATEGIC
 
 ## Multi-party data fusing
 
-"Multi-party" here means multiple independent Shepherd meshes —
+"Multi-party" here means multiple independent Outride meshes —
 different teams, units, or coalition partners — feeding one ZMeta
 fabric. What makes it work:
 
-1. **One platform_id per mesh, globally unique.** Set in Shepherd →
+1. **One platform_id per mesh, globally unique.** Set in Outride →
    Settings → ZMeta export. The gateway keys attribution, peer
    registry, and any per-party handling off this value.
 2. **ZMeta's contract already separates authority by layer.** A mesh's
@@ -52,7 +52,7 @@ fabric. What makes it work:
    by the gateway's policy layer — it degrades that party's
    contribution instead of silently dropping or blindly trusting it.
 
-What Shepherd does NOT do: it never fuses other meshes' data, never
+What Outride does NOT do: it never fuses other meshes' data, never
 takes commands from ZMeta (emit-only — the adapter has no receive
 path), and never re-labels another party's detections.
 
@@ -65,10 +65,10 @@ the hub; each mesh is a spoke. Meshes never talk to each other.
 
 Why WireGuard and not event-level crypto in the adapter:
 - The ZMeta gateway validates **plaintext** ZMeta JSON. Encrypting
-  inside Shepherd would break the standard contract — you'd decrypt
+  inside Outride would break the standard contract — you'd decrypt
   before ingest, which is just a worse VPN.
 - WireGuard gives authentication + confidentiality + integrity in one
-  audited mechanism, at the OS layer, with zero Shepherd code changes:
+  audited mechanism, at the OS layer, with zero Outride code changes:
   the adapter already targets a host:port, which becomes the tunnel
   address.
 - The sharper threat is **injection** (forged detections → false
@@ -86,7 +86,7 @@ Why WireGuard and not event-level crypto in the adapter:
    tunnel-IP ↔ platform_id ↔ party in `PEERS.md`.
 4. Operator returns: the mesh's tunnel IP, the gateway public key,
    and the gateway's public endpoint.
-5. Mesh fills `shepherd-mesh.conf`, imports into WireGuard, activates.
+5. Mesh fills `outride-mesh.conf`, imports into WireGuard, activates.
 
 There is no PKI and no shared secret: compromise of one mesh's key
 affects only that mesh. Revocation = delete its `[Peer]` block.
@@ -117,7 +117,7 @@ untrusted interface — the tunnel is the only door.
 
 ## Failure modes
 
-- **Tunnel down:** Shepherd's emitter silently drops events (emit-only,
+- **Tunnel down:** Outride's emitter silently drops events (emit-only,
   fire-and-forget — detection continues locally, nothing blocks).
   The gateway sees the mesh go quiet; its policy layer should flag
   the party stale, not assume clear.

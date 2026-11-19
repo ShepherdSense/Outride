@@ -16,7 +16,7 @@ import 'dart:io';
 class NodeUdpHub {
   NodeUdpHub._();
 
-  /// The Shepherd node broadcast port (beacons, events, sensor_obs).
+  /// The Outride node broadcast port (beacons, events, sensor_obs).
   static const int port = 49160;
 
   /// Datagrams larger than this are dropped unparsed (real node

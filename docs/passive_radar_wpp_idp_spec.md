@@ -42,7 +42,7 @@ the no-clean-reference case**: detection and Doppler estimation from
 **one** RX channel with no reference antenna, no demodulation, and no
 synchronization (CONFIRMED — this is what the "IDP" in the paper's
 name buys you: integrated detection and processing on a single
-surveillance channel). It maps directly onto hardware Shepherd
+surveillance channel). It maps directly onto hardware Outride
 already has or is building:
 
 - The **ESP32 WiFi sniffer already sees 802.11 preambles** — WPP-IDP's
@@ -136,7 +136,7 @@ claims, not facts:**
 - Physics summary for the spec: **material sets flash AMPLITUDE,
   blade-count × RPM sets FREQUENCY (WIDELY REPORTED).**
 
-Shepherd implication, documented as design guidance: pusher-prop
+Outride implication, documented as design guidance: pusher-prop
 (Shahed-class, Group 2–3 mission target) micro-Doppler is weaker
 than multirotor lifting-blade modulation — **budget LONGER CPI on
 the blade-flash feature for Shahed-class targets**, and treat blade
@@ -163,7 +163,7 @@ paper:
 
 **Defensive-posture implication (this is why it is in this spec):**
 any classifier that trusts blade micro-Doppler as **identity** —
-including Shepherd's planned passive-radar classification feature —
+including Outride's planned passive-radar classification feature —
 is **spoofable by a cheap PCB-scale device**. Design rule, stated as
 a hard constraint:
 
@@ -262,7 +262,7 @@ Because sensitivity peaks at baseline crossing (CONFIRMED):
 
 ### Ego-motion: documented open problem, not solved here
 
-The paper assumes a static receiver (CONFIRMED). Shepherd's
+The paper assumes a static receiver (CONFIRMED). Outride's
 operational concept is **dismounted, on the move** — node motion
 impresses its own slow amplitude modulation on E[n] and will
 masquerade as Doppler. This spec **documents the requirement**
@@ -302,22 +302,22 @@ features). Carrying the Yan/Vorobev findings as design guidance:
 
 ## Integration points (actual files)
 
-- `~/workspace/shepherd_field_kit/passive_radar/passive_radar.py` —
+- `~/workspace/outride_field_kit/passive_radar/passive_radar.py` —
   existing PCL prototype; the **two-channel path stays primary where
   a clean reference exists**. WPP-IDP is implemented as the
   single-channel sibling (new module in the same directory), sharing
   the event vocabulary. The **~110 dB zero-Doppler cancellation
   milestone is unchanged and still comes first**.
-- `~/workspace/shepherd_field_kit/passive_radar/b210_capture.py` —
+- `~/workspace/outride_field_kit/passive_radar/b210_capture.py` —
   dual-RX capture; WPP-IDP needs only one channel, so single-channel
   captures from any supported SDR (including the bridge's stare
   mode) are valid inputs. No changes required; document single-
   channel capture as the WPP-IDP input.
-- `~/workspace/shepherd_field_kit/passive_radar/README.md` — honest-
+- `~/workspace/outride_field_kit/passive_radar/README.md` — honest-
   scope section gains the WPP-IDP entries: meters-to-tens-of-meters
   demonstrated geometry, baseline-crossing requirement, static-
   receiver assumption, preamble-only 7 dB cost.
-- `~/workspace/shepherd_field_kit/sdr_bridge/sdr_bridge.py` —
+- `~/workspace/outride_field_kit/sdr_bridge/sdr_bridge.py` —
   RX-only bridge; the capture source for the SDR-side WPP-IDP chain.
   Per-packet/preamble energy estimation lives bridge-side (same
   process as the ELRS DSP in `elrs_detect.py`); events ride the

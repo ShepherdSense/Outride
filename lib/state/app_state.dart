@@ -11,6 +11,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme.dart';
 
 import '../models/link_sample.dart';
+import '../models/fetch_event.dart';
+import '../models/spectrum_sweep.dart';
 import '../models/tracking.dart';
 import '../services/discovery.dart';
 import '../services/gps_positioning.dart';
@@ -31,6 +33,10 @@ import '../services/geo_projection.dart';
 import '../services/sensor_protocol.dart';
 import '../services/track_consistency.dart';
 import '../services/generic_sensor_driver.dart';
+import '../services/fetch_driver.dart';
+import '../services/fetch_voice_alerts.dart';
+import '../services/operator_pose.dart';
+import '../services/voice_alert_service.dart';
 import '../models/sensor_observation.dart';
 import '../services/recorder.dart';
 import '../services/replay_driver.dart';
@@ -53,6 +59,7 @@ import '../services/hunt_tracker.dart';
 import '../services/offline_map_source.dart';
 import '../services/phone_tier.dart';
 import '../services/device_autoconnect.dart';
+import '../services/fleet_service.dart';
 
 /// Short display ID: strips the driver namespace (`silvus:90550` → `90550`).
 /// (Moved to utils/node_ids.dart; re-exported here for existing callers.)
@@ -71,17 +78,17 @@ String cotEmitterEvidenceLine(String callsign) =>
 Color driverColor(String driverId) {
   switch (driverId) {
     case 'silvus':
-      return SentryColors.blue;
+      return OutrideColors.blue;
     case 'sim':
-      return SentryColors.green;
+      return OutrideColors.green;
     case 'mpu5':
-      return SentryColors.purple;
+      return OutrideColors.purple;
     case 'harris':
-      return SentryColors.orange;
+      return OutrideColors.orange;
     case 'sdr':
-      return SentryColors.purple;
+      return OutrideColors.purple;
     default:
-      return SentryColors.muted;
+      return OutrideColors.muted;
   }
 }
 
@@ -100,7 +107,7 @@ class AppSettings {
     this.zmetaEnabled = false,
     this.zmetaHost = '127.0.0.1',
     this.zmetaPort = 5555,
-    this.zmetaPlatformId = 'shepherd-mesh-1',
+    this.zmetaPlatformId = 'outride-mesh-1',
     this.zmetaTransport = 'udp',
     this.zmetaIngestUrl = '',
     this.zmetaIngestFp = '',
@@ -116,7 +123,7 @@ class AppSettings {
     this.cotTakPort = 8087,
     this.cotStaleSeconds = 30,
     this.cotPublishFloor = 0.3,
-    this.cotCallsignPrefix = 'SHEPHERD-',
+    this.cotCallsignPrefix = 'OUTRIDE-',
     this.cotAirTypeThreshold = 0.5,
     this.cotListenEnabled = false,
     this.cotListenMulticastGroup = '239.2.3.1',
@@ -160,7 +167,7 @@ class AppSettings {
   double wifiDipThresholdDb;
 
   /// ZMeta export: emit OBSERVATION/INFERENCE events per detection over
-  /// UDP to a ZMeta gateway (emit-only). One Shepherd mesh = one ZMeta
+  /// UDP to a ZMeta gateway (emit-only). One Outride mesh = one ZMeta
   /// platform_id; the gateway fuses across meshes.
   bool zmetaEnabled;
   String zmetaHost;
@@ -203,7 +210,7 @@ class AppSettings {
   int zmetaHeartbeatIntervalSec;
 
   /// CoT track output (emit-only, defensive-only): publish the fused
-  /// track as a CoT event per update — the only bytes Shepherd ever
+  /// track as a CoT event per update — the only bytes Outride ever
   /// sends. Affiliation is always unknown (enforced in CotPublisher).
   bool cotEmitEnabled;
 
@@ -221,7 +228,7 @@ class AppSettings {
   /// Tracks below this displayed confidence are never published.
   double cotPublishFloor;
 
-  /// Emit callsign/uid prefix, e.g. 'SHEPHERD-' (hyphen, no space).
+  /// Emit callsign/uid prefix, e.g. 'OUTRIDE-' (hyphen, no space).
   /// Non-empty, no whitespace (validated at apply time).
   String cotCallsignPrefix;
 
@@ -576,12 +583,18 @@ class AppState extends ChangeNotifier {
     _loadLayout();
     _loadGpsOrigin();
     _loadZmetaSettings();
+    _loadFetchVoiceSettings();
     _initCameraDriver();
     _wireSkydio();
     _radiosReady = _loadRadios();
     // v0.26.0: user signatures load in the background; missing
     // file = built-in catalog only, never a boot failure.
     unawaited(loadUserSignatures());
+    // v0.28.0 Fleet: load the remembered fleet record; if one
+    // exists, start listening + beaconing so it auto-rejoins on
+    // sight. Unjoined EUDs start listening when the Fleet screen
+    // opens (ensureFleetListening), not at boot.
+    unawaited(_initFleet());
     // Fire-and-forget: events simply carry no AI label until it lands.
     DisturbanceClassifier.load().then((c) => _classifier = c);
     TrackStitcher.load().then((s) => _stitcher = s);
@@ -653,7 +666,7 @@ class AppState extends ChangeNotifier {
       fpMode: settings.zmetaIngestFp,
       tokenProvider: () {
         final platform = settings.zmetaPlatformId.trim().isEmpty
-            ? 'shepherd-mesh-1'
+            ? 'outride-mesh-1'
             : settings.zmetaPlatformId.trim();
         return ZmetaIngestStore.readToken(platform);
       },
@@ -838,7 +851,7 @@ class AppState extends ChangeNotifier {
   DeviceAutoConnect? _autoConnect;
 
   /// Stable CoT track identity: the deterministic tracker follows a
-  /// single mover, so one uid per mesh (SHEPHERD-mover-1 via the
+  /// single mover, so one uid per mesh (OUTRIDE-mover-1 via the
   /// callsign contract in cot_publisher.dart).
   static const String _cotTrackId = 'mover-1';
 
@@ -979,6 +992,115 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---- Fleet auto-mesh (v0.28.0) ----------------------------------
+  // Automatic EUD-to-EUD meshing: one fleet per 4-digit PIN, beacons
+  // on 239.2.3.2:6970, per-pair X25519 session keys. The service
+  // owns the socket lifecycle; AppState owns the service lifecycle
+  // alongside CotPublisher/CotListener and wires peer observations
+  // into the shared sensor-observation store (corroboration-only,
+  // exactly like local sensor-bus observations — the RF tripwire
+  // stays detection authority and a peer can never create a track
+  // alone or veto one).
+
+  FleetService? _fleetService;
+
+  /// The fleet service, created lazily. Creating it does no I/O —
+  /// the socket starts in [_initFleet] (remembered fleet) or
+  /// [ensureFleetListening] (Fleet screen opened).
+  FleetService get fleetService => _fleetService ??= FleetService(
+        hasSilvus: () => hasLiveSilvus,
+        callsignPrefix: () => settings.cotCallsignPrefix,
+        onPeerObservation: _ingestPeerObservation,
+        onChanged: () {
+          if (!_disposed) notifyListeners();
+        },
+      );
+
+  /// True when a live Silvus radio is attached: a non-sim poller
+  /// whose last poll is fresh (< 10 s) and error-free. This is the
+  /// same liveness the dashboard radio card shows; the fleet role
+  /// label (SENSING vs FUSION PEER) follows it live.
+  bool get hasLiveSilvus {
+    final now = DateTime.now();
+    for (final p in _pollers) {
+      if (p.config.driverId != 'silvus') continue;
+      final last = p.status.lastPoll;
+      if (last == null) continue;
+      if (p.status.error != null) continue;
+      if (now.difference(last).inSeconds < 10) return true;
+    }
+    return false;
+  }
+
+  /// Cold-start fleet init: load the remembered record; if one
+  /// exists, start listening + beaconing so the fleet auto-rejoins
+  /// on sight. Never throws.
+  Future<void> _initFleet() async {
+    try {
+      await fleetService.init();
+      if (fleetService.inFleet) {
+        await fleetService.start();
+      }
+    } catch (_) {}
+  }
+
+  /// Start fleet listening (called when the Fleet screen opens).
+  /// Idempotent; never throws.
+  Future<void> ensureFleetListening() async {
+    try {
+      await fleetService.start();
+    } catch (_) {}
+  }
+
+  /// Joined members (this device excluded), freshest first.
+  List<FleetPeer> get fleetPeers => fleetService.peers;
+
+  /// Fleets heard but not joined.
+  List<FleetHeard> get fleetHeardFleets => fleetService.heardFleets;
+
+  /// Dashboard fleet chip text: `FLEET 3 · 2 SENSING` or
+  /// `NOT IN A FLEET`.
+  String get fleetSummary => fleetService.summary;
+
+  bool get inFleet => fleetService.inFleet;
+
+  bool get fleetListening => fleetService.isRunning;
+
+  /// Create a fleet with a 4-digit PIN (lead). Throws
+  /// [ArgumentError] on a malformed PIN.
+  Future<FleetRecord> createFleet(String pin) async {
+    final rec = await fleetService.createFleet(pin);
+    notifyListeners();
+    return rec;
+  }
+
+  /// Join a heard fleet with its 4-digit PIN. False = wrong PIN /
+  /// timeout / no answer (UI shows only "Wrong PIN — try again").
+  Future<bool> joinFleet(FleetHeard heard, String pin) async {
+    final ok = await fleetService.joinFleet(heard, pin);
+    notifyListeners();
+    return ok;
+  }
+
+  /// Forget the fleet: deletes the record AND the secure-storage
+  /// key, stops beaconing, drops all peers.
+  Future<void> forgetFleet() async {
+    await fleetService.forgetFleet();
+    notifyListeners();
+  }
+
+  /// A peer's decrypted sensor observation joins the shared
+  /// observation store (bounded at 500, like the camera path).
+  /// Corroboration/display only — it never reaches the tripwire,
+  /// the tracker, or the merger as a detection, and it is never
+  /// re-exported to ZMeta (it is another EUD's observation).
+  void _ingestPeerObservation(SensorObservation obs) {
+    sensorObservations.add(obs);
+    if (sensorObservations.length > 500) {
+      sensorObservations.removeRange(0, sensorObservations.length - 500);
+    }
+  }
+
   // ---- Skydio integration (P1–P3) --------------------------------
 
   /// One-time wiring: BLE advertisements tap into the Remote ID
@@ -999,7 +1121,7 @@ class AppState extends ChangeNotifier {
   void _applySkydioSettings() {
     airframes.registry = FriendlyRegistry.parse(settings.friendlySerials);
     airframes.rematchAll();
-    // The Wi-Fi poll rides the shepherd/wifi_sense channel, which
+    // The Wi-Fi poll rides the outride/wifi_sense channel, which
     // only exists on Android; elsewhere the poll is a caught no-op
     // (MissingPluginException) and BLE remains the receive path.
     remoteId.setEnabled(settings.remoteIdEnabled, wifiCapable: true);
@@ -1229,7 +1351,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Emit callsign/uid prefix (default 'SHEPHERD-'). Must be
+  /// Emit callsign/uid prefix (default 'OUTRIDE-'). Must be
   /// non-empty with no whitespace; invalid input keeps the current
   /// value.
   Future<void> setCotCallsignPrefix(String v) async {
@@ -1397,7 +1519,7 @@ class AppState extends ChangeNotifier {
     try {
       await refreshPhoneFix();
       final platform = settings.zmetaPlatformId.trim().isEmpty
-          ? 'shepherd-mesh-1'
+          ? 'outride-mesh-1'
           : settings.zmetaPlatformId.trim();
       final geo = _platformGeo();
       final send = _zmetaSendFn();
@@ -1735,6 +1857,270 @@ class AppState extends ChangeNotifier {
   /// True when at least one SDR driver is polling.
   bool get hasSdrDriver => _pollers.any((p) => p.driver is SdrDriver);
 
+  /// The SDR drivers currently polling (usually one). The Spectrum
+  /// tab reads ingest counters from these.
+  List<SdrDriver> get sdrDrivers {
+    final out = <SdrDriver>[];
+    for (final p in _pollers) {
+      final d = p.driver;
+      if (d is SdrDriver) out.add(d);
+    }
+    return out;
+  }
+
+  /// All wideband sweep steps across live SDR pollers, LOW to HIGH
+  /// frequency (for the Spectrum tab). Display-only data: sweep
+  /// steps never become LinkSamples, so they can never drive the
+  /// tripwire, tracker, or merger.
+  List<SweepStep> get sweepSteps {
+    final out = <SweepStep>[];
+    for (final p in _pollers) {
+      final d = p.driver;
+      if (d is SdrDriver) out.addAll(d.latestSweepSteps);
+    }
+    out.sort((a, b) => a.centerMhz.compareTo(b.centerMhz));
+    return out;
+  }
+
+  /// Strongest sweep peaks across live SDR pollers (top 20).
+  List<SweepPeak> get sweepPeaks {
+    final out = <SweepPeak>[];
+    for (final p in _pollers) {
+      final d = p.driver;
+      if (d is SdrDriver) out.addAll(d.latestSweepPeaks);
+    }
+    out.sort((a, b) => b.dbfs.compareTo(a.dbfs));
+    return out.take(20).toList();
+  }
+
+  /// True when any SDR poller holds sweep steps from the current pass.
+  bool get hasSweepSteps => sweepSteps.isNotEmpty;
+
+  /// The Fetch (sensor ball) driver, when one is added and polling.
+  /// Null when the operator has not added the FETCH driver — the
+  /// Fetch view degrades to a setup hint, never to a confident
+  /// "nothing is happening" (absence of a driver is not absence of
+  /// a ball).
+  FetchDriver? get fetchDriver {
+    for (final p in _pollers) {
+      final d = p.driver;
+      if (d is FetchDriver) return d;
+    }
+    return null;
+  }
+
+  /// True when a Fetch driver is polling.
+  bool get hasFetchDriver => fetchDriver != null;
+
+  // ---- Fetch voice alerts (EXPERIMENTAL) ----
+  // Spoken Fetch trip alerts through the EUD audio output into the
+  // operator's hearing protection. Default OFF (fail-safe: nothing
+  // speaks until the operator opts in). The Fetch driver itself
+  // stays display-only — voice alerts read its events, they never
+  // feed the tripwire, tracker, or merger.
+
+  /// Persisted voice settings, SharedPreferences key
+  /// 'rf_sentry_fetch_voice_v1' (own block, separate from the ZMeta
+  /// settings block so a corrupt block can't take the other down).
+  static const _fetchVoiceSettingsKey = 'rf_sentry_fetch_voice_v1';
+
+  /// Voice alerts master switch. Default OFF.
+  bool fetchVoiceEnabled = false;
+
+  /// Fast silence for the Fetch screen mute toggle. Default false.
+  bool fetchVoiceMuted = false;
+
+  /// TTS speech rate, 0.1–1.0. Default 0.5.
+  double fetchVoiceRate = 0.5;
+
+  /// Pure phrase + throttle logic (no audio). One instance for the
+  /// app's lifetime so the per-sensor repeat window survives polls.
+  final fetchVoiceAlerts = FetchVoiceAlerts();
+
+  /// Operator pose (EUD GPS position; heading is null in v1 — see
+  /// operator_pose.dart). Refreshed fire-and-forget from the poll
+  /// loop, never blocking it.
+  OperatorPoseProvider _operatorPose = OperatorPoseProvider();
+
+  /// Throw point: operator position captured at the "Mark throw"
+  /// tap. Session-only, never persisted. Null = no throw point.
+  ThrowPoint? throwPoint;
+
+  /// Short error from the last failed "Mark throw" (e.g. the
+  /// GpsException message — already UI-ready). Null when the last
+  /// capture succeeded or none was attempted.
+  String? throwPointError;
+
+  /// Voice service, created lazily on first use so an install that
+  /// never enables voice alerts never touches the TTS platform
+  /// channel. Disposed with the app.
+  VoiceAlertService? _voiceService;
+
+  /// Test hook: replace the voice service (and pose provider) with
+  /// fakes so tests never touch flutter_tts or the location channel.
+  @visibleForTesting
+  set voiceAlertServiceForTest(VoiceAlertService s) => _voiceService = s;
+
+  @visibleForTesting
+  set operatorPoseForTest(OperatorPoseProvider p) => _operatorPose = p;
+
+  VoiceAlertService get voiceAlertService {
+    final cur = _voiceService;
+    if (cur != null) return cur;
+    final next = VoiceAlertService(
+      synthesizer: FlutterTtsVoiceSynthesizer(),
+      speechRate: fetchVoiceRate,
+    );
+    _voiceService = next;
+    return next;
+  }
+
+  Future<void> _loadFetchVoiceSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_fetchVoiceSettingsKey);
+      if (raw == null) return;
+      final j = jsonDecode(raw) as Map<String, dynamic>;
+      final e = j['enabled'];
+      if (e is bool) fetchVoiceEnabled = e;
+      final m = j['muted'];
+      if (m is bool) fetchVoiceMuted = m;
+      final r = j['speechRate'];
+      if (r is num) fetchVoiceRate = r.toDouble().clamp(0.1, 1.0);
+    } catch (_) {
+      // Corrupt prefs: keep defaults (voice stays OFF).
+    }
+    notifyListeners();
+  }
+
+  Future<void> _saveFetchVoiceSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _fetchVoiceSettingsKey,
+        jsonEncode({
+          'enabled': fetchVoiceEnabled,
+          'muted': fetchVoiceMuted,
+          'speechRate': fetchVoiceRate,
+        }),
+      );
+    } catch (_) {}
+  }
+
+  /// Voice alerts on/off. Persists; takes effect on the next poll.
+  Future<void> setFetchVoiceEnabled(bool v) async {
+    fetchVoiceEnabled = v;
+    await _saveFetchVoiceSettings();
+    notifyListeners();
+  }
+
+  /// Fast silence (Fetch screen mute toggle). Persists.
+  Future<void> setFetchVoiceMuted(bool v) async {
+    fetchVoiceMuted = v;
+    await _saveFetchVoiceSettings();
+    notifyListeners();
+  }
+
+  /// Speech rate, clamped 0.1–1.0. Persists; applied to the live
+  /// service when one exists.
+  Future<void> setFetchVoiceRate(double r) async {
+    fetchVoiceRate = r.clamp(0.1, 1.0);
+    await _saveFetchVoiceSettings();
+    unawaited(_voiceService?.setSpeechRate(fetchVoiceRate));
+    notifyListeners();
+  }
+
+  /// Speak the fixed sample alert (Settings "Test voice"). No-op
+  /// when voice alerts are off or muted — the button is disabled
+  /// then too.
+  void speakFetchVoiceTest() {
+    if (!fetchVoiceEnabled || fetchVoiceMuted) return;
+    voiceAlertService.speakTest();
+  }
+
+  /// Record the throw point from the operator's current position.
+  /// On failure the old value is left untouched and
+  /// [throwPointError] carries the short reason for the Fetch
+  /// screen to show. Heading is null in v1 (compass deferred).
+  Future<void> markThrowPoint() async {
+    try {
+      final pos = await _operatorPose.captureNow();
+      throwPoint = ThrowPoint(
+        lat: pos.lat,
+        lon: pos.lon,
+        at: pos.at,
+        heading: _operatorPose.heading,
+      );
+      throwPointError = null;
+    } catch (e) {
+      throwPointError = '$e';
+    }
+    notifyListeners();
+  }
+
+  /// Forget the throw point (phrases fall back to live GPS, then to
+  /// direction-free). Also clears any stale capture error.
+  void clearThrowPoint() {
+    throwPoint = null;
+    throwPointError = null;
+    notifyListeners();
+  }
+
+  /// Identities of Fetch events already considered for voice
+  /// announcement (receivedAt + trip flags), oldest first, bounded.
+  /// The driver store is newest-first and re-reports its events on
+  /// every poll — without this, one trip would speak on every tick.
+  final List<String> _announcedFetchEvents = [];
+
+  static String _fetchEventKey(FetchEvent e) =>
+      '${e.receivedAt.toIso8601String()}|'
+      '${[for (final s in e.trippedSensors) s.name].join(',')}';
+
+  /// Test hook: drive the announce path directly (the real entry
+  /// point is [_tickPoller], which needs a live poll loop).
+  @visibleForTesting
+  void announceFetchTripsForTest(FetchDriver driver) =>
+      _maybeAnnounceFetchTrips(driver);
+
+  /// Feed NEW Fetch trip events to the voice service. Called from
+  /// [_tickPoller] after a successful Fetch poll — only when voice
+  /// alerts are enabled, not muted, and not replaying. Never throws
+  /// into the poll loop and never blocks the tick: the pose refresh
+  /// is fire-and-forget and speaking is queued, not awaited.
+  void _maybeAnnounceFetchTrips(FetchDriver driver) {
+    if (!fetchVoiceEnabled || fetchVoiceMuted || replaying) return;
+    try {
+      unawaited(_operatorPose.refresh());
+      final now = DateTime.now();
+      final op = _operatorPose.currentPosition(now: now);
+      for (final e in driver.events) {
+        if (!e.anyTrip) continue;
+        // Only fresh trips speak: an event that arrived while voice
+        // was off must not bark minutes later when it is switched on.
+        if (now.difference(e.receivedAt) > const Duration(seconds: 30)) {
+          continue;
+        }
+        final key = _fetchEventKey(e);
+        if (_announcedFetchEvents.contains(key)) continue;
+        _announcedFetchEvents.add(key);
+        final phrase = fetchVoiceAlerts.nextPhrase(
+          e,
+          now: now,
+          operatorPosition: op,
+          heading: _operatorPose.heading,
+          throwPoint: throwPoint,
+        );
+        if (phrase != null) voiceAlertService.enqueue(phrase);
+      }
+      while (_announcedFetchEvents.length > 200) {
+        _announcedFetchEvents.removeAt(0);
+      }
+    } catch (e) {
+      // Voice must never take down the poll loop.
+      debugPrint('Fetch voice: announce failed: $e');
+    }
+  }
+
   /// ELRS Gemini signature evidence lines for the evidence view.
   ///
   /// Combines bridge-local signatures (wideband dual-frequency
@@ -1872,6 +2258,9 @@ class AppState extends ChangeNotifier {
   // it must NEVER veto or suppress one. A detection stands on RF evidence
   // alone; the camera can only add context. Absence of motion means
   // nothing (occlusion, night, facing away).
+  // Camera settings key keeps the pre-rename name on purpose: renaming
+  // it would orphan saved camera-confirmation settings on upgrade (same
+  // reason the rf_sentry_*_v1 prefs keys are unchanged).
   static const _cameraSettingsKey = 'shepherd_camera_v1';
 
   CameraSettings cameraSettings = CameraSettings();
@@ -2115,6 +2504,11 @@ class AppState extends ChangeNotifier {
       sensorObservations.removeRange(0, sensorObservations.length - 500);
     }
     unawaited(_emitZmetaSensorObs(fresh));
+    // v0.28.0 Fleet: a sensing node shares its sensor-bus
+    // observations with joined peers (encrypted, per-pair session
+    // keys). shareObservation is a no-op when unjoined, when this
+    // EUD has no live Silvus radio, or when no peer session exists.
+    unawaited(fleetService.shareObservations(fresh));
   }
 
   /// Emits acoustic/EO sensor observations to the ZMeta gateway.
@@ -2128,7 +2522,7 @@ class AppState extends ChangeNotifier {
     try {
       final send = _zmetaSendFn();
       final platform = settings.zmetaPlatformId.trim().isEmpty
-          ? 'shepherd-mesh-1'
+          ? 'outride-mesh-1'
           : settings.zmetaPlatformId.trim();
       for (final o in obs) {
         final evt = zmetaSensorObservation(platformId: platform, obs: o);
@@ -2489,6 +2883,18 @@ class AppState extends ChangeNotifier {
     _startPending = false;
     _autoConnect?.stop();
     _autoConnect = null;
+    // The throw point belongs to the Fetch session: once Fetch
+    // polling stops, the recorded throw position goes stale (the
+    // ball may have been picked up, re-thrown, or packed away), so
+    // a later session must never speak directions from an old
+    // throw. No time expiry — a legitimate all-day stakeout keeps
+    // the ball at the throw point while polling runs. Note start()
+    // routes through stop(), so a restart clears it too; the
+    // operator re-marks the throw on the new session.
+    if (_pollers.any((p) => p.driver is FetchDriver)) {
+      throwPoint = null;
+      throwPointError = null;
+    }
     for (final p in _pollers) {
       p.timer?.cancel();
       try {
@@ -2529,7 +2935,12 @@ class AppState extends ChangeNotifier {
       }
       p.status.lastPoll = DateTime.now();
       p.status.linkCount = raw.length;
-      p.status.error = raw.isEmpty ? p.driver.emptyHint : null;
+      // Only drivers whose empty poll means "broken" get an error
+      // here. Display-only drivers (Fetch, Camera) never emit links
+      // — their silence is normal, and flagging it would permanently
+      // poison deployment health (see RadioDriver.emptyPollIsError).
+      p.status.error =
+          raw.isEmpty && p.driver.emptyPollIsError ? p.driver.emptyHint : null;
 
       final enrichedAll = <LinkSample>[];
       for (final r in raw) {
@@ -2597,6 +3008,9 @@ class AppState extends ChangeNotifier {
         _applyBeaconCallsigns(drv.beaconCallsigns);
       }
       _updateFusedTrack();
+      // Fetch voice alerts: new trip events speak (when enabled,
+      // unmuted, not replaying). Never throws, never blocks the tick.
+      if (drv is FetchDriver) _maybeAnnounceFetchTrips(drv);
       _refreshConnectionLabel();
       error = null;
     } catch (e) {
@@ -3525,7 +3939,7 @@ class AppState extends ChangeNotifier {
     try {
       final send = _zmetaSendFn();
       final platform = settings.zmetaPlatformId.trim().isEmpty
-          ? 'shepherd-mesh-1'
+          ? 'outride-mesh-1'
           : settings.zmetaPlatformId.trim();
       for (final e in evts) {
         final rf = _zmetaRf(e.linkKey);
@@ -3745,6 +4159,13 @@ class AppState extends ChangeNotifier {
 
   Future<void> removeRadioAt(int i) async {
     if (i < 0 || i >= radioConfigs.length) return;
+    // Removing the FETCH driver retires its session: the throw
+    // point goes with it (see stop() — same rule, for the case
+    // where the driver was configured but never started polling).
+    if (radioConfigs[i].driverId == 'fetch') {
+      throwPoint = null;
+      throwPointError = null;
+    }
     radioConfigs.removeAt(i);
     await _saveRadios();
     if (polling && !settings.simulatedMode) start();
@@ -4132,6 +4553,8 @@ class AppState extends ChangeNotifier {
     _zmetaHeartbeatTimer?.cancel();
     _zmetaHeartbeatTimer = null;
     remoteId.dispose();
+    unawaited(_voiceService?.dispose());
+    _voiceService = null;
     _autoConnect?.stop();
     _autoConnect = null;
     _zmeta?.close();
@@ -4140,6 +4563,8 @@ class AppState extends ChangeNotifier {
     _cotPublisher = null;
     unawaited(_cotListener?.stop());
     _cotListener = null;
+    unawaited(_fleetService?.stop());
+    _fleetService = null;
     for (final p in _pollers) {
       p.timer?.cancel();
       try {

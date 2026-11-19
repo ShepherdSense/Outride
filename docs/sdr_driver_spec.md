@@ -16,7 +16,7 @@ band into a *virtual link* whose "signal" is band energy.
 
 ```
 ┌──────────────┐  libiio/UHD/      ┌──────────────────┐  UDP 127.0.0.1:49161  ┌─────────────┐
-│  Your SDR    │  rtlsdr/Soapy ──▶ │  sdr_bridge.py   │ ── JSON datagrams ──▶ │  Shepherd   │
+│  Your SDR    │  rtlsdr/Soapy ──▶ │  sdr_bridge.py   │ ── JSON datagrams ──▶ │  Outride   │
 │  (any below) │   RX ONLY         │  sweep / stare   │   band energy dBFS    │  SdrDriver  │
 └──────────────┘  (no TX path)     └──────────────────┘                       └──────┬──────┘
                                                                                   │ LinkSample
@@ -28,7 +28,7 @@ band into a *virtual link* whose "signal" is band energy.
 ```
 
 Two processes by necessity: Dart can't drive SDR libraries, so the Python
-bridge owns the radio and Shepherd owns the detection.
+bridge owns the radio and Outride owns the detection.
 
 ## Supported SDRs
 
@@ -47,7 +47,7 @@ SoapySDR device; first working one wins.
 
 ## The polarity trick
 
-Shepherd's tripwire detects *dips*: `dip = baseline − snr`. A spectrum
+Outride's tripwire detects *dips*: `dip = baseline − snr`. A spectrum
 sensor's signal is the opposite — an emitter *appearing* is an energy
 *rise*. Rather than teaching the tripwire about rises, the driver negates:
 
@@ -106,6 +106,57 @@ as any undiscovered node); drag them where you like or ignore them.
   SoapySDR users install PothosSDR (Windows) once; RTL-SDR users run
   Zadig once for the WinUSB driver.
 
+## Wideband survey mode (`--wideband`)
+
+Steps the radio across a range (default 24–1766 MHz in 2 MHz steps,
+clipped to the radio's ceiling) and ships one `sweep_step` packet per
+step on the same UDP 49161 transport. Same PSD, same adaptive floor,
+same DC masking as the band chain, so the numbers mean the same thing
+in both modes.
+
+```
+{"v":1,"kind":"sweep_step","radio":"rtlsdr0","sweep_id":3,
+ "step_index":412,"step_count":872,"center_mhz":915.0,
+ "span_mhz":1.92,"energy_dbfs":-62.4,"noise_dbfs":-81.0,
+ "bins_dbfs":[-80.1,... 32 values, LOW to HIGH ...],
+ "peaks":[{"freq_mhz":915.14,"dbfs":-48.3}],"t":1729123456.789}
+```
+
+- `bins_dbfs` is max-pooled (never mean-pooled) so a narrow tone is
+  never washed out of its bin. `peaks` are local maxima above
+  noise + margin (default 10 dB), strongest first, one entry per
+  hump (a flat-top hump yields one peak, its last bin; the DC-masked
+  bins are never peak candidates). `sweep_id` increments each full
+  pass so the app can group steps into passes — and because the
+  bridge restarts its `sweep_id` at 0, a step-0 from the same id
+  after a 5 s gap with no steps at all also starts a new pass
+  (a bridge restart, not a duplicate); a step with index > 0 never
+  clears, so a late datagram can only overwrite its own center.
+- **Display-only, by construction.** The app stores sweep steps in
+  the SdrDriver's sweep store and renders them on the Spectrum tab;
+  sweep_step packets never become LinkSamples, so a survey can never
+  drive the tripwire, the tracker, or the merger. The existing band
+  packets keep their tripwire behavior untouched, and no band packets
+  are sent while a survey runs.
+- A survey is slow by physics: ~870 steps at ~0.1 s/step is ~1–2 min
+  per full V3 pass. Focus ranges (`--wideband-focus 88-108,902-928,1090`)
+  revisit faster. A fast hopper can slip between visits.
+- Health contract: a wideband-only bridge sends no band packets, so
+  `poll()` returns no LinkSamples. `SdrDriver.emptyPollIsError` is
+  therefore state-aware: an empty poll is an error only when there
+  are neither fresh bands nor a fresh sweep step (within the 15 s
+  band window) — a live survey reads healthy, a dead bridge still
+  reads as an error.
+- `--simulate --wideband` synthesizes scripted peaks (FM band broad
+  lift, 2 m / 915 MHz / ADS-B 1090 tones, quiet elsewhere) so the
+  pipeline verifies with no hardware. `--replay <file>` replays
+  recorded bridge output (e.g. from `--print`) with no radio.
+- `--wideband` cannot combine with `--stare` / `--bands` / `--plan` /
+  `--pmr`: the bridge exits with a clear message. One dongle, one
+  process — a second bridge script would fight the first for the USB
+  device, which is why the survey lives in this bridge instead of a
+  separate script.
+
 ## Honest limits (v1)
 
 1. One radio = energy, not direction. "2.4 GHz got hot" is the whole
@@ -129,7 +180,7 @@ as any undiscovered node); drag them where you like or ignore them.
 1. On the PC: double-click `RUN_SDR_BRIDGE.bat --simulate` (test), or
    with `--backend rtlsdr` / `--backend soapy --soapy-driver hackrf` /
    `--backend pluto` / `--backend uhd` (hardware).
-2. In Shepherd: Settings → add radio → **SDR** —
+2. In Outride: Settings → add radio → **SDR** —
    address prefills to `127.0.0.1:49161`.
 3. Watch the dashboard: each band appears as a virtual link; scripted
    emitters in `--simulate` fire within ~40 s so the pipeline can be
@@ -141,4 +192,4 @@ as any undiscovered node); drag them where you like or ignore them.
   (converges with the DF node Phase 2 plan).
 - Multi-radio energy-gradient bearing (mesh hot-side bearing, per the
   DF node spec) once 3+ spectrum nodes are common.
-- TX remains out of scope permanently — Shepherd stays defensive-only.
+- TX remains out of scope permanently — Outride stays defensive-only.

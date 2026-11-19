@@ -1,9 +1,9 @@
-# Shepherd v0.26.0 — Fieldwatch-borrow build spec
+# Outride v0.26.0 — Fieldwatch-borrow build spec
 
 ## Status note (read first)
 
 Draco greenlit this 2026-10-24 ("Borrow away") under his standing EUD
-assumption: most Shepherd users run it on an EUD (ATAK Android device),
+assumption: most Outride users run it on an EUD (ATAK Android device),
 so anything that works on a phone gets implemented.
 
 **Correction to the original brief, verified in code 2026-10-24:**
@@ -26,7 +26,7 @@ Bluetooth LE observer. No dongle, no account, no backend, fully offline.
 Remote ID decoding. Hunt walk-around heat map with motion-sensor step
 tracking between GPS fixes. Live map with path. Offline maps: OSM and
 USGS out of the box; Esri/MapTiler/Stadia/Thunderforest only with the
-user's own key. Its own honest limits, which Shepherd inherits wherever
+user's own key. Its own honest limits, which Outride inherits wherever
 they apply: no direction finding, no monitor mode, no cellular,
 phone-OS scan quotas hide quiet/randomized radios, matches are
 hypotheses, not identity.

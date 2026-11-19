@@ -1,4 +1,4 @@
-/// Hunt heat-map mode (Shepherd v0.26.0, Fieldwatch-borrow item 3).
+/// Hunt heat-map mode (Outride v0.26.0, Fieldwatch-borrow item 3).
 ///
 /// Concept adapted from Fieldwatch (MIT): walk around a selected
 /// emitter, accumulate its RSSI samples into a spatial heat grid

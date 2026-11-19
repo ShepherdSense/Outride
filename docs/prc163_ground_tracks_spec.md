@@ -1,8 +1,8 @@
-# PRC-163 Friendly Ground Tracks — Shepherd
+# PRC-163 Friendly Ground Tracks — Outride
 
 Status: BUILT as v0.23.0 (2026-10-21, pending publish). Companion
 to `docs/skydio_integration_spec.md` (the air side). Operator
-decision: wire the AN/PRC-163 into Shepherd as friendly ground
+decision: wire the AN/PRC-163 into Outride as friendly ground
 tracks — the path the radio can actually support.
 
 ## What the 163 contributes — and what it does not
@@ -18,7 +18,7 @@ CONFIRMED (L3Harris Radio Application Handbook Rev G, research
   SNMP is not documented on the 163 at all; the SNMP-probe
   approach is retired.
 - The radio lives under a **no-LAN constraint** (operator's,
-  standing): it does not go back on a network for Shepherd.
+  standing): it does not go back on a network for Outride.
 - Real Ethernet would need the USB-to-Ethernet converter
   (12193-0395-A003/0396-A003 or 12246-2000-01) plus the
   12241-1000-01 side adapter — and would still be a management
@@ -32,7 +32,7 @@ So, in the sentence that must never get blurred:
 
 **The 163 is NOT a sensing node.** No link metrics exist for it —
 nothing like StreamScape's per-link SNR/MCS is exposed anywhere.
-Shepherd cannot sense *with* a 163; it can only show where the
+Outride cannot sense *with* a 163; it can only show where the
 163's carrier is, as reported by the TAK feed. Its presence adds
 zero detection capability and its silence removes none.
 
@@ -71,7 +71,7 @@ is friendly" is one question with one registry:
   Drone tab's selector — which reads air records — structurally
   cannot offer a dismount as a streamable airframe.
 - Labels: `FRIENDLY (FEED)` for a CoT-sourced track (the feed
-  asserts the affiliation; Shepherd did not verify it);
+  asserts the affiliation; Outride did not verify it);
   `FRIENDLY` when the callsign/uid also matches the friendly
   registry — the same registry the air path uses, so a unit the
   operator has named renders named in both domains.

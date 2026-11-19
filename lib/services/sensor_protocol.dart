@@ -1,5 +1,5 @@
-/// Shepherd Sensor Protocol — the wire format for "if it can sense
-/// something, it feeds Shepherd."
+/// Outride Sensor Protocol — the wire format for "if it can sense
+/// something, it feeds Outride."
 ///
 /// Two transports, one data model ([SensorObservation]):
 ///

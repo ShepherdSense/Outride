@@ -1,4 +1,4 @@
-# Shepherd DF Node — pseudo-Doppler direction-finding variant
+# Outride DF Node — pseudo-Doppler direction-finding variant
 
 Status: SPEC (accepted 2026-10-16). Not yet implemented.
 Owner: Draco. Implements: his "at least a general direction" bar for
@@ -8,7 +8,7 @@ external RF emitters.
 
 A variant of the ESP32 field-kit node that reports a general-direction
 bearing to an external RF emitter — not a fix, not an identification,
-just "that way, with confidence." Bearings feed Shepherd over the same
+just "that way, with confidence." Bearings feed Outride over the same
 UDP channel the nodes already use, so the future ESP32Driver and mesh
 fusion can cross-fix two stations later.
 
@@ -59,7 +59,7 @@ register. v1 is a 433 MHz / CC1101 band instrument.)
 
 ## 4. Firmware (variant sketch, shares the base node)
 
-New sketch `shepherd_df_node.ino`, built from `shepherd_node.ino` —
+New sketch `outride_df_node.ino`, built from `outride_node.ino` —
 same beacon/event UDP protocol (port 49160), same nodeId/Preferences/
 mDNS/WebServer scaffolding, same tripwire sensors (wifi/ble/nRF24/CC1101
 energy) running as before. The DF node is a superset: everything the
@@ -115,7 +115,7 @@ New message type alongside `beacon` and `event`:
      "bearing_deg":135,"conf":0.6,"freq_hz":433920000}
 
 - `bearing_deg`: 0–359, relative to the antenna-0 reference mark.
-- Shepherd-side integration (future ESP32Driver / mesh fusion):
+- Outride-side integration (future ESP32Driver / mesh fusion):
   bearings are timestamped estimates with confidence, same honest
   treatment as everything else. Two stations' bearings → cross-fix,
   app-side, later — not this spec's build.
@@ -134,7 +134,7 @@ all antennas).
 2. **Multipath smears bearings.** Indoors, urban clutter, near big
    metal — bearings degrade like every DF system ever built.
 3. **One station = a bearing, not a fix.** Two stations → cross-fix,
-   and that math lives in Shepherd, not the node.
+   and that math lives in Outride, not the node.
 4. **Accuracy is quadrant-level.** Realistic ±20–40° — "point that way,"
    not BEAST+ phase-interferometry precision. It clears Draco's
    "general direction" bar with margin and claims nothing more.
@@ -158,7 +158,7 @@ all antennas).
 ## 8. Phased build
 
 - **Phase 1 — switched-RSSI DF variant (this spec).** Ring + SP4T
-  hardware, `shepherd_df_node.ino` firmware, calibration procedure,
+  hardware, `outride_df_node.ino` firmware, calibration procedure,
   `df_bearing` protocol, boot self-test of the switch. Field
   validation: known-source walk-around at several ranges, record
   bearing-error statistics before trusting the confidence numbers.
@@ -170,9 +170,9 @@ all antennas).
 
 ## 9. Hermes one-shot implementation prompt
 
-> In ~/workspace/shepherd_field_kit/esp32/, implement Phase 1 of
+> In ~/workspace/outride_field_kit/esp32/, implement Phase 1 of
 > ~/workspace/rf_sentry/docs/df_node_spec.md: the DF node variant
-> firmware. Create shepherd_df_node/ as a copy of shepherd_node/,
+> firmware. Create outride_df_node/ as a copy of outride_node/,
 > sharing its UDP 49160 beacon/event protocol, nodeId/Preferences/mDNS/
 > WebServer scaffolding, and tripwire sensors. Add: SP4T switch drive
 > on 2 GPIOs (default 25/26), the §4 measurement cycle (N=8 rotations,

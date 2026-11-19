@@ -1,5 +1,5 @@
 /// Android Wi-Fi MulticastLock bridge (MainActivity.kt, channel
-/// `shepherd/multicast_lock`).
+/// `outride/multicast_lock`).
 ///
 /// Most Android Wi-Fi stacks drop inbound multicast unless an app
 /// holds a MulticastLock, so the CoT listener hears nothing without
@@ -11,7 +11,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 class MulticastLock {
-  static const _channel = MethodChannel('shepherd/multicast_lock');
+  static const _channel = MethodChannel('outride/multicast_lock');
 
   /// True when the lock is held (or the platform needs none).
   static Future<bool> acquire() async {

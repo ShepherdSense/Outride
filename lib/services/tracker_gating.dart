@@ -1,4 +1,4 @@
-/// BSense / MilaGro / size-aware gating layers for the Shepherd tracker
+/// BSense / MilaGro / size-aware gating layers for the Outride tracker
 /// (v0.25.0, Builder A — Dart tracker).
 ///
 /// This file ports the *portable* parts of three papers into the existing
@@ -7,7 +7,7 @@
 /// (UDP formats and the 10-feature classifier contract are untouched).
 ///
 /// Sources (see docs/bsense_tracker_gating_spec.md for the full mapping
-/// tables, including paper value → Shepherd value → why):
+/// tables, including paper value → Outride value → why):
 ///  - BSense (Meng et al., arXiv:2603.29187, MobiSys '26): per-cell
 ///    Gaussian clutter fingerprint + Mahalanobis gating, and decayed
 ///    (0.9) spatial/velocity consistency confidence as a false-track
@@ -15,17 +15,17 @@
 ///  - MilaGro (Picazo-Martinez et al., arXiv:2507.22591v2): the
 ///    sharpest/shortest-range channel as a GATE that prunes the search
 ///    space for the broad-coverage channel. NO CNN, no ML here — only
-///    the gate shape, the same shape as Shepherd's anti-fade-link
+///    the gate shape, the same shape as Outride's anti-fade-link
 ///    gating.
 ///  - Kim et al. (arXiv:2505.04085v2, lane1 §6.12.1 caveat): slim
 ///    targets degrade detection, so thresholds must be size-aware, not
 ///    one global threshold.
 ///
 /// HONESTY — READ BEFORE QUOTING ANY NUMBER FROM THIS FILE:
-///  - Shepherd has NO 5G-A base station. BSense's 1 km range and
+///  - Outride has NO 5G-A base station. BSense's 1 km range and
 ///    F1 95.56% belong to carrier hardware and are NEVER claimed for
-///    Shepherd. What ports is the layered false-alarm *recipe*, at
-///    Shepherd scale, with Shepherd-scale parameters documented as
+///    Outride. What ports is the layered false-alarm *recipe*, at
+///    Outride scale, with Outride-scale parameters documented as
 ///    starting estimates to field-calibrate.
 ///  - The 6-node / 15-link ~1–2 m imaging bound is NOT upgraded by any
 ///    paper in this scope. No paper here supports that.
@@ -59,13 +59,13 @@ import 'dart:math' as math;
 
 /// Per-cell Gaussian clutter fingerprint for link-shadow false alarms.
 ///
-/// Paper form, Shepherd scale:
+/// Paper form, Outride scale:
 ///  - Paper: one multivariate Gaussian per 40 m cube of the 5G-A cell,
 ///    Mahalanobis distance, k = 80th percentile, ~10 min init, refresh
 ///    ~every 2 days / 700 frames.
-///  - Shepherd: one UNIVARIATE Gaussian per field cell over the link
+///  - Outride: one UNIVARIATE Gaussian per field cell over the link
 ///    dip (radio units) observed while quiet. Multivariate point-cloud
-///    features do not exist in Shepherd's input — the tracker sees link
+///    features do not exist in Outride's input — the tracker sees link
 ///    dips, so the fingerprint feature is the dip. The *form* ports
 ///    (per-cell Gaussian, percentile Mahalanobis gate, periodic
 ///    refresh); the feature vector does not, and that is stated, not
@@ -103,8 +103,8 @@ class ClutterFingerprint {
     }
   }
 
-  /// Paper 40 m → Shepherd 10 m. Why: BSense's field is a 1,000 m
-  /// 5G-A cell; Shepherd's mesh field is of order 100 m across with
+  /// Paper 40 m → Outride 10 m. Why: BSense's field is a 1,000 m
+  /// 5G-A cell; Outride's mesh field is of order 100 m across with
   /// 30–60 m links and a tracker falloff sigma ≈ 11 m. A 40 m cell
   /// would be most of the field (2–3 cells, no locality at all).
   /// 10 m is ~the tracker sigma, small against the field, and large
@@ -120,15 +120,15 @@ class ClutterFingerprint {
   /// statistic — see the spec doc.)
   final double percentileK;
 
-  /// Paper ~10 min init → Shepherd 20 quiet samples per cell. Why not
-  /// a frame count: BSense sees ~168 points/frame; Shepherd sees ~1
+  /// Paper ~10 min init → Outride 20 quiet samples per cell. Why not
+  /// a frame count: BSense sees ~168 points/frame; Outride sees ~1
   /// track poll's worth of link samples, so per-cell frame counts do
   /// not port. 20 quiet samples is attainable in one quiet session
   /// while still being a distribution, not a single reading. Cells
   /// below this stay untrusted and fail open.
   final int minSamplesPerCell;
 
-  /// Paper refresh ~every 700 frames → Shepherd 700 Tracker.update
+  /// Paper refresh ~every 700 frames → Outride 700 Tracker.update
   /// polls. Counted by [notePoll] (one call per tracker poll), NOT by
   /// observe() calls: one poll feeds ~15 pairs, so counting observes
   /// would fire the refresh every ~50 polls instead of every 700.
@@ -308,7 +308,7 @@ class ClutterFingerprint {
   /// contradict the "without a blind re-init window" promise). New
   /// observations then re-anchor the fingerprint without a blind
   /// window in which the gate is untrusted everywhere. This is the
-  /// Shepherd-scale reading of BSense's "update every ~2 days /
+  /// Outride-scale reading of BSense's "update every ~2 days /
   /// 700 frames" — a full reset would discard a session's clutter
   /// learning and fail open everywhere at once.
   void refresh({DateTime? now}) {
@@ -374,7 +374,7 @@ class _CellStats {
 ///
 /// Paper: spatial + velocity consistency with decay 0.9, match < 15 m,
 /// thresholds τ_s = 1.7, τ_v = 1.1 — cuts false objects 61.34 → 2.58
-/// per frame on 5G-A point clouds. Shepherd has no point clouds and no
+/// per frame on 5G-A point clouds. Outride has no point clouds and no
 /// Doppler stream, so the gate runs over the tracker's own fix
 /// sequence (same constant-velocity prediction shape as
 /// TrackConsistencyMonitor, which stays the operator-visible
@@ -384,10 +384,10 @@ class _CellStats {
 /// Parameter mapping (full table in the spec doc):
 ///  - decay 0.9 → ported verbatim. Confidence c ← 0.9·c + 0.1·instant,
 ///    instant = 1 when the fix matches prediction, else 0.
-///  - match < 15 m → Shepherd spatialMatchM = 6.0 m. Why: BSense
+///  - match < 15 m → Outride spatialMatchM = 6.0 m. Why: BSense
 ///    localization error is 4.9 m mean, so 15 m ≈ 3× its error.
-///    Shepherd's 6-node imaging bound is ~1–2 m, so 3× ≈ 6 m — same
-///    3×-error rule, Shepherd error scale. Must also exceed the
+///    Outride's 6-node imaging bound is ~1–2 m, so 3× ≈ 6 m — same
+///    3×-error rule, Outride error scale. Must also exceed the
 ///    tracker grid step (2.5 m) plus fix error (~1 m), which 6 m does.
 ///  - τ_s = 1.7 → ported verbatim as the dimensionless threshold on
 ///    the normalized spatial score residual / spatialMatchM. A fix
@@ -396,13 +396,13 @@ class _CellStats {
 ///    localization test, and the 0.9 decay requires sustained passing.
 ///  - τ_v = 1.1 → ported verbatim as the dimensionless threshold on
 ///    the normalized velocity score |Δspeed| / 1 m/s, i.e. a 1.1 m/s
-///    speed-mismatch tolerance. The 1 m/s scale is the Shepherd fix
+///    speed-mismatch tolerance. The 1 m/s scale is the Outride fix
 ///    scale (fix error ~1 m over ~1 s fixes). Starting estimate —
 ///    field-calibrate, do not quote as a paper result.
 ///  - Gate threshold: a track passes only when decayed confidence is
 ///    STRICTLY above 0.5. A single fix starts at 0.5 and therefore
 ///    never passes alone — the gate needs ≥ 2 consistent fixes. This
-///    threshold is Shepherd's (not a paper number) and is labeled so.
+///    threshold is Outride's (not a paper number) and is labeled so.
 ///
 /// KNOWN LIMITS (see file header): tangential motion that produces no
 /// new disturbance yields no fixes, so this gate says nothing about
@@ -422,7 +422,7 @@ class DecayedConsistencyGate {
   /// Paper decay, verbatim.
   final double decay;
 
-  /// Paper 15 m → Shepherd 6 m (3× the ~1–2 m imaging bound; see above).
+  /// Paper 15 m → Outride 6 m (3× the ~1–2 m imaging bound; see above).
   final double spatialMatchM;
 
   /// Paper τ_s, verbatim (dimensionless, on residual / spatialMatchM).
@@ -431,10 +431,10 @@ class DecayedConsistencyGate {
   /// Paper τ_v, verbatim (dimensionless, on |Δspeed| / velocityScale).
   final double tauV;
 
-  /// Shepherd velocity scale for the τ_v normalization (1 m/s).
+  /// Outride velocity scale for the τ_v normalization (1 m/s).
   final double velocityScaleMps;
 
-  /// Shepherd gate level (NOT a paper number): strictly above 0.5.
+  /// Outride gate level (NOT a paper number): strictly above 0.5.
   final double gateThreshold;
 
   /// Gap beyond this resets the gate (matches the tracker's 10 s idle
@@ -668,7 +668,7 @@ class GatePoint {
 
 /// One sharp-channel support point: a location the sharp channel says
 /// is active (e.g. the midpoint of a disturbed anti-fade link, whose
-/// tight ellipse is Shepherd's sharpest spatial evidence — the same
+/// tight ellipse is Outride's sharpest spatial evidence — the same
 /// shape as the existing anti-fade-link gating).
 class SharpSupport {
   const SharpSupport({required this.x, required this.y, this.at});
@@ -687,10 +687,10 @@ class SharpSupport {
 /// gate shape — sharpest/shortest-range channel prunes, broad channel
 /// resolves — with NO CNN, NO classifier, and NO MilaGro accuracy
 /// numbers (their 100% fused lab presence / 94% corridor tracking are
-/// classification accuracies on trained labels, not Shepherd
+/// classification accuracies on trained labels, not Outride
 /// localization, and are never claimed here).
 ///
-/// Shepherd mapping:
+/// Outride mapping:
 ///  - Sharp channel = disturbed anti-fade links (tight λ ellipses;
 ///    fadeLevel above the tripwire fade gate) and, where the caller
 ///    prefers it, the shortest links. The caller supplies support
@@ -699,7 +699,7 @@ class SharpSupport {
 ///  - Broad channel = the RTI image cells / grid candidates (see
 ///    Tracker.gateRtiCells).
 ///  - Inter-band skew: MilaGro tolerates 100 ms collection skew with
-///    no tight sync. Shepherd polls at ~0.25–1.5 s, so the skew
+///    no tight sync. Outride polls at ~0.25–1.5 s, so the skew
 ///    tolerance ports as [skewTolerance] = 2 s (one tracker cycle
 ///    scale), not 100 ms — a 100 ms window would expire every sharp
 ///    support before the broad channel ever saw it.
@@ -715,12 +715,12 @@ class MilagroGate {
   });
 
   /// Pruning radius around each sharp support point. 10 m ≈ the
-  /// tracker sigma / one RTI cell neighbourhood at Shepherd scale —
+  /// tracker sigma / one RTI cell neighbourhood at Outride scale —
   /// a starting estimate, not a paper number (MilaGro's gate is a
   /// LOS/beam sector, not a meter radius).
   final double radiusM;
 
-  /// Paper 100 ms → Shepherd 2 s (see class doc: poll-cadence scale).
+  /// Paper 100 ms → Outride 2 s (see class doc: poll-cadence scale).
   final Duration skewTolerance;
 
   /// Live sharp supports at [now]: drops supports older than
@@ -761,7 +761,7 @@ class MilagroGate {
 /// Kim et al. (lane1 §6.12.1, CONFIRMED measurement): a larger subject
 /// moderately increases error, a slimmer subject significantly
 /// degrades detection across the distribution — body size directly
-/// scales MPC shadowing. The Shepherd implication, adopted here, is
+/// scales MPC shadowing. The Outride implication, adopted here, is
 /// that detection thresholds must be size-aware, not one global
 /// threshold.
 ///

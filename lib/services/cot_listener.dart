@@ -1,21 +1,21 @@
-/// Shepherd CoT ingest — Predator emitter tracks as corroboration-only
+/// Outride CoT ingest — Predator emitter tracks as corroboration-only
 /// evidence.
 ///
 /// RX-only: joins the CoT multicast group, parses inbound CoT XML
 /// WITHOUT the xml package (hand parser), keeps only events whose
 /// callsign starts with the configured emitter prefix (default
 /// `PREDATOR-`), and holds them in a time window. [checkCoincidence]
-/// reports emitter observations spatially coincident with Shepherd
+/// reports emitter observations spatially coincident with Outride
 /// tracks as upgrade-only, never-subtractive corroboration feeding the
 /// gated confidence merger (see docs/predator_integration_spec.md).
 ///
 /// CORROBORATION CONTRACT (structural):
-///  - never originates a track: an emitter with no Shepherd track
+///  - never originates a track: an emitter with no Outride track
 ///    produces nothing;
 ///  - never subtractive: coincidences carry boost >= 0 only;
 ///  - stale emitters (older than windowSeconds) contribute nothing.
 ///
-/// License: Both sides are now GPL-3.0 — Predator is GPL-3.0 and Shepherd is
+/// License: Both sides are now GPL-3.0 — Predator is GPL-3.0 and Outride is
 /// GPLv3. This file speaks the CoT wire protocol only — no Predator
 /// code, no shared code, no linking.
 library;
@@ -97,7 +97,7 @@ class EmitterObservation {
 }
 
 /// Emitter-mover coincidence: a fresh emitter observation within
-/// [CotListenerConfig.coincidenceRadiusM] of an active Shepherd track.
+/// [CotListenerConfig.coincidenceRadiusM] of an active Outride track.
 ///
 /// "Coincident", never "confirmed" — spatial proximity of two
 /// independent estimates, each with stated error. Feeds the gated
@@ -145,7 +145,7 @@ double haversineMeters(
   return 2 * r * math.asin(math.sqrt(a.clamp(0.0, 1.0)));
 }
 
-/// Shepherd track position for coincidence checks (WGS84).
+/// Outride track position for coincidence checks (WGS84).
 class TrackPosition {
   const TrackPosition({required this.id, required this.lat, required this.lon});
   final String id;
@@ -487,7 +487,7 @@ class CotListener {
     return n;
   }
 
-  /// Emitter-mover coincidences for the given Shepherd tracks.
+  /// Emitter-mover coincidences for the given Outride tracks.
   ///
   /// For each fresh observation x each track: haversine distance; if
   /// <= [CotListenerConfig.coincidenceRadiusM], emit one

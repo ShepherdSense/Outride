@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:shepherd/models/link_sample.dart';
-import 'package:shepherd/models/tracking.dart';
-import 'package:shepherd/screens/dashboard.dart';
-import 'package:shepherd/state/app_state.dart';
-import 'package:shepherd/theme.dart';
+import 'package:outride/models/link_sample.dart';
+import 'package:outride/models/tracking.dart';
+import 'package:outride/screens/dashboard.dart';
+import 'package:outride/state/app_state.dart';
+import 'package:outride/theme.dart';
 
 CrossingEvent _ev(String link, int secs, {String size = 'M'}) =>
     CrossingEvent(
@@ -19,11 +19,11 @@ CrossingEvent _ev(String link, int secs, {String size = 'M'}) =>
 void main() {
   group('eventSizeColor', () {
     test('S/M/L mapping matches the detection card', () {
-      expect(eventSizeColor('S'), SentryColors.blue);
-      expect(eventSizeColor('M'), SentryColors.amber);
-      expect(eventSizeColor('L'), SentryColors.red);
+      expect(eventSizeColor('S'), OutrideColors.blue);
+      expect(eventSizeColor('M'), OutrideColors.amber);
+      expect(eventSizeColor('L'), OutrideColors.red);
       // Unknown sizes read as large, never as small.
-      expect(eventSizeColor('?'), SentryColors.red);
+      expect(eventSizeColor('?'), OutrideColors.red);
     });
   });
 

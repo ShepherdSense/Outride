@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title Shepherd - Build Android APK
+title Outride - Build Android APK
 cd /d "%~dp0"
 
 where flutter >nul 2>nul
@@ -25,7 +25,7 @@ if not defined SDKFOUND (
   exit /b 1
 )
 
-echo === Building Shepherd Android APK (release) ===
+echo === Building Outride Android APK (release) ===
 echo First build takes a few minutes. Leave this window open.
 echo.
 call flutter build apk --release
@@ -46,7 +46,7 @@ echo.
 echo === Copying APK to your Desktop ===
 for /f "delims=" %%D in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::GetFolderPath('Desktop')"') do set DESKTOPDIR=%%D
 if not defined DESKTOPDIR set DESKTOPDIR=%USERPROFILE%\Desktop
-copy /y "build\app\outputs\flutter-apk\app-release.apk" "%DESKTOPDIR%\shepherd.apk" >nul
+copy /y "build\app\outputs\flutter-apk\app-release.apk" "%DESKTOPDIR%\outride.apk" >nul
 if errorlevel 1 (
   echo [ERROR] Copy failed, but the APK built fine. Find it at:
   echo %CD%\build\app\outputs\flutter-apk\app-release.apk
@@ -55,10 +55,10 @@ if errorlevel 1 (
 )
 
 echo.
-echo DONE. The installer is on your Desktop: shepherd.apk
+echo DONE. The installer is on your Desktop: outride.apk
 echo.
 echo TO INSTALL ON YOUR PHONE:
-echo 1. Copy shepherd.apk to the phone (USB cable, or send it to yourself).
+echo 1. Copy outride.apk to the phone (USB cable, or send it to yourself).
 echo 2. On the phone, tap the APK file to install.
 echo 3. Android will ask you to allow "install unknown apps" - allow it once.
 echo.

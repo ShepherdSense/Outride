@@ -9,7 +9,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/airframe_identity.dart';
+import 'package:outride/services/airframe_identity.dart';
 
 const registryText = '''
 # tail numbers

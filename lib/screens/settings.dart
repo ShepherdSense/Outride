@@ -10,6 +10,7 @@ import '../services/radio_driver.dart';
 import '../services/recorder.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import 'fleet_screen.dart';
 import 'zmeta_join_dialog.dart';
 
 /// Settings: radio manager (multi-driver), detector tuning, Wi-Fi
@@ -77,6 +78,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _remoteIdEnabled;
   late bool _phoneTierEnabled;
   late bool _deviceSignaturesEnabled;
+  late bool _fetchVoiceEnabled;
+  late bool _fetchVoiceMuted;
+  late double _fetchVoiceRate;
   late String _tileSourceId;
   late String _droneStreamSource;
   late bool _autoConnectSilvusUsb;
@@ -103,6 +107,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // re-join prompt without waiting for the operator to tap anything.
     if (st.zmetaIngestTokenRejected != _seenTokenRejected) {
       _seenTokenRejected = st.zmetaIngestTokenRejected;
+      if (mounted) setState(() {});
+    }
+    // Voice flags can change from outside this screen (the Fetch
+    // tab's mute toggle, the persisted load on cold start) — re-copy
+    // them so the switches never show a stale value.
+    if (st.fetchVoiceEnabled != _fetchVoiceEnabled ||
+        st.fetchVoiceMuted != _fetchVoiceMuted ||
+        st.fetchVoiceRate != _fetchVoiceRate) {
+      _fetchVoiceEnabled = st.fetchVoiceEnabled;
+      _fetchVoiceMuted = st.fetchVoiceMuted;
+      _fetchVoiceRate = st.fetchVoiceRate;
       if (mounted) setState(() {});
     }
   }
@@ -180,6 +195,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _remoteIdEnabled = s.remoteIdEnabled;
     _phoneTierEnabled = s.phoneTierEnabled;
     _deviceSignaturesEnabled = s.deviceSignaturesEnabled;
+    _fetchVoiceEnabled = widget.state.fetchVoiceEnabled;
+    _fetchVoiceMuted = widget.state.fetchVoiceMuted;
+    _fetchVoiceRate = widget.state.fetchVoiceRate;
     _tileSourceId = s.tileSourceId;
     _droneEoUrl = TextEditingController(text: s.droneEoUrl);
     _droneIrUrl = TextEditingController(text: s.droneIrUrl);
@@ -367,7 +385,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       zmetaPort:
           (int.tryParse(_zmetaPort.text.trim()) ?? 5555).clamp(1, 65535),
       zmetaPlatformId: _zmetaPlatform.text.trim().isEmpty
-          ? 'shepherd-mesh-1'
+          ? 'outride-mesh-1'
           : _zmetaPlatform.text.trim(),
       zmetaTransport: _zmetaTransport,
       zmetaIngestUrl: _zmetaIngestUrl,
@@ -389,10 +407,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               0.3)
           .clamp(0.0, 1.0),
       // Emit callsign prefix: non-empty, no whitespace — invalid
-      // input falls back to the SHEPHERD- default.
+      // input falls back to the OUTRIDE- default.
       cotCallsignPrefix: () {
         final v = _cotCallsignPrefix.text.trim();
-        return (v.isEmpty || RegExp(r'\s').hasMatch(v)) ? 'SHEPHERD-' : v;
+        return (v.isEmpty || RegExp(r'\s').hasMatch(v)) ? 'OUTRIDE-' : v;
       }(),
       cotAirTypeThreshold:
           (double.tryParse(_cotAirTypeThreshold.text.trim()) ?? 0.5)
@@ -468,7 +486,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => ZmetaJoinDialog(
-        initialPlatformId: current.isEmpty ? 'shepherd-mesh-1' : current,
+        initialPlatformId: current.isEmpty ? 'outride-mesh-1' : current,
       ),
     );
     if (result == null || !mounted) return;
@@ -580,7 +598,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'EACH RADIO IS POLLED INDEPENDENTLY ON ITS OWN TIMER. '
             'NODE IDS ARE NAMESPACED PER DRIVER, SO MESHES NEVER COLLIDE. '
             'IN SIMULATED MODE THIS LIST IS IGNORED.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 8),
           for (int i = 0;
@@ -589,16 +607,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _radioRow(i),
           if (widget.state.radioConfigs.isEmpty)
             Text('NO RADIOS CONFIGURED.',
-                style: SentryType.section(10)
-                    .copyWith(color: SentryColors.muted)),
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.muted)),
           const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
                   initialValue: _newDriverId,
-                  dropdownColor: SentryColors.surface2,
-                  style: SentryType.rowValue(SentryColors.onDark),
+                  dropdownColor: OutrideColors.surface2,
+                  style: OutrideType.rowValue(OutrideColors.onDark),
                   decoration: const InputDecoration(
                       labelText: 'DRIVER'),
                   items: [
@@ -675,21 +693,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ]),
         _section('Mode', [
           SwitchListTile(
-            title: Text('SIMULATED MODE', style: SentryType.rowValue(SentryColors.onDark)),
+            title: Text('SIMULATED MODE', style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
               'GENERATE SYNTHETIC LINK DATA — NO HARDWARE NEEDED. '
               'CLEARLY LABELED ON THE DASHBOARD.',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _simulated,
             onChanged: (v) => setState(() => _simulated = v),
           ),
           SwitchListTile(
-            title: Text('WI-FI VISION', style: SentryType.rowValue(SentryColors.onDark)),
+            title: Text('WI-FI VISION', style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
               'USE THIS DEVICE\'S WI-FI ADAPTER AS AN AMBIENT DISTURBANCE SENSOR. '
               'COARSE RSSI SENSING — DETECTS DISTURBANCES, CANNOT IMAGE OBJECTS.',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _wifiVision,
             onChanged: (v) {
@@ -699,12 +717,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           SwitchListTile(
             title: Text('CAMERA CONFIRMATION (UPGRADE)',
-                style: SentryType.rowValue(SentryColors.onDark)),
+                style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
               'MOTION WEBHOOK (POST /motion) OR ONVIF EVENTS. CAMERA '
               'EVIDENCE MAY UPGRADE DISPLAYED CONFIDENCE BUT NEVER '
               'VETOES OR SUPPRESSES A DETECTION.',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _camera,
             onChanged: (v) {
@@ -724,10 +742,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 'e.g. http://192.168.1.50/shot.jpg'),
           ],
         ]),
+        _section('Fetch voice alerts — EXPERIMENTAL', [
+          SwitchListTile(
+            title: Text('FETCH VOICE ALERTS',
+                style: OutrideType.rowValue(OutrideColors.onDark)),
+            subtitle: Text(
+              'SPEAK FETCH TRIP ALERTS THROUGH THE EUD AUDIO OUTPUT '
+              'INTO HEARING PROTECTION. DEFAULT OFF.',
+              style: OutrideType.section(10).copyWith(height: 1.6),
+            ),
+            value: _fetchVoiceEnabled,
+            onChanged: (v) {
+              setState(() => _fetchVoiceEnabled = v);
+              unawaited(widget.state.setFetchVoiceEnabled(v));
+            },
+          ),
+          SwitchListTile(
+            title: Text('MUTE',
+                style: OutrideType.rowValue(OutrideColors.onDark)),
+            subtitle: Text(
+              'SILENCE VOICE ALERTS WITHOUT TURNING THE FEATURE OFF.',
+              style: OutrideType.section(10).copyWith(height: 1.6),
+            ),
+            value: _fetchVoiceMuted,
+            onChanged: (v) {
+              setState(() => _fetchVoiceMuted = v);
+              unawaited(widget.state.setFetchVoiceMuted(v));
+            },
+          ),
+          const SizedBox(height: 6),
+          Text('SPEECH RATE — ${_fetchVoiceRate.toStringAsFixed(2)}',
+              style: OutrideType.rowLabel()),
+          Slider(
+            value: _fetchVoiceRate,
+            min: 0.1,
+            max: 1.0,
+            divisions: 18,
+            label: _fetchVoiceRate.toStringAsFixed(2),
+            onChanged: (v) {
+              setState(() => _fetchVoiceRate = v);
+              unawaited(widget.state.setFetchVoiceRate(v));
+            },
+          ),
+          const SizedBox(height: 6),
+          ElevatedButton(
+            onPressed: (_fetchVoiceEnabled && !_fetchVoiceMuted)
+                ? () => widget.state.speakFetchVoiceTest()
+                : null,
+            child: const Text('Test voice'),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Spoken Fetch trip alerts through the EUD audio output '
+            'into hearing protection. Direction comes from GPS '
+            'positions only — indoors GPS usually dies and alerts '
+            'speak without direction rather than guessing. Reaches '
+            'the operator carrying this EUD; whole-team distribution '
+            'needs a radio bridge and is out of scope. The Fetch '
+            'senses movement and presence — it never identifies '
+            'anyone as an enemy, a friendly, or a civilian, and never '
+            'states armed status. The operator decides what a '
+            'detection is.',
+            style: OutrideType.section(10)
+                .copyWith(height: 1.6, color: OutrideColors.muted),
+          ),
+        ]),
         _section('Phone tier, signatures & offline maps', [
           SwitchListTile(
             title: Text('PHONE-ONLY TIER',
-                style: SentryType.rowValue(SentryColors.onDark)),
+                style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
               'WHEN ON, THE DASHBOARD SHOWS THE PHONE-ONLY BANNER '
               '— BUT ONLY WHEN NO MESH/SDR HARDWARE IS ATTACHED. '
@@ -736,21 +819,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               '(TENS OF METERS, NOT AREA COVERAGE). (THIS SWITCH '
               'CONTROLS ONLY THE BANNER; HUNT IS REACHED FROM ITS '
               'OWN BUTTON AND IS NOT GATED BY THIS SWITCH.)',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _phoneTierEnabled,
             onChanged: (v) => setState(() => _phoneTierEnabled = v),
           ),
           SwitchListTile(
             title: Text('DEVICE SIGNATURE LIBRARY',
-                style: SentryType.rowValue(SentryColors.onDark)),
+                style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
               'MATCH PHONE-VISIBLE WI-FI / BLE OBSERVATIONS AGAINST '
               'A SIGNATURE CATALOG. EVERY MATCH IS A HYPOTHESIS — '
               'NOT IDENTITY. USER-ADDED ENTRIES COME FROM '
               'device_signatures.json IN THE APP DOCUMENTS '
               'DIRECTORY AND ARE LABELED USER-ADDED. DEFAULT OFF.',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _deviceSignaturesEnabled,
             onChanged: (v) =>
@@ -762,8 +845,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     .any((s) => s.id == _tileSourceId)
                 ? _tileSourceId
                 : widget.state.selectedTileSource.id,
-            dropdownColor: SentryColors.surface2,
-            style: SentryType.rowValue(SentryColors.onDark),
+            dropdownColor: OutrideColors.surface2,
+            style: OutrideType.rowValue(OutrideColors.onDark),
             decoration: const InputDecoration(
                 labelText: 'OFFLINE MAP TILE SOURCE (KEYLESS ONLY)'),
             items: [
@@ -785,16 +868,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             '${widget.state.deviceSignatures.merged.length} MERGED. '
             'MISSING device_signatures.json MEANS BUILT-IN ONLY — '
             'THAT IS NORMAL, NOT AN ERROR.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           if (widget.state.deviceSignatureWarnings.isNotEmpty) ...[
             const SizedBox(height: 10),
             for (final w in widget.state.deviceSignatureWarnings)
               Text(
                 'SIGNATURE WARNING: ${w.toUpperCase()}',
-                style: SentryType.section(10).copyWith(
+                style: OutrideType.section(10).copyWith(
                   height: 1.6,
-                  color: SentryColors.orange,
+                  color: OutrideColors.orange,
                 ),
               ),
           ],
@@ -815,13 +898,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _section('Output — CoT', [
           SwitchListTile(
             title: Text('EMIT COT TRACKS',
-                style: SentryType.rowValue(SentryColors.onDark)),
+                style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
               'PUBLISH THE FUSED TRACK AS CURSOR-ON-TARGET EVENTS. '
               'EMIT-ONLY, DEFENSIVE-ONLY — THE ONLY BYTES SENT ARE '
               'THIS MESH\'S OWN TRACK EVENTS, AND AFFILIATION IS ALWAYS '
               'UNKNOWN. DEFAULT OFF.',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _cotEmitEnabled,
             onChanged: (v) {
@@ -833,8 +916,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 10),
             DropdownButtonFormField<bool>(
               initialValue: _cotEmitUseMulticast,
-              dropdownColor: SentryColors.surface2,
-              style: SentryType.rowValue(SentryColors.onDark),
+              dropdownColor: OutrideColors.surface2,
+              style: OutrideType.rowValue(OutrideColors.onDark),
               decoration:
                   const InputDecoration(labelText: 'DESTINATION'),
               items: [
@@ -869,7 +952,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 numeric: true),
             const SizedBox(height: 10),
             _field(_cotCallsignPrefix, 'Track callsign prefix',
-                'e.g. SHEPHERD- (no spaces)'),
+                'e.g. OUTRIDE- (no spaces)'),
             const SizedBox(height: 10),
             _field(_cotAirTypeThreshold, 'Air type threshold (0–1)',
                 'e.g. 0.5 — air-type guess ≥ this → a-u-A',
@@ -877,13 +960,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
           SwitchListTile(
             title: Text('LISTEN FOR EMITTER TRACKS',
-                style: SentryType.rowValue(SentryColors.onDark)),
+                style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
               'INGEST COT TRACKS WHOSE CALLSIGN MATCHES THE EMITTER '
-              'PREFIX (RX-ONLY). SPATIAL COINCIDENCES WITH THE SHEPHERD '
+              'PREFIX (RX-ONLY). SPATIAL COINCIDENCES WITH THE OUTRIDE '
               'TRACK UPGRADE CONFIDENCE ONLY — NEVER SUBTRACT, NEVER '
               'ORIGINATE A TRACK. DEFAULT OFF.',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _cotListenEnabled,
             onChanged: (v) {
@@ -897,7 +980,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               'RX-ONLY — LISTENS ON '
               '${widget.state.settings.cotListenMulticastGroup}:'
               '${widget.state.settings.cotListenMulticastPort}',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             const SizedBox(height: 10),
             _field(_cotListenMulticastGroup, 'Listen multicast group',
@@ -927,17 +1010,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text(
             'YOUR OWN AIRFRAMES, BY BATTERY-TRAY SERIAL. CONTROLLER COT '
             '(FRIENDLY AIR EVENTS ON THE LISTENER ABOVE) MAKES THEM CLASS B '
-            'POSITION NODES; A SERIAL HERE LETS SHEPHERD NAME THEM AND '
+            'POSITION NODES; A SERIAL HERE LETS OUTRIDE NAME THEM AND '
             'CORROBORATE OTHER FEEDS. A MATCH CHANGES RENDERING ONLY — '
             'IT NEVER SUPPRESSES A TRACK OR AN ALERT.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 10),
           TextField(
             controller: _friendlySerials,
             minLines: 2,
             maxLines: 5,
-            style: SentryType.rowValue(SentryColors.onDark),
+            style: OutrideType.rowValue(OutrideColors.onDark),
             decoration: const InputDecoration(
               labelText: 'FRIENDLY SERIALS — ONE PER LINE',
               hintText: 'SERIAL[, CALLSIGN[, A|B]] — e.g. '
@@ -947,7 +1030,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 10),
           SwitchListTile(
             title: Text('REMOTE ID RECEIVER',
-                style: SentryType.rowValue(SentryColors.onDark)),
+                style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
               'DECODE FAA REMOTE ID BROADCASTS (ASTM F3411) FROM BLE '
               'ADVERTISEMENTS AND WI-FI BEACONS — RECEIVE-ONLY. CIVIL '
@@ -956,7 +1039,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               'DEFAULT OFF. '
               '${kRidWifiNanUnavailableNote.toUpperCase()}. '
               '${kRidBle5Note.toUpperCase()}.',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _remoteIdEnabled,
             onChanged: (v) {
@@ -970,8 +1053,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'THERMAL ARE SEPARATE SIMULTANEOUS STREAMS FROM THE '
             'AIRCRAFT; THE TAB SWITCHES WHICH ONE YOU WATCH. THE EO '
             'STREAM IS THE PILOT’S FOCAL VIEW (WIDE/TELE IS THE '
-            'PILOT’S CHOICE). SHEPHERD SENDS NOTHING TO THE AIRCRAFT.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            'PILOT’S CHOICE). OUTRIDE SENDS NOTHING TO THE AIRCRAFT.',
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 10),
           _field(_droneEoUrl, 'EO stream URL (local link)',
@@ -988,12 +1071,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 10),
           Row(children: [
             Text('STREAM SOURCE',
-                style: SentryType.section(10).copyWith(height: 1.6)),
+                style: OutrideType.section(10).copyWith(height: 1.6)),
             const SizedBox(width: 12),
             DropdownButton<String>(
               value: _droneStreamSource,
-              dropdownColor: SentryColors.surface2,
-              style: SentryType.rowValue(SentryColors.onDark),
+              dropdownColor: OutrideColors.surface2,
+              style: OutrideType.rowValue(OutrideColors.onDark),
               items: const [
                 DropdownMenuItem(
                     value: 'local', child: Text('LOCAL LINK')),
@@ -1006,9 +1089,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ]),
         _section('ZMeta export', [
           OutlinedButton.icon(
-            icon: const Icon(Icons.link, color: SentryColors.purple),
+            icon: const Icon(Icons.link, color: OutrideColors.purple),
             label: Text('JOIN NETWORK…',
-                style: SentryType.rowValue(SentryColors.onDark)),
+                style: OutrideType.rowValue(OutrideColors.onDark)),
             onPressed: _joinNetwork,
           ),
           const SizedBox(height: 4),
@@ -1017,7 +1100,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'THIS MESH — OVER ENCRYPTED HTTPS WHEN THE HUB SUPPORTS IT '
             '(NO OTHER APP NEEDED), OR VIA WIREGUARD. EXPORT STAYS OFF '
             'UNTIL YOU ENABLE IT BELOW.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           if (_zmetaTransport == 'https' || _zmetaTransport == 'wireguard')
             Padding(
@@ -1026,8 +1109,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _zmetaTransport == 'https'
                     ? 'LINK: HTTPS — EVENTS POST ENCRYPTED STRAIGHT TO THE HUB.'
                     : 'LINK: WIREGUARD — ACTIVATE THE TUNNEL IN THE WIREGUARD APP.',
-                style: SentryType.section(10)
-                    .copyWith(height: 1.6, color: SentryColors.green),
+                style: OutrideType.section(10)
+                    .copyWith(height: 1.6, color: OutrideColors.green),
               ),
             ),
           // S3: the hub has rejected the ingest token repeatedly — the
@@ -1038,8 +1121,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.only(top: 6),
               child: Text(
                 'HUB REJECTED THE TOKEN — RE-JOIN OR CONTACT THE HUB OPERATOR.',
-                style: SentryType.section(10)
-                    .copyWith(height: 1.6, color: SentryColors.red),
+                style: OutrideType.section(10)
+                    .copyWith(height: 1.6, color: OutrideColors.red),
               ),
             ),
           // S4: platform ID edited after a join — the hub's token/peer is
@@ -1050,14 +1133,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.only(top: 6),
               child: Text(
                 'PLATFORM ID CHANGED — RE-JOIN THE NETWORK.',
-                style: SentryType.section(10)
-                    .copyWith(height: 1.6, color: SentryColors.amber),
+                style: OutrideType.section(10)
+                    .copyWith(height: 1.6, color: OutrideColors.amber),
               ),
             ),
           const SizedBox(height: 10),
           SwitchListTile(
             title: Text('EMIT ZMETA EVENTS',
-                style: SentryType.rowValue(SentryColors.onDark)),
+                style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
               _zmetaTransport == 'https'
                   ? 'SEND EACH DETECTION TO THE HUB AS OBSERVATION / INFERENCE EVENTS (HTTPS, EMIT-ONLY). '
@@ -1067,7 +1150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           'ONE MESH = ONE PLATFORM ID — THE GATEWAY FUSES ACROSS MESHES.'
                       : 'SEND EACH DETECTION TO A ZMETA GATEWAY AS OBSERVATION / INFERENCE EVENTS (UDP, EMIT-ONLY). '
                           'ONE MESH = ONE PLATFORM ID — THE GATEWAY FUSES ACROSS MESHES.',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _zmetaEnabled,
             onChanged: (v) => setState(() => _zmetaEnabled = v),
@@ -1081,7 +1164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 numeric: true, onChanged: (_) => setState(() {})),
             const SizedBox(height: 10),
             _field(_zmetaPlatform, 'Platform ID (this mesh)',
-                'e.g. shepherd-mesh-1', onChanged: (_) {
+                'e.g. outride-mesh-1', onChanged: (_) {
               // S4: changing the platform ID after a join voids the join
               // (the hub's token/peer is bound to the OLD id). Clear the
               // transport back to unset until they re-join.
@@ -1099,11 +1182,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 10),
             SwitchListTile(
               title: Text('LINK SECURED (WIREGUARD)',
-                  style: SentryType.rowValue(SentryColors.onDark)),
+                  style: OutrideType.rowValue(OutrideColors.onDark)),
               subtitle: Text(
                 'CONFIRM THE WIREGUARD TUNNEL TO THE GATEWAY IS ACTIVE. '
                 'THE APP CANNOT VERIFY THIS ITSELF.',
-                style: SentryType.section(10).copyWith(height: 1.6),
+                style: OutrideType.section(10).copyWith(height: 1.6),
               ),
               value: _zmetaSecured,
               onChanged: (v) => setState(() => _zmetaSecured = v),
@@ -1111,11 +1194,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 10),
             SwitchListTile(
               title: Text('MESH HEARTBEAT (PLATFORM_STATUS)',
-                  style: SentryType.rowValue(SentryColors.onDark)),
+                  style: OutrideType.rowValue(OutrideColors.onDark)),
               subtitle: Text(
                 'PERIODIC "ALIVE, HERE IS THE PLATFORM" TO THE GATEWAY '
                 '(SYSTEM_EVENT). FOR TEAMS ON THE MOVE. DEFAULT OFF.',
-                style: SentryType.section(10).copyWith(height: 1.6),
+                style: OutrideType.section(10).copyWith(height: 1.6),
               ),
               value: _zmetaHeartbeatEnabled,
               onChanged: (v) => setState(() => _zmetaHeartbeatEnabled = v),
@@ -1135,10 +1218,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   'WARNING: EXPORTING DETECTIONS TO A NON-LOCAL HOST WITHOUT '
                   'A SECURED LINK. ACTIVATE THE WIREGUARD TUNNEL '
                   '(SEE zmeta_secure/) OR EXPECT INTERCEPTION AND SPOOFING.',
-                  style: SentryType.section(10).copyWith(
-                      height: 1.6, color: SentryColors.red),
+                  style: OutrideType.section(10).copyWith(
+                      height: 1.6, color: OutrideColors.red),
                 ),
               ),
+          ],
+        ]),
+        // v0.28.0 Fleet: automatic EUD-to-EUD meshing. Status line,
+        // "Open Fleet" (dialer + member list), "Forget fleet".
+        _section('Fleet', [
+          Text(
+            widget.state.fleetSummary,
+            style: OutrideType.rowValue(widget.state.inFleet
+                ? OutrideColors.green
+                : OutrideColors.muted),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'EUDS ON THE SAME WI-FI FORM ONE FLEET WITH A 4-DIGIT '
+            'PIN. NO MANUAL IP ENTRY, NO MANUAL PAIRING. A FLEET '
+            'WITH A LIVE SILVUS RADIO SENSES; WITHOUT ONE IT IS A '
+            'FUSION PEER.',
+            style: OutrideType.section(10).copyWith(height: 1.6),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.group, color: OutrideColors.purple),
+            label: Text('OPEN FLEET…',
+                style: OutrideType.rowValue(OutrideColors.onDark)),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => FleetScreen(state: widget.state),
+                ),
+              );
+              if (mounted) setState(() {});
+            },
+          ),
+          if (widget.state.inFleet) ...[
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: OutrideColors.surface,
+                    title: const Text('FORGET FLEET?'),
+                    content: const Text(
+                      'This EUD leaves the fleet and forgets it. '
+                      'The fleet key is deleted. You will need the '
+                      '4-digit PIN to join again.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        child: const Text('CANCEL'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        child: const Text('FORGET'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm != true || !mounted) return;
+                await widget.state.forgetFleet();
+                if (mounted) {
+                  setState(() {});
+                  messenger.showSnackBar(
+                    const SnackBar(
+                        content: Text('Fleet forgotten.')),
+                  );
+                }
+              },
+              child: const Text('FORGET FLEET'),
+            ),
           ],
         ]),
         _section('Find radios on LAN', [
@@ -1155,17 +1310,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (_scanError != null) ...[
             const SizedBox(height: 8),
             Text(_scanError!,
-                style: const TextStyle(color: SentryColors.red)),
+                style: const TextStyle(color: OutrideColors.red)),
           ],
           for (final r in _found)
             ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.router, color: SentryColors.blue),
-              title: Text(r.label, style: SentryType.rowValue(SentryColors.onDark)),
+              leading: const Icon(Icons.router, color: OutrideColors.blue),
+              title: Text(r.label, style: OutrideType.rowValue(OutrideColors.onDark)),
               subtitle: Text(
                   'TAP TO ADD AS ${r.driverId.toUpperCase()} RADIO',
-                  style: SentryType.section(10)),
+                  style: OutrideType.section(10)),
               onTap: () async {
                 await widget.state.addRadio(RadioConfig(
                   driverId: r.driverId,
@@ -1180,18 +1335,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (!_scanning && _found.isEmpty && _scanError == null)
             Text(
               'NO SCAN YET. RADIOS MUST BE ON THIS SUBNET AND REACHABLE OVER HTTP.',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
         ]),
         _section('Auto-connect', [
           SwitchListTile(
             title: Text('AUTO-CONNECT SILVUS USB',
-                style: SentryType.rowValue(SentryColors.onDark)),
+                style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
               'WHEN A SILVUS RADIO APPEARS ON USB (172.17.97.X), '
               'VALIDATE IT AND ADD IT AUTOMATICALLY. UNPLUGGING NEVER '
               'REMOVES THE CONFIG — IT RECONNECTS ON REPLUG.',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _autoConnectSilvusUsb,
             onChanged: (v) {
@@ -1203,6 +1358,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ]),
         const SizedBox(height: 8),
         ElevatedButton(onPressed: _save, child: const Text('Save settings')),
+        const SizedBox(height: 16),
+        Center(
+          child: Text(
+            'OUTRIDE — FIRST OUT. FIRST TO KNOW.\n'
+            'Formerly Shepherd — same product, new name.',
+            textAlign: TextAlign.center,
+            style: OutrideType.section(10).copyWith(height: 1.6),
+          ),
+        ),
         const SizedBox(height: 16),
       ],
     );
@@ -1220,14 +1384,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'CLEAR 30–60 S, THEN NUDGE THE NAMED WORST NODE UNTIL FADE '
         'LEVELS STOP IMPROVING. SETS THE DRIFT-COMPENSATED REFERENCE '
         'ANCHORS; DETECTION ITSELF STAYS DETERMINISTIC.',
-        style: SentryType.section(10).copyWith(height: 1.6),
+        style: OutrideType.section(10).copyWith(height: 1.6),
       ),
       const SizedBox(height: 10),
     ];
     if (cs == CalibrationState.calibrating) {
       body.addAll([
         Text(st.calibrationNote ?? 'CALIBRATING…',
-            style: SentryType.rowValue(SentryColors.amber)),
+            style: OutrideType.rowValue(OutrideColors.amber)),
         const SizedBox(height: 10),
         Row(
           children: [
@@ -1251,7 +1415,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             TextButton(
               onPressed: () => st.cancelCalibration(),
               child: const Text('Cancel',
-                  style: TextStyle(color: SentryColors.red)),
+                  style: TextStyle(color: OutrideColors.red)),
             ),
           ],
         ),
@@ -1259,7 +1423,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Text(
           'ONE ROUND ≈ 10 S AFTER MOVING THE NAMED NODE. STOP WHEN NO '
           'LINK IMPROVES > 1 DB ACROSS TWO ROUNDS, OR TAP DONE.',
-          style: SentryType.section(10).copyWith(height: 1.6),
+          style: OutrideType.section(10).copyWith(height: 1.6),
         ),
       ]);
     } else if (cs == CalibrationState.stable ||
@@ -1268,18 +1432,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body.addAll([
         Text(
           stable ? 'FADE LEVELS STABLE' : 'CALIBRATED (DEGRADED MODE)',
-          style: SentryType.rowValue(
-              stable ? SentryColors.green : SentryColors.amber),
+          style: OutrideType.rowValue(
+              stable ? OutrideColors.green : OutrideColors.amber),
         ),
         if (st.calibrationNote != null) ...[
           const SizedBox(height: 4),
           Text(st.calibrationNote!,
-              style: SentryType.section(10).copyWith(height: 1.6)),
+              style: OutrideType.section(10).copyWith(height: 1.6)),
         ],
         if (st.calibrationOwnerSummary.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(st.calibrationOwnerSummary.toUpperCase(),
-              style: SentryType.rowValue(SentryColors.onDark)
+              style: OutrideType.rowValue(OutrideColors.onDark)
                   .copyWith(fontSize: 12)),
         ],
         const SizedBox(height: 6),
@@ -1295,11 +1459,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body.addAll([
         SwitchListTile(
           title: Text('DEGRADED MODE',
-              style: SentryType.rowValue(SentryColors.onDark)),
+              style: OutrideType.rowValue(OutrideColors.onDark)),
           subtitle: Text(
             'RUN ON WHATEVER QUIET IS AVAILABLE — FADE LEVELS ARE '
             'PROVISIONAL AND SAY SO.',
-            style: SentryType.section(10).copyWith(height: 1.6),
+            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           value: _calibDegraded,
           onChanged: (v) => setState(() => _calibDegraded = v),
@@ -1332,13 +1496,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Expanded(
             child: Text(label,
-                style: SentryType.rowValue(SentryColors.onDark)
+                style: OutrideType.rowValue(OutrideColors.onDark)
                     .copyWith(fontSize: 12)),
           ),
           Text(
             '${l.fadeDb >= 0 ? '+' : ''}${l.fadeDb.toStringAsFixed(1)} dB',
-            style: SentryType.rowValue(
-                    deep ? SentryColors.red : SentryColors.muted)
+            style: OutrideType.rowValue(
+                    deep ? OutrideColors.red : OutrideColors.muted)
                 .copyWith(fontSize: 12),
           ),
         ],
@@ -1368,21 +1532,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : 'STATUS: NOT CONFIGURED — THE DOPPLER CORRELATOR ABSTAINS '
                     'UNTIL STATION + eNB ARE SET';
     final statusColor = station != null
-        ? SentryColors.green
+        ? OutrideColors.green
         : touched
-            ? SentryColors.red
-            : SentryColors.muted;
+            ? OutrideColors.red
+            : OutrideColors.muted;
     return [
       Text(
         'PASSIVE-DOPPLER GEOMETRY. CONVERTED TO FIELD-LOCAL METERS AT '
         'APPLY TIME (GPS FIELD ORIGIN WHEN SET, ELSE RELATIVE TO THE '
         'STATION). PERSISTED WITH THE OTHER SETTINGS.',
-        style: SentryType.section(10).copyWith(height: 1.6),
+        style: OutrideType.section(10).copyWith(height: 1.6),
       ),
       const SizedBox(height: 10),
       SwitchListTile(
         title: Text('AUTO STATION (GPS)',
-            style: SentryType.rowValue(SentryColors.onDark)),
+            style: OutrideType.rowValue(OutrideColors.onDark)),
         subtitle: Text(
           'TAKE THE STATION POSITION FROM THIS DEVICE\'S GPS FIX — THE '
           'SDR HOST IN THE FIELD SETUP. RE-ARMS WHEN THE DEVICE MOVES '
@@ -1390,7 +1554,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'POSITION HAS NO AUTO SOURCE AND STAYS MANUAL. MANUAL '
           'STATION VALUES BELOW ARE KEPT, JUST NOT USED WHILE AUTO '
           'IS ON.',
-          style: SentryType.section(10).copyWith(height: 1.6),
+          style: OutrideType.section(10).copyWith(height: 1.6),
         ),
         value: _sdrAutoStation,
         onChanged: (v) => setState(() => _sdrAutoStation = v),
@@ -1429,7 +1593,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           numeric: true, onChanged: (_) => setState(() {})),
       const SizedBox(height: 8),
       Text(status,
-          style: SentryType.section(10)
+          style: OutrideType.section(10)
               .copyWith(height: 1.6, color: statusColor)),
     ];
   }
@@ -1458,7 +1622,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Text(
                   c.displayLabel,
-                  style: SentryType.rowValue(SentryColors.onDark)
+                  style: OutrideType.rowValue(OutrideColors.onDark)
                       .copyWith(fontSize: 12),
                 ),
                 Text(
@@ -1466,22 +1630,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       (st?.lastPoll == null
                           ? 'NOT POLLING'
                           : '${st!.linkCount} LINKS'),
-                  style: SentryType.section(10).copyWith(
+                  style: OutrideType.section(10).copyWith(
                       color: st?.error != null
-                          ? SentryColors.red
-                          : SentryColors.muted),
+                          ? OutrideColors.red
+                          : OutrideColors.muted),
                 ),
               ],
             ),
           ),
           if (!type.implemented)
             Text('SOON',
-                style: SentryType.section(10)
-                    .copyWith(color: SentryColors.orange))
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.orange))
           else
             Switch(
               value: c.enabled,
-              activeThumbColor: SentryColors.green,
+              activeThumbColor: OutrideColors.green,
               onChanged: (v) async {
                 await widget.state.setRadioEnabled(i, v);
                 if (mounted) setState(() {});
@@ -1489,7 +1653,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           IconButton(
             icon: const Icon(Icons.delete_outline,
-                color: SentryColors.muted, size: 20),
+                color: OutrideColors.muted, size: 20),
             onPressed: () async {
               await widget.state.removeRadioAt(i);
               if (mounted) setState(() {});
@@ -1510,12 +1674,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('SESSION RECORDING',
-                  style: SentryType.rowValue(SentryColors.onDark)),
+                  style: OutrideType.rowValue(OutrideColors.onDark)),
               Text(
                 recording
                     ? 'RECORDING RAW LINK DATA…'
                     : 'CAPTURE RAW SAMPLES TO CSV FOR LATER REPLAY.',
-                style: SentryType.section(10).copyWith(height: 1.6),
+                style: OutrideType.section(10).copyWith(height: 1.6),
               ),
             ],
           ),
@@ -1543,7 +1707,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             }
           },
           child: Text(recording ? 'STOP' : 'RECORD',
-              style: const TextStyle(color: SentryColors.purple)),
+              style: const TextStyle(color: OutrideColors.purple)),
         ),
       ],
     );
@@ -1561,7 +1725,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Row(
               children: [
                 Text('REPLAY A RECORDING',
-                    style: SentryType.rowValue(SentryColors.onDark)),
+                    style: OutrideType.rowValue(OutrideColors.onDark)),
                 const Spacer(),
                 if (st.replaying)
                   TextButton(
@@ -1570,7 +1734,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       setState(() {});
                     },
                     child: const Text('STOP REPLAY',
-                        style: TextStyle(color: SentryColors.red)),
+                        style: TextStyle(color: OutrideColors.red)),
                   ),
               ],
             ),
@@ -1578,12 +1742,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               'RUNS THE RECORDING THROUGH THE LIVE DETECTOR — TUNE '
               'THRESHOLDS, THEN REPLAY TO SEE WHAT THE NEW SETTINGS '
               'WOULD HAVE CAUGHT.',
-              style: SentryType.section(10).copyWith(height: 1.6),
+              style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             const SizedBox(height: 6),
             if (files.isEmpty)
               Text('NO RECORDINGS YET',
-                  style: SentryType.rowLabel()),
+                  style: OutrideType.rowLabel()),
             for (final f in files.take(10))
               InkWell(
                 onTap: st.replaying
@@ -1597,12 +1761,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Row(
                     children: [
                       const Icon(Icons.play_arrow,
-                          color: SentryColors.purple, size: 18),
+                          color: OutrideColors.purple, size: 18),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _fileName(f.path),
-                          style: SentryType.rowValue(SentryColors.onDark)
+                          style: OutrideType.rowValue(OutrideColors.onDark)
                               .copyWith(fontSize: 12),
                         ),
                       ),
@@ -1617,11 +1781,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _section(String title, List<Widget> children) {
-    return SentryPanel(
+    return OutridePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title.toUpperCase(), style: SentryType.section()),
+          Text(title.toUpperCase(), style: OutrideType.section()),
           const SizedBox(height: 10),
           ...children,
         ],
@@ -1634,7 +1798,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return TextField(
       controller: c,
       onChanged: onChanged,
-      style: SentryType.rowValue(SentryColors.onDark),
+      style: OutrideType.rowValue(OutrideColors.onDark),
       decoration:
           InputDecoration(labelText: label.toUpperCase(), hintText: hint),
       keyboardType: numeric

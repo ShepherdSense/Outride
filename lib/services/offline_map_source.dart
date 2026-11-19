@@ -1,4 +1,4 @@
-/// Offline maps pattern (Shepherd v0.26.0, Fieldwatch-borrow item 5).
+/// Offline maps pattern (Outride v0.26.0, Fieldwatch-borrow item 5).
 ///
 /// Concept adapted from Fieldwatch (MIT): OpenStreetMap and USGS
 /// layers work out of the box, with no account and no key.
@@ -173,7 +173,7 @@ const double kMaxMercatorLat = 85.05112878;
 /// Sent on every fetch/refresh; no contact address is baked in
 /// because none is configured for this app — the application name
 /// and version are the identification.
-const String kTileUserAgent = 'Shepherd/0.26.0 (offline tile cache)';
+const String kTileUserAgent = 'Outride/0.26.0 (offline tile cache)';
 
 /// WGS84 -> slippy tile at [zoom]. Pure Dart.
 ///

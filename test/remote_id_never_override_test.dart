@@ -1,4 +1,4 @@
-/// Never-override proof for Remote ID (Shepherd v0.26.0,
+/// Never-override proof for Remote ID (Outride v0.26.0,
 /// Fieldwatch-borrow item 1).
 ///
 /// Rule: RID evidence is cooperative identification, display-only.
@@ -31,12 +31,12 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/models/link_sample.dart';
-import 'package:shepherd/models/tracking.dart';
-import 'package:shepherd/services/confidence_merger.dart';
-import 'package:shepherd/services/remote_id.dart';
-import 'package:shepherd/services/tracker.dart';
-import 'package:shepherd/services/tripwire.dart';
+import 'package:outride/models/link_sample.dart';
+import 'package:outride/models/tracking.dart';
+import 'package:outride/services/confidence_merger.dart';
+import 'package:outride/services/remote_id.dart';
+import 'package:outride/services/tracker.dart';
+import 'package:outride/services/tripwire.dart';
 
 import 'remote_id_test.dart' as vec;
 

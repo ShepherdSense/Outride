@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train RF Sentry's track-stitching specialist.
+"""Train Outride's track-stitching specialist.
 
 A SMALL, task-oriented neural network — not an LLM. It answers one
 question: given a disturbance detection that just went quiet on radio A

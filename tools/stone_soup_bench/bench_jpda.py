@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stone Soup multi-target tracker bench on synthetic Shepherd record data.
+"""Stone Soup multi-target tracker bench on synthetic Outride record data.
 
 Pipeline:
     sample_run.csv  (synth_data.py)

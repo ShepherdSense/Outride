@@ -1,8 +1,8 @@
 # TinyML Boundary — what runs on-node (ESP32) vs on-phone
 
-*2026-10-23, for Shepherd v0.24.0. Source research:
-`~/memory/topics/shepherd_research/lane6_tinyml.md` (2026-10-23 section)
-and `~/memory/topics/shepherd_research/BRIEF.md` (item 9 + lane-6
+*2026-10-23, for Outride v0.24.0. Source research:
+`~/memory/topics/outride_research/lane6_tinyml.md` (2026-10-23 section)
+and `~/memory/topics/outride_research/BRIEF.md` (item 9 + lane-6
 honorable mention). This doc records the MEASURED numbers behind the
 boundary; it does not change any code.*
 
@@ -13,7 +13,7 @@ boundary; it does not change any code.*
 | CSI-HAR **typing** on ESP32-S3 (5-activity, LSTM-embedded DenseNet, full INT8, TFLite Micro, ESP32-S3 N16R8 @ 240 MHz) | **232 ms** latency, **127 kB** memory, **external PSRAM required** ("having an external PSRAM is a must") | Armenta-Garcia et al., *Sensors* 2025, 25, 6220 — read in full |
 | Same model, fp32 / full-subcarrier variant | 97.33% accuracy but **10,904 ms** latency — unusable at tripwire cadence; the 232 ms point cost ~5 accuracy points via single-subcarrier selection | same |
 | INT8 quantization cost on the recurrent component | 97.33% → 93.32% (~4 points) — independently corroborates Saha & Samanta's LSTM/INT8 finding | same; lane-6 §2a |
-| **Shepherd on-node inference budget** | **< 50 ms** per inference | Shepherd node budget (BRIEF lane-6 mention) |
+| **Outride on-node inference budget** | **< 50 ms** per inference | Outride node budget (BRIEF lane-6 mention) |
 | CSI collection-rate ceiling on stock ESP32 | **> 200 packets/s trips the task watchdog** (system overload); at 200 pps the full CSI estimation + processing pipeline must finish **within 5 ms/sample**; plan on **~180 pps sustained** | Armenta-Garcia et al. §7.1; BRIEF lane-6 mention |
 
 Typing on ESP32-S3 therefore costs **~4.6× the entire on-node latency

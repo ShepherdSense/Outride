@@ -9,14 +9,14 @@ import 'radio_driver.dart';
 
 /// ESP32 node ingest driver (passive UDP listener).
 ///
-/// Listens on UDP 49160 for the standard Shepherd node beacons and
-/// events (see field_kit/esp32/shepherd_node/shepherd_node.ino):
+/// Listens on UDP 49160 for the standard Outride node beacons and
+/// events (see field_kit/esp32/outride_node/outride_node.ino):
 ///   beacon: {"type":"beacon","node":"SHN-XXXX",...,"lat":..,"lon":..}
 ///   event:  {"type":"event","node":"SHN-XXXX","sensor":"wifi",
 ///            "dur_s":5.2,"depth_db":6.1,"class":"PASSING","conf":0.7}
 ///
 /// This covers BOTH node kinds with zero config: WiFi-direct
-/// shepherd_nodes (broadcasting on their own AP) and lora_gateway
+/// outride_nodes (broadcasting on their own AP) and lora_gateway
 /// re-emits (the gateway rebroadcasts each LoRa node's beacon/event
 /// with the original "SLN-XXXX" node id, so they appear as distinct
 /// nodes here).
@@ -31,7 +31,7 @@ import 'radio_driver.dart';
 /// Meshtastic driver).
 ///
 /// HONEST SCOPE: the app re-detects from the node's *reported* depth,
-/// not raw samples — threshold and classification are Shepherd's, the
+/// not raw samples — threshold and classification are Outride's, the
 /// underlying measurement is the node's. Event classes are the node's
 /// crude heuristics, shown as estimates.
 class Esp32Driver extends RadioDriver {
@@ -83,14 +83,14 @@ class Esp32Driver extends RadioDriver {
   String get emptyHint => NodeUdpHub.lastError != null
       ? 'Cannot listen for nodes: ${NodeUdpHub.lastError}'
       : 'Listening on UDP 49160 — no node beacons heard yet. Join the '
-      'node AP (Shepherd-XXXX / Shepherd-LoRa-XXXX) on this device.';
+      'node AP (Outride-XXXX / Outride-LoRa-XXXX) on this device.';
 
   /// Beacons are slow (30 s); event evidence stays live briefly longer
   /// than the poller so a reconstructed dip isn't instantly stale.
   @override
   Duration? get sampleMaxAge => const Duration(seconds: 45);
 
-  /// GPS positions for map placement, keyed by Shepherd node ID.
+  /// GPS positions for map placement, keyed by Outride node ID.
   Map<String, ({double lat, double lon})> meshPositions() =>
       Map.of(_positions);
 

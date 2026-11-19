@@ -9,7 +9,7 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/cot_publisher.dart';
+import 'package:outride/services/cot_publisher.dart';
 
 void main() {
   group('CotPublisher.connectNow guards', () {

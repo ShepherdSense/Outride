@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/phone_tier.dart';
+import 'package:outride/services/phone_tier.dart';
 
 void main() {
   group('activation', () {

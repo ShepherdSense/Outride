@@ -15,7 +15,7 @@ import 'radio_driver.dart';
 /// per-node GPS position, last-heard SNR, and neighbor edges
 /// (from the NeighborInfo module when the mesh broadcasts it).
 ///
-/// What Shepherd gets from this:
+/// What Outride gets from this:
 /// - every mesh node on the map (GPS → node position, auto-placed)
 /// - coarse link-health samples: `meshtastic:local → meshtastic:!<id>`
 ///   (SNR at which OUR node heard that node) and
@@ -79,12 +79,12 @@ class MeshtasticDriver extends RadioDriver {
   final BytesBuilder _inbox = BytesBuilder();
   bool _configRequested = false;
 
-  /// Shepherd node ID for a Meshtastic node number: the `!` + 8-hex
+  /// Outride node ID for a Meshtastic node number: the `!` + 8-hex
   /// convention from the Meshtastic ecosystem (e.g. `!a1b2c3d4`).
   static String nodeIdOf(int num) =>
       'meshtastic:!${num.toRadixString(16).padLeft(8, '0')}';
 
-  /// GPS positions for map placement, keyed by Shepherd node ID.
+  /// GPS positions for map placement, keyed by Outride node ID.
   Map<String, ({double lat, double lon})> meshPositions() {
     final out = <String, ({double lat, double lon})>{};
     for (final n in _nodes.values) {

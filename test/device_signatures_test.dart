@@ -1,4 +1,4 @@
-/// Tests for the Wi-Fi/BLE signature library (Shepherd v0.26.0,
+/// Tests for the Wi-Fi/BLE signature library (Outride v0.26.0,
 /// Fieldwatch-borrow item 2, lib/services/device_signatures.dart).
 ///
 /// Honesty notes for these tests:
@@ -12,7 +12,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shepherd/services/device_signatures.dart';
+import 'package:outride/services/device_signatures.dart';
 
 void main() {
   const catalog = DeviceSignatureCatalog();

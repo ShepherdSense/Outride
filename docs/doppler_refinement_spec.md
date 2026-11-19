@@ -31,7 +31,7 @@ bandwidth-intensive correlation surface):
   range**. That is the verified operating envelope: short range,
   small target, LTE-band illumination.
 - The FEKO electromagnetic simulation produced the finding that
-  matters most for Shepherd's honesty posture: **removing the
+  matters most for Outride's honesty posture: **removing the
   payload degrades RCS by 22 dB** (and cylinder/sphere payloads sat
   7/16 dB below the cuboid payload case). A drone's *detectability
   is dominated by what it carries*, not by its clean airframe. A
@@ -43,7 +43,7 @@ bandwidth-intensive correlation surface):
 **What the paper does NOT give us (honesty boundaries):** their
 0.5 m accuracy came from a fused dual-geometry Doppler track with
 USRP-class receivers and known/AoA initialization at short range.
-Shepherd proposes a *single-geometry, single-radio* Doppler channel
+Outride proposes a *single-geometry, single-radio* Doppler channel
 as corroboration only — no position claim, no accuracy inheritance.
 We take the *mechanism* (Doppler-only works on ambient LTE at
 SDR-class cost) and the *RCS calibration point* (the 22 dB swing),
@@ -154,7 +154,7 @@ consistent with this track's velocity."
 The FEKO result is not a capability — it is a *calibration of our
 own optimism*, and the spec uses it that way:
 
-- Shepherd's mission focus is **Group 2–3 UAS** (ScanEagle/Shadow/
+- Outride's mission focus is **Group 2–3 UAS** (ScanEagle/Shadow/
   V-BAT-class, Geran/Shahed-type). A Shahed in terminal phase is
   **RF-quiet and payload-released** — the configuration the paper
   shows can sit ~22 dB below the "clean airframe with payload" RCS
@@ -203,7 +203,7 @@ own optimism*, and the spec uses it that way:
 - **Radial velocity only. No position, no identity, no imagery.**
   One Doppler history is a line, not a fix. The paper's sub-meter
   accuracy came from *dual*-bistatic fusion with USRPs at < 30 m —
-  Shepherd claims none of it. The output is "motion consistent with
+  Outride claims none of it. The output is "motion consistent with
   the track", full stop.
 - **Geometry-dependent.** Tangential motion is Doppler-invisible to
   a given radio↔eNB pair. A null return is *uninformative*, never

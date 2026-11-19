@@ -1,4 +1,4 @@
-# BEAST+ / Mastodon MRSI bearing ingest — build spec for Shepherd (v0.15.0 candidate)
+# BEAST+ / Mastodon MRSI bearing ingest — build spec for Outride (v0.15.0 candidate)
 
 Prepared 2026-10-08. Interface verified against the document Draco
 provided: `MRSI_API_-20261008T134141Z-1-001.zip` →
@@ -14,10 +14,10 @@ expose?"* — is now answered. Not the un-documented LAN CoT multicast
 Ice Bucket export. The unit exposes a documented **JSON-over-TCP
 command interface plus client-directed UDP data streams** — the Mastodon
 Remote Sensor Interface. It publishes exactly the data products
-Shepherd's bearing ingest needs: **lob / lobext** (line-of-bearing,
+Outride's bearing ingest needs: **lob / lobext** (line-of-bearing,
 extended LOB with confidence), **hits** (detection events), **psd**,
 **compass**, plus multinode **mn.lob / mn.gps / mn.geo**. This makes the
-BEAST+ the emitter-bearing half of Shepherd's fusion story: tripwire
+BEAST+ the emitter-bearing half of Outride's fusion story: tripwire
 disturbance + emitter bearing at the same timestamp = detection plus
 direction, and the corroboration kills most false alarms.
 
@@ -28,7 +28,7 @@ From the summary (§2, §10):
 - **TCP command socket**, default port **10051**. Persistent connection
   for commands/control. TCP keepalives maintain it; **all subscriptions
   terminate if the connection drops**.
-- **UDP data streams** to a **client-specified IP/port** — Shepherd
+- **UDP data streams** to a **client-specified IP/port** — Outride
   tells the unit where to send; no fixed multicast to chase.
 - **Multicast discovery (optional):** hello messages on
   **239.2.3.27:10050**. The driver should listen first, then fall back
@@ -50,7 +50,7 @@ handle → `version_req` (MRSI version + system capabilities) →
 `available_streams_req` → `subscribe_req` with `stream_id`, `data_type`,
 `ip`, `port` → receive on UDP → `unsubscribe_req` / `disconnect_req`.
 
-Stream IDs to subscribe to (§4): the Shepherd-relevant set is
+Stream IDs to subscribe to (§4): the Outride-relevant set is
 
 - `lob` — line of bearing, JSON
 - `lobext` — extended LOB **with confidence**, JSON
@@ -127,11 +127,11 @@ is built first introduces them; both drivers emit into it.
   this driver — same blind spot as Remote ID.
 - `lobext` confidence is algorithm-internal, not a calibrated
   probability of detection — the UI must never present it as one.
-- **Shepherd is receive-only on this interface.** The MRSI API also
+- **Outride is receive-only on this interface.** The MRSI API also
   exposes Electronic Attack commands (`ea_sweep_req`,
-  `ea_sweep_effectiveness_req`, `ea_stop`) — Shepherd never invokes
+  `ea_sweep_effectiveness_req`, `ea_stop`) — Outride never invokes
   them, and never issues `rf_*`, mission, SOI, or scan commands either:
-  the unit's own control plane stays authoritative. Shepherd
+  the unit's own control plane stays authoritative. Outride
   subscribes to sensor streams and nothing else.
 - **No authentication is described in the summary** for the TCP command
   socket. Deploy the BEAST+ on an isolated sensor network; do not
@@ -179,7 +179,7 @@ is built first introduces them; both drivers emit into it.
 
 ## Out of scope for this spec
 
-- Any Shepherd-initiated mission/SOI/scan/`rf_*` configuration, and
+- Any Outride-initiated mission/SOI/scan/`rf_*` configuration, and
   all EA commands — read-only ingest, permanently.
 - The KrakenSDR driver (separate spec; shares the abstraction).
 - Transmit-side anything, on any hardware, ever.
