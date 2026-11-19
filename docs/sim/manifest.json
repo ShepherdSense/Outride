@@ -1,6 +1,6 @@
 {
-    "name": "shepherd",
-    "short_name": "shepherd",
+    "name": "outride",
+    "short_name": "outride",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
