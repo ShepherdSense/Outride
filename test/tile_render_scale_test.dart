@@ -25,15 +25,24 @@
 ///    source resolution the dropdown now uses.
 library;
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:outride/screens/picture_screen.dart';
 import 'package:outride/screens/tile_pack_layer.dart';
+import 'package:outride/screens/tracking.dart';
 import 'package:outride/services/offline_map_source.dart';
 import 'package:outride/services/tile_pack.dart';
 import 'package:outride/services/web_tile_loader.dart';
+import 'package:outride/state/app_state.dart';
+import 'package:outride/theme.dart';
+import 'package:outride/utils/field_map_transform.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('tile render scale (v0.29.4 defect 1)', () {
@@ -294,6 +303,412 @@ void main() {
       );
     });
   });
+
+  group('1:1 by default + persistence (v0.29.5)', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('AppState defaults to 1:1 on', () {
+      final state = AppState();
+      addTearDown(state.dispose);
+      expect(state.tileOneToOne, isTrue);
+    });
+
+    test('setTileOneToOne notifies only on change', () {
+      final state = AppState();
+      addTearDown(state.dispose);
+      var notified = 0;
+      state.addListener(() => notified++);
+      state.setTileOneToOne(true); // already on: no notify
+      expect(notified, 0);
+      state.setTileOneToOne(false);
+      expect(state.tileOneToOne, isFalse);
+      expect(notified, 1);
+      state.setTileOneToOne(false); // same value: no notify
+      expect(notified, 1);
+      state.setTileOneToOne(true);
+      expect(notified, 2);
+    });
+
+    test('tileOneToOneControlLabel shows the true state', () {
+      expect(tileOneToOneControlLabel(oneToOneActive: true), '1:1 ON');
+      expect(
+          tileOneToOneControlLabel(
+              oneToOneActive: true, renderScale: 23.5),
+          '1:1 ON');
+      expect(tileOneToOneControlLabel(oneToOneActive: false), 'FIT');
+      expect(
+          tileOneToOneControlLabel(
+              oneToOneActive: false, renderScale: 1.0),
+          '1:1');
+      expect(
+          tileOneToOneControlLabel(
+              oneToOneActive: false, renderScale: 2.5),
+          '×2.5');
+      expect(
+          tileOneToOneControlLabel(
+              oneToOneActive: false, renderScale: 23.5),
+          '×24');
+    });
+
+    testWidgets('compact map defaults to 1:1 ON with an honest pill',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final state = AppState();
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+            theme: buildDarkTheme(),
+            home: Scaffold(body: PictureScreen(state: state))),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      // Default is 1:1, and the pill says so — never the bare
+      // '1:1' the v0.29.4 pill showed while stretched.
+      expect(find.text('1:1 ON'), findsOneWidget);
+      expect(find.text('1:1'), findsNothing);
+      // Tap the pill: 1:1 turns off and the pill shows the
+      // stretch, never '1:1'. The tap must toggle, NOT open the
+      // full map (the pill wins the tap arena over the ancestor
+      // GestureDetector) — no TrackingScreen route appears.
+      await tester.tap(find.text('1:1 ON'));
+      await tester.pump();
+      expect(find.byType(TrackingScreen), findsNothing);
+      expect(find.text('1:1 ON'), findsNothing);
+      expect(find.text('1:1'), findsNothing);
+      expect(find.textContaining(RegExp(r'^×\d+')), findsOneWidget);
+      // Tap again: back to 1:1 ON.
+      await tester.tap(find.textContaining(RegExp(r'^×\d+')));
+      await tester.pump();
+      expect(find.byType(TrackingScreen), findsNothing);
+      expect(find.text('1:1 ON'), findsOneWidget);
+    });
+
+    testWidgets('compact map renders at the native scale by default',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final state = AppState();
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+            theme: buildDarkTheme(),
+            home: Scaffold(body: PictureScreen(state: state))),
+      );
+      await tester.pump();
+      await tester.pump();
+      // Same wiring guard as the full-map test: the pill saying
+      // '1:1 ON' is derived from the same helper that builds the
+      // transform, so pin the pixels — the layer must actually be
+      // at the tile-native scale, not the fit scale.
+      final layer =
+          tester.widget<TilePackMapLayer>(find.byType(TilePackMapLayer));
+      expect(
+        layer.transform.scale,
+        closeTo(_nativeScaleFor(state, layer.size), 0.001),
+      );
+      expect(layer.transform.scale,
+          lessThan(_fitScaleFor(state, layer.size)));
+    });
+
+    testWidgets('pill reports scale; the status line owns tile presence',
+        (tester) async {
+      // Review follow-up (v0.29.5): with an origin but no tiles
+      // loaded (no packs in the test env), the pill reads the view
+      // scale — '1:1 ON' at native — while the status line says
+      // GRID ONLY. The control never claims tiles exist; presence
+      // is the status line's job (its source name is gated on
+      // tilesLoaded > 0).
+      tester.view.physicalSize = const Size(360, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final state = AppState();
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+            theme: buildDarkTheme(),
+            home: Scaffold(body: PictureScreen(state: state))),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('1:1 ON'), findsOneWidget);
+      expect(find.textContaining('TILES: NONE — GRID ONLY'),
+          findsOneWidget);
+    });
+
+    testWidgets('1:1 survives the Picture screen being rebuilt',
+        (tester) async {
+      // Models a bottom-nav tab switch: the dashboard keeps the
+      // same AppState but disposes and recreates the tab's State.
+      // The v0.29.4 defect: the choice lived in that State, so the
+      // map came back stretched with the pill lying '1:1'.
+      tester.view.physicalSize = const Size(360, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final state = AppState();
+      addTearDown(state.dispose);
+      Future<void> pumpPicture() async {
+        await tester.pumpWidget(
+          MaterialApp(
+              theme: buildDarkTheme(),
+              home: Scaffold(body: PictureScreen(state: state))),
+        );
+        await tester.pump();
+      }
+
+      await pumpPicture();
+      expect(find.text('1:1 ON'), findsOneWidget);
+      await tester.tap(find.text('1:1 ON'));
+      await tester.pump();
+      expect(find.byType(TrackingScreen), findsNothing);
+      expect(find.textContaining(RegExp(r'^×\d+')), findsOneWidget);
+      await pumpPicture();
+      expect(find.text('1:1 ON'), findsNothing);
+      expect(find.text('1:1'), findsNothing);
+      expect(find.textContaining(RegExp(r'^×\d+')), findsOneWidget);
+      // And back on: the preference sticks the other way too.
+      await tester.tap(find.textContaining(RegExp(r'^×\d+')));
+      await tester.pump();
+      expect(find.byType(TrackingScreen), findsNothing);
+      await pumpPicture();
+      expect(find.text('1:1 ON'), findsOneWidget);
+    });
+
+    testWidgets('full Field Map defaults to 1:1 ON; + leaves 1:1',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final state = AppState();
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: TrackingScreen(state: state))),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.text('1:1 ON'), findsOneWidget);
+      expect(find.text('1:1'), findsNothing);
+      // Toggle off: the button shows the stretch, never bare '1:1'.
+      await tester.tap(find.text('1:1 ON'));
+      await tester.pump();
+      expect(find.text('1:1 ON'), findsNothing);
+      expect(find.text('1:1'), findsNothing);
+      expect(find.textContaining(RegExp(r'^×\d+')), findsOneWidget);
+      // Toggle back on.
+      await tester.tap(find.textContaining(RegExp(r'^×\d+')));
+      await tester.pump();
+      expect(find.text('1:1 ON'), findsOneWidget);
+      // + zoom leaves 1:1: the button drops to the stretch, and
+      // the SHARED preference flips — the compact map reads off.
+      await tester.tap(find.text('+'));
+      await tester.pump();
+      expect(find.text('1:1 ON'), findsNothing);
+      expect(find.text('1:1'), findsNothing);
+      expect(find.textContaining(RegExp(r'^×\d+')), findsOneWidget);
+      expect(state.tileOneToOne, isFalse);
+    });
+
+    testWidgets('full map renders at the native scale by default',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final state = AppState();
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: TrackingScreen(state: state))),
+      );
+      await tester.pump();
+      await tester.pump();
+      // The label says '1:1 ON' — but the label is derived from the
+      // preference, so pin the pixels: the layer's transform must
+      // actually be at the tile-native scale, not the fit scale. A
+      // wiring bug that returned the fit view here would still print
+      // '1:1 ON' and pass the label tests above.
+      final layer =
+          tester.widget<TilePackMapLayer>(find.byType(TilePackMapLayer));
+      expect(
+        layer.transform.scale,
+        closeTo(_nativeScaleFor(state, layer.size), 0.001),
+      );
+      expect(layer.transform.scale, lessThan(_fitScaleFor(state, layer.size)));
+    });
+
+    testWidgets('toggling 1:1 off restores the manual zoom',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final state = AppState();
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: TrackingScreen(state: state))),
+      );
+      await tester.pump();
+      final native = _mapScale(tester);
+      await tester.tap(find.text('+'));
+      await tester.pump();
+      final zoomed = _mapScale(tester);
+      expect(zoomed, closeTo(native * 1.25, native * 0.01));
+      // The 1:1 button now shows the stretch; tap it to go 1:1.
+      await tester.tap(find.textContaining(RegExp(r'^×\d+')));
+      await tester.pump();
+      expect(find.text('1:1 ON'), findsOneWidget);
+      expect(_mapScale(tester), closeTo(native, native * 0.01));
+      // Toggle off: back to the manual zoom, not the fit.
+      await tester.tap(find.text('1:1 ON'));
+      await tester.pump();
+      expect(_mapScale(tester), closeTo(zoomed, zoomed * 0.01));
+    });
+
+    testWidgets('scroll wheel leaves 1:1', (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final state = AppState();
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: TrackingScreen(state: state))),
+      );
+      await tester.pump();
+      expect(find.text('1:1 ON'), findsOneWidget);
+      final before = _mapScale(tester);
+      // The map sits below the fold at phone height: scroll it into
+      // view first, or the wheel event lands outside the viewport
+      // and never reaches the map's Listener (tester.tap scrolls
+      // into view automatically; a raw pointer event does not).
+      await tester.drag(find.byType(ListView), const Offset(0, -300));
+      await tester.pump();
+      final mapCenter = tester.getCenter(find.byWidgetPredicate(
+          (w) => w is CustomPaint && w.painter is TrackingMapPainter));
+      tester.binding.handlePointerEvent(PointerScrollEvent(
+        position: mapCenter,
+        scrollDelta: const Offset(0, -120),
+      ));
+      await tester.pump();
+      expect(find.text('1:1 ON'), findsNothing);
+      expect(state.tileOneToOne, isFalse);
+      expect(_mapScale(tester), closeTo(before * 1.12, before * 0.01));
+    });
+
+    testWidgets('manual zoom survives 1:1 toggle with no origin',
+        (tester) async {
+      // Reviewer regression test (v0.29.5 review): live mode with no
+      // GPS origin has no 1:1 multiplier, so a manual zoom must
+      // never be seeded from 1.0. Pre-fix, the sequence below jumped
+      // the view from ~3x back to ~1.1x.
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final state = AppState();
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: TrackingScreen(state: state))),
+      );
+      await tester.pump();
+      // Go live the way the app does — no GPS origin in the test,
+      // so the map has no tiles and 1:1 has nothing to scale.
+      state.applySettings(AppSettings(simulatedMode: false));
+      await tester.pump();
+      expect(state.displayOrigin, isNull);
+      // Turn the preference OFF first (the button reads FIT with no
+      // origin): the operator zooms manually with 1:1 off.
+      await tester.tap(find.text('FIT'));
+      await tester.pump();
+      expect(state.tileOneToOne, isFalse);
+      // Manual zoom to ~3x with the + button (1.25^5 ≈ 3.05).
+      for (var i = 0; i < 5; i++) {
+        await tester.tap(find.text('+'));
+        await tester.pump();
+      }
+      final before = _mapScale(tester);
+      // Toggle 1:1 on: the button still reads FIT (no origin), the
+      // map stays on the fit view — and the manual zoom survives.
+      await tester.tap(find.text('FIT'));
+      await tester.pump();
+      expect(state.tileOneToOne, isTrue);
+      expect(_mapScale(tester), closeTo(before, 0.001));
+      // One more +: bumps from ~3x, not from 1.0.
+      await tester.tap(find.text('+'));
+      await tester.pump();
+      expect(_mapScale(tester), closeTo(before * 1.25, before * 0.01));
+    });
+
+    testWidgets('follow centers on the operator at the native scale',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final state = AppState();
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: TrackingScreen(state: state))),
+      );
+      await tester.pump();
+      state.setLiveGpsFollow(true);
+      await tester.pump();
+      expect(state.liveGpsFollow, isTrue);
+      final layer =
+          tester.widget<TilePackMapLayer>(find.byType(TilePackMapLayer));
+      final op = state.mapOperatorMeters!;
+      // Follow moves the CENTER, not the zoom: the operator sits at
+      // the middle of the map, still at the native scale.
+      final screen = layer.transform.toScreen(op.x, op.y);
+      expect(screen.dx, closeTo(layer.size.width / 2, 1.0));
+      expect(screen.dy, closeTo(layer.size.height / 2, 1.0));
+      expect(
+        layer.transform.scale,
+        closeTo(_nativeScaleFor(state, layer.size), 0.001),
+      );
+    });
+  });
+}
+
+/// The field points the maps fit: every node + the defended point
+/// + the live track, if any — the same extent the screens fit.
+List<math.Point<double>> _fieldPointsFor(AppState state) {
+  final pts = <math.Point<double>>[
+    for (final n in state.effectiveNodes.values)
+      math.Point(n.x, n.y),
+    math.Point(state.defended.x, state.defended.y),
+  ];
+  final track = state.track;
+  if (track != null) pts.add(math.Point(track.x, track.y));
+  return pts;
+}
+
+/// The fit view scale (screen px per meter) for [state]'s field at
+/// [size], at zoom 1.0.
+double _fitScaleFor(AppState state, Size size) =>
+    FieldMapTransform.fit(size, _fieldPointsFor(state), zoom: 1.0).scale;
+
+/// The tile-native scale the maps should render at by default for
+/// [state]'s current view: resolves the tile zoom the way the
+/// screens do and converts it to px/m.
+double _nativeScaleFor(AppState state, Size size) {
+  final origin = state.displayOrigin!;
+  final tileZoom = bestZoomForView(
+    viewMetersPerPixel: 1 / _fitScaleFor(state, size),
+    latitude: origin.lat,
+    minZoom: 0,
+    maxZoom: kWebTileMaxZoom,
+  );
+  return tileNativeScalePxPerMeter(tileZoom, origin.lat);
+}
+
+/// The field map's current view scale, read off the painter — the
+/// TilePackMapLayer is absent when there is no origin, so the
+/// painter is the scale's witness in every mode.
+double _mapScale(WidgetTester tester) {
+  final finder = find.byWidgetPredicate(
+      (w) => w is CustomPaint && w.painter is TrackingMapPainter);
+  final painter =
+      tester.widget<CustomPaint>(finder).painter as TrackingMapPainter;
+  return painter.transform.scale;
 }
 
 /// A solid-color test image (no asset decode needed).

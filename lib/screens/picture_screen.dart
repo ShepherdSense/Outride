@@ -810,21 +810,16 @@ class _LiveMapCardState extends State<_LiveMapCard> {
   // its first tile lands.
   TileLayerStatus _tileStatus = const TileLayerStatus(web: kIsWeb);
 
-  /// True 1:1 tile scale for the compact map (v0.29.4): when on,
-  /// the map renders at the tile-native scale — one tile pixel =
-  /// one screen pixel, tiles crisp — instead of the fit zoom,
-  /// where a z16 tile renders ~23x stretched. Off is the usual
-  /// field view. Tap the map (or the fullscreen icon) for the
-  /// full Field Map, which has the same 1:1 on its zoom controls.
-  bool _tileOneToOne = false;
-
   AppState get state => widget.state;
 
   /// The tile-native view scale (screen px per meter) for this
-  /// map when 1:1 is on, else null. Shared by the range label and
-  /// the map transform so both agree on the scale in use.
+  /// map when 1:1 is on, else null. Shared by the range label, the
+  /// map transform, and the pill label so all three agree on the
+  /// scale in use. 1:1 is a SHARED preference on [AppState]
+  /// (v0.29.5, default ON) — not local state — so it survives
+  /// bottom-nav tab switches and full-map round trips.
   double? _compactOneToOneScale(Size size, List<math.Point<double>> pts) {
-    if (!_tileOneToOne) return null;
+    if (!state.tileOneToOne) return null;
     final origin = state.displayOrigin;
     if (origin == null) return null;
     final fit = FieldMapTransform.fit(size, pts, zoom: 1.0);
@@ -836,6 +831,35 @@ class _LiveMapCardState extends State<_LiveMapCard> {
           maxZoom: kWebTileMaxZoom,
         );
     return tileNativeScalePxPerMeter(tileZoom, origin.lat);
+  }
+
+  /// The 1:1 pill label for the transform in use (v0.29.5): '1:1
+  /// ON' only when the map is actually rendering at the tile-native
+  /// scale, the stretch ('×N') when fitted/stretched, 'FIT' when
+  /// there is no origin (no tiles to scale). Computed from the
+  /// transform in use — the same scale the layer reports — so the
+  /// label updates in the same frame as the toggle, with no
+  /// one-frame lag behind the layer's status callback.
+  String _compactScaleLabel(FieldMapTransform tr, Size size,
+      List<math.Point<double>> pts) {
+    if (_compactOneToOneScale(size, pts) != null) return '1:1 ON';
+    final origin = state.displayOrigin;
+    if (origin == null) return 'FIT';
+    final tileZoom = _tileStatus.zoom ??
+        bestZoomForView(
+          viewMetersPerPixel: 1 / tr.scale,
+          latitude: origin.lat,
+          minZoom: 0,
+          maxZoom: kWebTileMaxZoom,
+        );
+    return tileOneToOneControlLabel(
+      oneToOneActive: false,
+      renderScale: tileRenderScale(
+        viewScalePxPerMeter: tr.scale,
+        zoom: tileZoom,
+        latitude: origin.lat,
+      ),
+    );
   }
 
   void _openFullMap(BuildContext context) {
@@ -1032,11 +1056,15 @@ class _LiveMapCardState extends State<_LiveMapCard> {
                                 fontWeight: FontWeight.w700,
                                 color: OutrideColors.faint)),
                       ),
-                      // 1:1 tile scale toggle (v0.29.4): crisp tiles
+                      // 1:1 tile scale toggle (v0.29.5): crisp tiles
                       // at one tile pixel = one screen pixel. The
-                      // tap that opens the full map is on the
-                      // ancestor GestureDetector; this button wins
-                      // the tap arena, so tapping it toggles
+                      // label shows the TRUE state — '1:1 ON' only
+                      // while the map is actually at the tile-native
+                      // scale, the stretch ('×N') when fitted — never
+                      // the bare '1:1' the v0.29.4 pill showed while
+                      // stretched. The tap that opens the full map is
+                      // on the ancestor GestureDetector; this button
+                      // wins the tap arena, so tapping it toggles
                       // instead of opening the full map.
                       Positioned(
                         right: 4,
@@ -1047,14 +1075,14 @@ class _LiveMapCardState extends State<_LiveMapCard> {
                                 horizontal: 8, vertical: 4),
                             minimumSize: const Size(0, 28),
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            backgroundColor: _tileOneToOne
+                            backgroundColor: oneToOneScale != null
                                 ? OutrideColors.purple.withAlpha(60)
                                 : OutrideColors.surface.withAlpha(220),
                           ),
-                          onPressed: () => setState(
-                              () => _tileOneToOne = !_tileOneToOne),
+                          onPressed: () => state.setTileOneToOne(
+                              !state.tileOneToOne),
                           child: Text(
-                            _tileOneToOne ? '1:1 ON' : '1:1',
+                            _compactScaleLabel(tr, size, pts),
                             style: OutrideType.chip(OutrideColors.onDark),
                           ),
                         ),

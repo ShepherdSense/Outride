@@ -110,6 +110,27 @@ String tileRenderScaleLabel(double renderScale) {
   return '×${renderScale.toStringAsFixed(renderScale < 10 ? 1 : 0)}';
 }
 
+/// Label for the 1:1 control — the compact map's pill and the full
+/// map's 1:1 button (v0.29.5). It shows the TRUE state, never the
+/// stale '1:1' the v0.29.4 pill showed while the map was stretched:
+/// '1:1 ON' only when the view is actually at the tile-native
+/// scale, the stretch ('×N') when fitted/stretched, 'FIT' when
+/// there is no origin (nothing to scale). This control reports
+/// VIEW SCALE only — whether tiles are actually painted is the
+/// status line's job (it gates the source name on tilesLoaded > 0,
+/// so an origin with no tiles loaded reads '1:1 ON' here while the
+/// status line says GRID ONLY). A view that happens to sit at the
+/// native scale with 1:1 off honestly reads '1:1' — it is not
+/// stretched — but without the ON suffix or highlight.
+String tileOneToOneControlLabel({
+  required bool oneToOneActive,
+  double? renderScale,
+}) {
+  if (oneToOneActive) return '1:1 ON';
+  if (renderScale == null) return 'FIT';
+  return tileRenderScaleLabel(renderScale);
+}
+
 /// Max tiles fetched for one view. A field-sized view needs a
 /// handful; past this the user is zoomed too far out for packs and
 /// the layer paints nothing instead of hammering the DB.

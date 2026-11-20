@@ -1,7 +1,7 @@
 name: outride
 description: Outride — device-free RF sensing tripwire for Silvus StreamCaster mesh radios.
 publish_to: "none"
-version: 0.29.4
+version: 0.29.5
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

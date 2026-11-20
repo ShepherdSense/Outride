@@ -95,40 +95,28 @@ class _TrackingScreenState extends State<TrackingScreen> {
     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
   );
 
-  void _bumpMapZoom(double f) => setState(() {
-        // Wide clamp (v0.29.4): the 1:1 tile scale sits near
-        // _mapZoom 0.04 — the old 0.5 floor would have snapped a
-        // 1:1 view back to 0.5 on the next wheel tick or +/− tap.
-        // Floor 0.001, not 0.01: on a wide (2560px) window the
-        // fit scale can reach 60 px/m, so 1:1 needs zoom 0.0085 —
-        // a 0.01 floor would clamp it to x1.2 and break the
-        // button's promise. The layer's 100-tile cap bounds the
-        // zoomed-out case, so the lower floor is safe.
-        _mapZoom = (_mapZoom * f).clamp(0.001, 8.0);
-      });
-
-  /// True 1:1 (v0.29.4): set the map zoom so one tile pixel is
-  /// exactly one screen pixel at the current tile zoom. The old
-  /// reset just restored _mapZoom 1.0 — the fit zoom, ~12 px/m —
-  /// which left the same ~23x-stretched blocky tiles and the
-  /// button's "1:1" label a lie. The tile zoom is the layer's
-  /// reported zoom when tiles are rendering, else the zoom the
-  /// layer would pick for this view (already the USGS z16 cap at
-  /// field zoom). No origin means no tiles, so fall back to the
-  /// plain fit view.
-  void _resetMapZoomToTileOneToOne(Size size, List<NodePosition> nodes) {
-    final origin = state.displayOrigin;
-    if (origin == null) {
-      setState(() => _mapZoom = 1.0);
-      return;
-    }
-    final pts = <math.Point<double>>[];
-    for (final n in nodes) {
-      pts.add(math.Point(n.x, n.y));
-    }
-    pts.add(math.Point(state.defended.x, state.defended.y));
+  /// The field points the map fits: every node + the defended
+  /// point + the live track, if any. Shared by the transform
+  /// builder and the zoom math so both fit the same extent.
+  List<math.Point<double>> _fieldPoints(List<NodePosition> nodes) {
+    final pts = <math.Point<double>>[
+      for (final n in nodes) math.Point(n.x, n.y),
+      math.Point(state.defended.x, state.defended.y),
+    ];
     final t = state.track;
     if (t != null) pts.add(math.Point(t.x, t.y));
+    return pts;
+  }
+
+  /// The tile-native view scale (screen px per meter) for [pts] at
+  /// [size] when 1:1 is on, else null — preference off, or no
+  /// origin (no tiles to be 1:1 with). The transform builder, the
+  /// zoom buttons, and the 1:1 button label all read this, so they
+  /// agree on whether 1:1 is actually in effect.
+  double? _oneToOneScale(Size size, List<math.Point<double>> pts) {
+    if (!state.tileOneToOne) return null;
+    final origin = state.displayOrigin;
+    if (origin == null) return null;
     final fit = FieldMapTransform.fit(size, pts, zoom: 1.0);
     final tileZoom = _tileStatus.zoom ??
         bestZoomForView(
@@ -137,14 +125,91 @@ class _TrackingScreenState extends State<TrackingScreen> {
           minZoom: 0,
           maxZoom: kWebTileMaxZoom,
         );
-    setState(() {
-      _mapZoom = mapZoomForTileOneToOne(
-        fitScalePxPerMeter: fit.scale,
-        tileZoom: tileZoom,
-        latitude: origin.lat,
-      ).clamp(0.001, 8.0);
-    });
+    return tileNativeScalePxPerMeter(tileZoom, origin.lat);
   }
+
+  /// The map-zoom multiplier that puts the view at the tile-native
+  /// 1:1 scale for [pts] at [size], or null when there is no origin.
+  /// A manual zoom while 1:1 is on starts from this multiplier —
+  /// not the stale fit zoom — so the view doesn't jump when 1:1
+  /// turns off.
+  double? _oneToOneZoom(Size size, List<math.Point<double>> pts) {
+    final origin = state.displayOrigin;
+    if (origin == null) return null;
+    final fit = FieldMapTransform.fit(size, pts, zoom: 1.0);
+    final tileZoom = _tileStatus.zoom ??
+        bestZoomForView(
+          viewMetersPerPixel: 1 / fit.scale,
+          latitude: origin.lat,
+          minZoom: 0,
+          maxZoom: kWebTileMaxZoom,
+        );
+    return mapZoomForTileOneToOne(
+      fitScalePxPerMeter: fit.scale,
+      tileZoom: tileZoom,
+      latitude: origin.lat,
+    ).clamp(0.001, 8.0);
+  }
+
+  /// The 1:1 button's label for the transform in use (v0.29.5):
+  /// '1:1 ON' only when the map is actually rendering at the
+  /// tile-native scale, the stretch ('×N') when fitted/stretched,
+  /// 'FIT' when there is no origin (no tiles to scale). Computed
+  /// from the transform in use, so it can never say '1:1' while
+  /// stretched the way the v0.29.4 button did (its label never
+  /// changed at all).
+  String _oneToOneButtonLabel(
+      FieldMapTransform tr, bool oneToOneActive) {
+    if (oneToOneActive) return '1:1 ON';
+    final origin = state.displayOrigin;
+    if (origin == null) return 'FIT';
+    final tileZoom = _tileStatus.zoom ??
+        bestZoomForView(
+          viewMetersPerPixel: 1 / tr.scale,
+          latitude: origin.lat,
+          minZoom: 0,
+          maxZoom: kWebTileMaxZoom,
+        );
+    return tileOneToOneControlLabel(
+      oneToOneActive: false,
+      renderScale: tileRenderScale(
+        viewScalePxPerMeter: tr.scale,
+        zoom: tileZoom,
+        latitude: origin.lat,
+      ),
+    );
+  }
+
+  void _bumpMapZoom(double f, Size size, List<NodePosition> nodes) =>
+      setState(() {
+        // Wide clamp (v0.29.4): the 1:1 tile scale sits near
+        // _mapZoom 0.04 — the old 0.5 floor would have snapped a
+        // 1:1 view back to 0.5 on the next wheel tick or +/− tap.
+        // Floor 0.001, not 0.01: on a wide (2560px) window the
+        // fit scale can reach 60 px/m, so 1:1 needs zoom 0.0085 —
+        // a 0.01 floor would clamp it to x1.2 and break the
+        // button's promise. The layer's 100-tile cap bounds the
+        // zoomed-out case, so the lower floor is safe.
+        // Leaving 1:1 (v0.29.5): a manual zoom means the operator
+        // wants a different scale, so the shared 1:1 preference
+        // turns off — and the bump starts from the 1:1 multiplier,
+        // not the stale fit zoom, so the view doesn't jump. Only
+        // when 1:1 was actually in effect: with no origin there is
+        // no 1:1 multiplier, and seeding from 1.0 would discard
+        // the operator's manual zoom and jump the view (live mode
+        // before any GPS origin is set). With no multiplier the
+        // preference stays on — the map takes 1:1 when an origin
+        // appears — and the bump starts from the zoom the operator
+        // already had.
+        if (state.tileOneToOne) {
+          final oneToOneZoom = _oneToOneZoom(size, _fieldPoints(nodes));
+          if (oneToOneZoom != null) {
+            _mapZoom = oneToOneZoom;
+            state.setTileOneToOne(false);
+          }
+        }
+        _mapZoom = (_mapZoom * f).clamp(0.001, 8.0);
+      });
 
   AppState get state => widget.state;
 
@@ -364,6 +429,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
         final size =
             Size(constraints.maxWidth, h.isFinite ? h : 320.0);
         final tr = _buildTransform(size, nodes);
+        // Whether the map is actually rendering at 1:1 (v0.29.5):
+        // shared by the 1:1 button's label and highlight.
+        final oneToOneActive =
+            _oneToOneScale(size, _fieldPoints(nodes)) != null;
         final origin = state.gpsOrigin;
         return Stack(
           children: [
@@ -385,9 +454,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
             Listener(
               onPointerSignal: (signal) {
                 if (signal is PointerScrollEvent) {
-                  _bumpMapZoom(signal.scrollDelta.dy < 0
-                      ? 1.12
-                      : 1 / 1.12);
+                  _bumpMapZoom(
+                      signal.scrollDelta.dy < 0 ? 1.12 : 1 / 1.12,
+                      size,
+                      nodes);
                 }
               },
               child: GestureDetector(
@@ -461,11 +531,19 @@ class _TrackingScreenState extends State<TrackingScreen> {
               right: 4,
               top: 4,
               child: OutrideZoomControls(
-                onZoomIn: () => _bumpMapZoom(1.25),
-                onZoomOut: () => _bumpMapZoom(1 / 1.25),
-                // 1:1 is the true tile-native scale (v0.29.4), not
-                // the fit zoom: one tile pixel = one screen pixel.
-                onReset: () => _resetMapZoomToTileOneToOne(size, nodes),
+                onZoomIn: () => _bumpMapZoom(1.25, size, nodes),
+                onZoomOut: () => _bumpMapZoom(1 / 1.25, size, nodes),
+                // 1:1 (v0.29.5): a shared preference with the
+                // compact map, default ON. Tapping toggles it; the
+                // button's label and highlight show the true state
+                // — '1:1 ON' only while the map is actually at the
+                // tile-native scale, the stretch ('×N') when
+                // fitted. Toggling off returns to the manual zoom
+                // (fit if the operator never zoomed).
+                onReset: () =>
+                    state.setTileOneToOne(!state.tileOneToOne),
+                resetLabel: _oneToOneButtonLabel(tr, oneToOneActive),
+                resetActive: oneToOneActive,
               ),
             ),
             // Compass rose: the map is north-up (world +y = north renders
@@ -482,17 +560,25 @@ class _TrackingScreenState extends State<TrackingScreen> {
   }
 
   FieldMapTransform _buildTransform(Size size, List<NodePosition> nodes) {
-    final pts = <math.Point<double>>[];
-    for (final n in nodes) {
-      pts.add(math.Point(n.x, n.y));
-    }
-    pts.add(math.Point(state.defended.x, state.defended.y));
-    final t = state.track;
-    if (t != null) pts.add(math.Point(t.x, t.y));
+    final pts = _fieldPoints(nodes);
     final fit = FieldMapTransform.fit(size, pts, zoom: _mapZoom);
+    // 1:1 (v0.29.5): the tile-native scale is the DEFAULT and a
+    // shared preference — same center as the fit view (or the
+    // operator under follow), at the native scale, so tiles render
+    // crisp. Null when the preference is off or there is no origin
+    // (no tiles to be 1:1 with): the map stays on the fit view.
+    final oneToOneScale = _oneToOneScale(size, pts);
+    final op = state.liveGpsFollow ? state.mapOperatorMeters : null;
+    if (oneToOneScale != null) {
+      return FieldMapTransform.centered(
+        size: size,
+        centerX: op?.x ?? fit.toWorldX(size.width / 2),
+        centerY: op?.y ?? fit.toWorldY(size.height / 2),
+        scale: oneToOneScale,
+      );
+    }
     // Follow mode (v0.28.0 live GPS): keep the map centered on the
     // operator at the same zoom — only the center moves.
-    final op = state.liveGpsFollow ? state.mapOperatorMeters : null;
     if (op != null) {
       return FieldMapTransform.centered(
         size: size,

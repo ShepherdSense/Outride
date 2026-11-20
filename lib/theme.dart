@@ -221,11 +221,23 @@ class OutrideZoomControls extends StatelessWidget {
     required this.onZoomIn,
     required this.onZoomOut,
     required this.onReset,
+    this.resetLabel = '1:1',
+    this.resetActive = false,
   });
 
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
   final VoidCallback onReset;
+
+  /// Label for the reset button — '1:1' for the 3D views (the
+  /// historical default), the true render state ('1:1 ON' / '×N' /
+  /// 'FIT') on the Field Map (v0.29.5).
+  final String resetLabel;
+
+  /// Whether the reset button is in its active state (the map is
+  /// at 1:1): highlighted so the state is visible, not just the
+  /// label (v0.29.5). False everywhere else.
+  final bool resetActive;
 
   @override
   Widget build(BuildContext context) {
@@ -240,14 +252,14 @@ class OutrideZoomControls extends StatelessWidget {
         children: [
           _btn('+', onZoomIn),
           _btn('−', onZoomOut),
-          _btn('1:1', onReset),
+          _btn(resetLabel, onReset, active: resetActive),
         ],
       ),
     );
   }
 
-  Widget _btn(String label, VoidCallback onTap) {
-    return InkWell(
+  Widget _btn(String label, VoidCallback onTap, {bool active = false}) {
+    final child = InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
@@ -255,6 +267,14 @@ class OutrideZoomControls extends StatelessWidget {
             const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Text(label, style: OutrideType.chip(OutrideColors.onDark)),
       ),
+    );
+    if (!active) return child;
+    return Container(
+      decoration: BoxDecoration(
+        color: OutrideColors.purple.withAlpha(60),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: child,
     );
   }
 }

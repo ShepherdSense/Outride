@@ -2664,6 +2664,27 @@ class AppState extends ChangeNotifier {
   /// source, otherwise USGS Topo (see [syncWebTileSource]).
   final WebTileLoader webTiles = WebTileLoader();
 
+  /// True 1:1 tile scale preference, shared by both maps (v0.29.5).
+  /// When on, the compact Picture map and the full Field Map render
+  /// at the tile-native scale — one tile pixel = one screen pixel,
+  /// tiles crisp — instead of the fit zoom, where a z16 tile renders
+  /// ~23x stretched. Default ON: v0.29.4 shipped 1:1 as an opt-in
+  /// toggle held in each screen's local state, so both maps loaded
+  /// pixelated and the choice died on every tab switch. The
+  /// preference lives here now, so it survives bottom-nav tab
+  /// switches and full-map round trips. In-memory only — a fresh
+  /// launch starts at 1:1 again.
+  bool _tileOneToOne = true;
+
+  /// Whether the maps render at the true 1:1 tile scale.
+  bool get tileOneToOne => _tileOneToOne;
+
+  void setTileOneToOne(bool value) {
+    if (_tileOneToOne == value) return;
+    _tileOneToOne = value;
+    notifyListeners();
+  }
+
   /// Keeps the web loader on the selected tile source (USGS only —
   /// any other selection falls back to USGS Topo). Called after
   /// persisted settings load and after every settings save; a
