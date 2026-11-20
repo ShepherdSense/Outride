@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -5,12 +6,16 @@ import 'package:flutter/material.dart';
 
 import '../models/tracking.dart';
 import '../services/gps_positioning.dart';
+import '../services/operator_pose.dart';
 import '../services/tracker.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../utils/field_map_transform.dart';
 import '../utils/hull.dart';
 import 'airframe_overlay.dart';
+import 'offline_maps_screen.dart';
 import 'sensor_overlay.dart';
+import 'tile_pack_layer.dart';
 
 /// Tracking tab in the RuView observatory style: dark field map with
 /// glowing nodes, fused track readout as technical rows, node heights.
@@ -36,6 +41,14 @@ class TrackingScreen extends StatefulWidget {  const TrackingScreen({super.key, 
 class _TrackingScreenState extends State<TrackingScreen> {
   /// nodeId being dragged, 'defended', or null.
   String? _dragging;
+
+  /// Transform captured at pan start, used for the whole drag.
+  /// Follow mode re-centers the map on the operator, so the
+  /// visible transform changes when follow turns off mid-grab;
+  /// mapping pan updates through the pan-start transform keeps
+  /// the grabbed node under the finger instead of teleporting it
+  /// by the operator's distance from the field centroid.
+  FieldMapTransform? _dragTransform;
 
   /// Shadow (attenuation) heatmap overlay on the field map.
   bool _showShadow = true;
@@ -63,6 +76,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   /// Fullscreen field map: the map fills the whole tab area.
   bool _mapFullscreen = false;
+
+  /// What the tile-pack layer is currently rendering (pack name +
+  /// zoom), for the status line under the map. Null = no tiles.
+  TileLayerStatus _tileStatus = const TileLayerStatus();
 
   /// Compact layer-toggle buttons for the field-map header: tight
   /// padding so all four fit across a phone-width card when wrapped.
@@ -192,6 +209,48 @@ class _TrackingScreenState extends State<TrackingScreen> {
                     setState(() => _showContacts = !_showContacts),
                 child: Text(_showContacts ? 'CONTACTS ON' : 'CONTACTS OFF'),
               ),
+              // Live GPS (v0.28.0, EXPERIMENTAL): continuous position
+              // stream for the "you are here" marker. Denied or
+              // unavailable falls back to the simulated operator
+              // position — the map still works.
+              TextButton(
+                style: _toggleStyle,
+                onPressed: () {
+                  if (state.liveGpsState == LiveGpsState.off ||
+                      state.liveGpsState == LiveGpsState.denied ||
+                      state.liveGpsState == LiveGpsState.unavailable) {
+                    unawaited(state.startLiveGps());
+                  } else {
+                    unawaited(state.stopLiveGps());
+                  }
+                },
+                child: Text(switch (state.liveGpsState) {
+                  LiveGpsState.off => 'LIVE GPS OFF',
+                  LiveGpsState.starting => 'LIVE GPS…',
+                  LiveGpsState.live => 'LIVE GPS ON',
+                  LiveGpsState.denied => 'LIVE GPS DENIED',
+                  LiveGpsState.unavailable => 'LIVE GPS N/A',
+                }),
+              ),
+              // Follow mode: keep the map centered on the operator.
+              // Any map drag turns it off (the operator took over).
+              TextButton(
+                style: _toggleStyle,
+                onPressed: state.mapOperatorPosition == null
+                    ? null
+                    : () => state.setLiveGpsFollow(!state.liveGpsFollow),
+                child: Text(
+                    state.liveGpsFollow ? 'FOLLOW ON' : 'FOLLOW OFF'),
+              ),
+              TextButton(
+                style: _toggleStyle,
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => OfflineMapsScreen(state: state),
+                  ),
+                ),
+                child: const Text('OFFLINE MAPS'),
+              ),
               // Mode label rides the toggle wrap: in the title row it
               // still overflowed narrow cards under fallback fonts.
               Padding(
@@ -224,6 +283,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
           if (_showHealth) _healthLegend() else _driverLegend(nodes),
           const SizedBox(height: 8),
           _mapVisualization(nodes, live),
+          const SizedBox(height: 6),
+          _mapStatusLine(),
           if (live) ...[
             const SizedBox(height: 8),
             Align(
@@ -253,6 +314,17 @@ class _TrackingScreenState extends State<TrackingScreen> {
         final origin = state.gpsOrigin;
         return Stack(
           children: [
+            // Offline tile packs (v0.28.0, EXPERIMENTAL): pack tiles
+            // under the field overlay. No origin or no packs means
+            // no layer — the field canvas is exactly as before.
+            if (state.displayOrigin != null)
+              TilePackMapLayer(
+                transform: tr,
+                origin: state.displayOrigin!,
+                size: size,
+                tilePacks: state.tilePacks,
+                onStatus: (s) => setState(() => _tileStatus = s),
+              ),
             Listener(
               onPointerSignal: (signal) {
                 if (signal is PointerScrollEvent) {
@@ -266,7 +338,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
                     _onPanStart(d.localPosition, size, nodes, live),
                 onPanUpdate: (d) =>
                     _onPanUpdate(d.localPosition, size, live),
-                onPanEnd: (_) => setState(() => _dragging = null),
+                onPanEnd: (_) => setState(() {
+                  _dragging = null;
+                  _dragTransform = null;
+                }),
                 child: CustomPaint(
                   size: size,
                   painter: _TrackingMapPainter(
@@ -281,6 +356,9 @@ class _TrackingScreenState extends State<TrackingScreen> {
                     showRti: _showRti,
                     showHealth: _showHealth,
                     nodeHealth: _showHealth ? state.nodeHealthMap : const {},
+                    operatorPos: state.mapOperatorMeters,
+                    operatorAccuracyM: state.mapOperatorAccuracyM,
+                    operatorLive: state.mapOperatorIsLive,
                   ),
                 ),
               ),
@@ -344,7 +422,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
     );
   }
 
-  _MapTransform _buildTransform(Size size, List<NodePosition> nodes) {
+  FieldMapTransform _buildTransform(Size size, List<NodePosition> nodes) {
     final pts = <math.Point<double>>[];
     for (final n in nodes) {
       pts.add(math.Point(n.x, n.y));
@@ -352,7 +430,19 @@ class _TrackingScreenState extends State<TrackingScreen> {
     pts.add(math.Point(state.defended.x, state.defended.y));
     final t = state.track;
     if (t != null) pts.add(math.Point(t.x, t.y));
-    return _MapTransform.fit(size, pts, zoom: _mapZoom);
+    final fit = FieldMapTransform.fit(size, pts, zoom: _mapZoom);
+    // Follow mode (v0.28.0 live GPS): keep the map centered on the
+    // operator at the same zoom — only the center moves.
+    final op = state.liveGpsFollow ? state.mapOperatorMeters : null;
+    if (op != null) {
+      return FieldMapTransform.centered(
+        size: size,
+        centerX: op.x,
+        centerY: op.y,
+        scale: fit.scale,
+      );
+    }
+    return fit;
   }
 
   void _onPanStart(
@@ -361,6 +451,12 @@ class _TrackingScreenState extends State<TrackingScreen> {
     // Defended point first (topmost).
     final d = tr.toScreen(state.defended.x, state.defended.y);
     if ((p - d).distance < 26) {
+      // A real drag takes over from follow mode (hit-tested against
+      // the visible, follow-centered transform first). The drag
+      // then maps through the captured transform, so turning
+      // follow off here cannot move the grabbed point.
+      if (state.liveGpsFollow) state.setLiveGpsFollow(false);
+      _dragTransform = tr;
       setState(() => _dragging = 'defended');
       return;
     }
@@ -368,6 +464,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
     for (final n in nodes) {
       final s = tr.toScreen(n.x, n.y);
       if ((p - s).distance < 26) {
+        if (state.liveGpsFollow) state.setLiveGpsFollow(false);
+        _dragTransform = tr;
         setState(() => _dragging = n.nodeId);
         return;
       }
@@ -377,7 +475,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
   void _onPanUpdate(Offset p, Size size, bool live) {
     final drag = _dragging;
     if (drag == null) return;
-    final tr = _buildTransform(size, state.effectiveNodes.values.toList());
+    // The pan-start transform, frozen for the drag — never the
+    // live rebuild, which would jump when follow mode turns off.
+    final tr = _dragTransform ??
+        _buildTransform(size, state.effectiveNodes.values.toList());
     final wx = tr.toWorldX(p.dx);
     final wy = tr.toWorldY(p.dy);
     if (drag == 'defended') {
@@ -385,6 +486,38 @@ class _TrackingScreenState extends State<TrackingScreen> {
     } else if (live) {
       state.moveNode(drag, wx, wy);
     }
+  }
+
+  /// One-line map status: where YOU are (live GPS / simulated /
+  /// denied fallback) and what tiles are rendering. Honest about
+  /// distance: when the operator is far from the defended point
+  /// the line says so and points at FOLLOW.
+  Widget _mapStatusLine() {
+    final op = state.mapOperatorPosition;
+    final String you;
+    if (state.mapOperatorIsLive) {
+      final acc = state.mapOperatorAccuracyM;
+      final dist = state.mapOperatorDistanceToDefendedM;
+      final distText = dist != null && dist > 100
+          ? ' · ${dist >= 1000 ? '${(dist / 1000).toStringAsFixed(1)} KM' : '${dist.toStringAsFixed(0)} M'} FROM DEFENDED'
+          : '';
+      you = 'YOU: LIVE GPS${acc != null ? ' ±${acc.toStringAsFixed(0)} M' : ''}$distText'
+          '${state.liveGpsFollow ? ' · FOLLOWING' : ''}';
+    } else if (state.liveGpsState == LiveGpsState.denied ||
+        state.liveGpsState == LiveGpsState.unavailable) {
+      you = 'YOU: GPS ${state.liveGpsState == LiveGpsState.denied ? 'DENIED' : 'UNAVAILABLE'} — SIMULATED FALLBACK';
+    } else if (op != null) {
+      you = 'YOU: SIMULATED (DEMO ANCHOR)';
+    } else {
+      you = 'YOU: NO POSITION — TAP LIVE GPS';
+    }
+    final tiles = _tileStatus.hasTiles
+        ? 'TILES: ${_tileStatus.packName} · Z${_tileStatus.zoom}'
+        : 'TILES: NONE — GRID ONLY';
+    return Text(
+      '$you · $tiles',
+      style: OutrideType.section(10),
+    );
   }
 
   /// Legend: which driver color marks which radio family on the map.
@@ -1002,44 +1135,6 @@ class _TrackScopeNote extends StatelessWidget {
   }
 }
 
-/// World (meters) <-> screen (pixels) transform for the field map.
-class _MapTransform {
-  _MapTransform(
-      {required this.scale, required this.ox, required this.oy});
-
-  final double scale;
-  final double ox;
-  final double oy;
-
-  Offset toScreen(double x, double y) =>
-      Offset(ox + x * scale, oy - y * scale);
-  double toWorldX(double sx) => (sx - ox) / scale;
-  double toWorldY(double sy) => (oy - sy) / scale;
-
-  factory _MapTransform.fit(Size size, List<math.Point<double>> pts,
-      {double zoom = 1.0}) {
-    var minX = -40.0, maxX = 40.0, minY = -40.0, maxY = 40.0;
-    if (pts.isNotEmpty) {
-      minX = pts.map((p) => p.x).reduce(math.min);
-      maxX = pts.map((p) => p.x).reduce(math.max);
-      minY = pts.map((p) => p.y).reduce(math.min);
-      maxY = pts.map((p) => p.y).reduce(math.max);
-      final padX = math.max(12.0, (maxX - minX) * 0.18);
-      final padY = math.max(12.0, (maxY - minY) * 0.18);
-      minX -= padX;
-      maxX += padX;
-      minY -= padY;
-      maxY += padY;
-    }
-    final scale = math.min(size.width / (maxX - minX),
-            size.height / (maxY - minY)) *
-        zoom;
-    final ox = size.width / 2 - (minX + maxX) / 2 * scale;
-    final oy = size.height / 2 + (minY + maxY) / 2 * scale;
-    return _MapTransform(scale: scale, ox: ox, oy: oy);
-  }
-}
-
 class _TrackingMapPainter extends CustomPainter {
   _TrackingMapPainter({
     required this.transform,
@@ -1053,9 +1148,12 @@ class _TrackingMapPainter extends CustomPainter {
     this.showRti = true,
     this.showHealth = false,
     this.nodeHealth = const {},
+    this.operatorPos,
+    this.operatorAccuracyM,
+    this.operatorLive = false,
   });
 
-  final _MapTransform transform;
+  final FieldMapTransform transform;
   final List<NodePosition> nodes;
   final Set<String> disturbedPairs;
   final DefendedPoint defended;
@@ -1071,6 +1169,16 @@ class _TrackingMapPainter extends CustomPainter {
   /// driver color. Disturbed nodes still glow amber on top.
   final bool showHealth;
   final Map<String, NodeHealthStatus> nodeHealth;
+
+  /// Live "you are here" marker (v0.28.0, EXPERIMENTAL): operator
+  /// position in field meters, or null when there is none to draw.
+  /// [operatorAccuracyM] is the live GPS accuracy ring radius in
+  /// meters (null = no ring, e.g. the simulated marker).
+  /// [operatorLive] distinguishes the live fix (green) from the
+  /// simulated fallback (blue, labeled SIM).
+  final ({double x, double y})? operatorPos;
+  final double? operatorAccuracyM;
+  final bool operatorLive;
 
   static String _pairKey(String a, String b) {
     final ids = [a, b]..sort();
@@ -1289,6 +1397,38 @@ class _TrackingMapPainter extends CustomPainter {
         canvas.drawLine(
             tip, tip - dir * 8 - perp * 4.5, arrowPaint);
       }
+    }
+
+    // Operator marker (v0.28.0 live GPS, EXPERIMENTAL): "you are
+    // here", drawn last so it sits on top of tracks and nodes. The
+    // accuracy ring is the live GPS accuracy in meters, scaled to
+    // screen pixels; the simulated marker has no ring and is
+    // labeled SIM so it is never mistaken for a real fix.
+    final op = operatorPos;
+    if (op != null) {
+      final p = tr.toScreen(op.x, op.y);
+      final color =
+          operatorLive ? OutrideColors.green : OutrideColors.blue;
+      final acc = operatorAccuracyM;
+      if (operatorLive && acc != null && acc > 0) {
+        final rPx = acc * tr.scale;
+        if (rPx >= 3) {
+          canvas.drawCircle(
+              p, rPx, Paint()..color = color.withAlpha(18));
+          canvas.drawCircle(
+              p,
+              rPx,
+              Paint()
+                ..color = color.withAlpha(90)
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1.5);
+        }
+      }
+      canvas.drawCircle(p, 12, Paint()..color = color.withAlpha(45));
+      canvas.drawCircle(p, 7, Paint()..color = color.withAlpha(160));
+      canvas.drawCircle(p, 4, Paint()..color = Colors.white);
+      _label(canvas, operatorLive ? 'YOU' : 'YOU · SIM',
+          p + const Offset(16, 6), color);
     }
   }
 

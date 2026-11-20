@@ -103,4 +103,55 @@ class GpsPositioning {
           'GPS FIX TIMED OUT — TRY AGAIN OUTSIDE WITH A CLEAR VIEW OF THE SKY.');
     }
   }
+
+  /// Continuous position stream (live "you are here", v0.28.0).
+  /// Same permission/service checks as [currentFix], run once when
+  /// the stream is first listened to — a denial surfaces as a
+  /// [GpsException] stream error, never a crash, and the caller
+  /// falls back to the simulated operator position.
+  ///
+  /// PRIVACY: fixes flow only to the caller (the map marker). They
+  /// are never transmitted, never persisted, never logged. On web
+  /// the geolocator plugin uses the browser's geolocation API —
+  /// HTTPS + a permission prompt the visitor answers; the position
+  /// stays in their browser.
+  ///
+  /// [distanceFilterM] is the minimum movement between fixes
+  /// (2 m default — walking pace; a stationary device stays quiet
+  /// instead of jittering the marker).
+  static Stream<
+      ({
+        double lat,
+        double lon,
+        double accuracyM,
+        double altitudeM,
+      })> watchPosition({int distanceFilterM = 2}) async* {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw GpsException(
+          'LOCATION SERVICES ARE OFF — ENABLE THEM IN SYSTEM SETTINGS, THEN RETRY.');
+    }
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied) {
+      throw GpsException('LOCATION PERMISSION DENIED.');
+    }
+    if (permission == LocationPermission.deniedForever) {
+      throw GpsException(
+          'LOCATION PERMISSION DENIED FOREVER — ENABLE IT IN SYSTEM SETTINGS.');
+    }
+    yield* Geolocator.getPositionStream(
+      locationSettings: LocationSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: distanceFilterM,
+      ),
+    ).map((pos) => (
+          lat: pos.latitude,
+          lon: pos.longitude,
+          accuracyM: pos.accuracy,
+          altitudeM: pos.altitude,
+        ));
+  }
 }

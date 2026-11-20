@@ -57,9 +57,12 @@ import '../services/remote_id_service.dart';
 import '../services/device_signatures.dart';
 import '../services/hunt_tracker.dart';
 import '../services/offline_map_source.dart';
+import '../services/tile_pack_store.dart';
 import '../services/phone_tier.dart';
 import '../services/device_autoconnect.dart';
 import '../services/fleet_service.dart';
+import '../services/fleet_chat.dart';
+import '../services/fleet_chat_service.dart';
 
 /// Short display ID: strips the driver namespace (`silvus:90550` → `90550`).
 /// (Moved to utils/node_ids.dart; re-exported here for existing callers.)
@@ -1101,6 +1104,92 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // --- Fleet chat (EXPERIMENTAL) ------------------------------------
+  // Text chat over the auto-mesh: the fleet channel (every message
+  // out to all team members) plus 1:1 DMs. Each copy is encrypted
+  // with the recipient's pairwise session key — no group key, no
+  // cloud, no external service. History is in-memory only and is
+  // lost on restart (v1). Design note:
+  // `research_notes/outride-fleet-chat.md`.
+  //
+  // Additive only: the chat service is created lazily like the
+  // fleet service, owns its own UDP listener, and is stopped in
+  // [dispose] next to the fleet service.
+
+  FleetChatService? _fleetChatService;
+
+  /// The fleet chat service, created lazily. Creating it does no
+  /// I/O — the hub listener starts in [startFleetChat].
+  FleetChatService get fleetChatService =>
+      _fleetChatService ??= FleetChatService(
+        ownNodeId: () async {
+          final id = fleetService.record?.nodeId;
+          if (id == null) throw StateError('not in a fleet');
+          return id;
+        },
+        ownCallsign: () => fleetService.callsign,
+        fleetId: () => fleetService.record?.fleetId,
+        inFleet: () => fleetService.inFleet,
+        peers: () => fleetService.peers,
+        // Known wart (see the design note): session keys are read
+        // through the test-hook getter, which returns a copy — the
+        // service always reads them fresh and never caches them.
+        // A production `sessionKeyFor(nodeId)` accessor on
+        // FleetService is the follow-up.
+        sessions: () => fleetService.sessionsForTest,
+        onChanged: () {
+          if (!_disposed) notifyListeners();
+        },
+      );
+
+  /// Start fleet chat (called when the chat screen opens).
+  /// Idempotent; never throws. On web this is a no-op — there is
+  /// no mesh there, and the chat screen shows the simulated /
+  /// no-fleet state instead of crashing.
+  Future<void> startFleetChat() async {
+    try {
+      await fleetChatService.start();
+    } catch (_) {}
+  }
+
+  /// Messages on the fleet channel, oldest first.
+  List<FleetChatMessage> get fleetChannelMessages =>
+      fleetChatService.messagesFor(fleetChatThreadFleet);
+
+  /// Messages in the DM thread with [peerNodeId], oldest first.
+  List<FleetChatMessage> dmMessages(String peerNodeId) =>
+      fleetChatService.messagesFor(fleetChatDmThread(peerNodeId));
+
+  /// Unread count for a thread (`'fleet'` or `'dm:<node id>'`).
+  int chatUnread(String threadId) => fleetChatService.unreadCount(threadId);
+
+  /// Tell the chat service which thread the UI currently shows
+  /// (null for the thread list). Opens the thread and clears its
+  /// unread count.
+  void openChatThread(String? threadId) =>
+      fleetChatService.openThread(threadId);
+
+  /// Send [text] to the fleet channel — every team member.
+  Future<FleetChatSendResult> sendFleetChatMessage(String text) async {
+    final result = await fleetChatService.sendFleet(text);
+    notifyListeners();
+    return result;
+  }
+
+  /// Send [text] as a DM to one peer.
+  Future<FleetChatSendResult> sendDmChatMessage(
+      String peerNodeId, String text) async {
+    final result = await fleetChatService.sendDm(peerNodeId, text);
+    notifyListeners();
+    return result;
+  }
+
+  /// Manually retry a failed (or partial) message.
+  Future<void> retryChatMessage(String threadId, String messageId) async {
+    await fleetChatService.retryMessage(threadId, messageId);
+    notifyListeners();
+  }
+
   // ---- Skydio integration (P1–P3) --------------------------------
 
   /// One-time wiring: BLE advertisements tap into the Remote ID
@@ -1964,6 +2053,127 @@ class AppState extends ChangeNotifier {
   @visibleForTesting
   set operatorPoseForTest(OperatorPoseProvider p) => _operatorPose = p;
 
+  // --- Live GPS ("you are here", v0.28.0, EXPERIMENTAL) -----------
+
+  OperatorPoseProvider? _liveGpsSubscribedPose;
+  StreamSubscription<OperatorPosition>? _liveGpsFixSub;
+  StreamSubscription<LiveGpsState>? _liveGpsStateSub;
+
+  /// Current live-GPS stream state (off / starting / live /
+  /// denied / unavailable). Denied or unavailable means the map
+  /// falls back to the simulated operator position.
+  LiveGpsState get liveGpsState => _operatorPose.liveState;
+
+  /// Latest live-stream fix, or null when the stream never produced
+  /// one (or was stopped). Freshness-guarded by the caller.
+  OperatorPosition? get liveOperatorFix {
+    final fix = _operatorPose.liveFix;
+    if (fix == null) return null;
+    return fix.freshAt(DateTime.now()) ? fix : null;
+  }
+
+  /// Follow mode: keep the Field map centered on the operator while
+  /// on. Any map drag turns it off (the operator took over).
+  bool liveGpsFollow = false;
+
+  /// The position the Field map draws as "YOU": the live fix when
+  /// one is fresh; otherwise the simulated operator position when in
+  /// simulated mode (the demo anchor — the sim's operator stands
+  /// there); otherwise null (no marker). Never a guessed position.
+  OperatorPosition? get mapOperatorPosition {
+    final live = liveOperatorFix;
+    if (live != null) return live;
+    if (settings.simulatedMode) {
+      return OperatorPosition(
+        lat: SimGroundFeed.demoOriginLat,
+        lon: SimGroundFeed.demoOriginLon,
+        at: DateTime.now(),
+      );
+    }
+    return null;
+  }
+
+  /// True when the drawn marker comes from the live GPS stream
+  /// (vs the simulated fallback).
+  bool get mapOperatorIsLive => liveOperatorFix != null;
+
+  /// Accuracy of the drawn marker, when it comes from live GPS.
+  /// Null for the simulated marker (no ring is drawn for it).
+  double? get mapOperatorAccuracyM =>
+      mapOperatorIsLive ? liveOperatorFix!.accuracyM : null;
+
+  /// Field meters of the map operator position, or null when it
+  /// cannot be projected (no position, or no display origin).
+  ({double x, double y})? get mapOperatorMeters {
+    final pos = mapOperatorPosition;
+    final origin = displayOrigin;
+    if (pos == null || origin == null) return null;
+    final m = latLonToMeters(pos.lat, pos.lon, origin.lat, origin.lon);
+    return (x: m.x, y: m.y);
+  }
+
+  /// Distance in meters from the operator to the defended point,
+  /// when both are known. The map status line uses it to say how
+  /// far off the field the operator is (follow centers the map).
+  double? get mapOperatorDistanceToDefendedM {
+    final m = mapOperatorMeters;
+    if (m == null) return null;
+    final dx = m.x - defended.x;
+    final dy = m.y - defended.y;
+    return math.sqrt(dx * dx + dy * dy);
+  }
+
+  void _ensureLiveGpsSubscribed() {
+    if (_liveGpsSubscribedPose == _operatorPose) return;
+    unawaited(_liveGpsFixSub?.cancel());
+    unawaited(_liveGpsStateSub?.cancel());
+    _liveGpsSubscribedPose = _operatorPose;
+    _liveGpsFixSub = _operatorPose.liveFixes.listen((_) => _onLiveGpsFix());
+    _liveGpsStateSub =
+        _operatorPose.liveStates.listen((_) => notifyListeners());
+  }
+
+  /// A live fix arrived. If the field has no origin yet, the first
+  /// fix sets it (same rule as the GPS capture buttons: the first
+  /// capture sets the origin), so the marker can project.
+  void _onLiveGpsFix() {
+    final fix = _operatorPose.liveFix;
+    if (fix != null && gpsOrigin == null) {
+      gpsOrigin = GpsOrigin(lat: fix.lat, lon: fix.lon);
+      unawaited(_saveGpsOrigin());
+      gpsMessage =
+          'ORIGIN SET FROM YOUR POSITION — ${_accuracyNote(fix.accuracyM ?? 0)}';
+    }
+    notifyListeners();
+  }
+
+  /// Starts the live GPS stream. Safe to call in simulated mode
+  /// (the web sim): the browser prompts for geolocation, and a
+  /// denial leaves the simulated marker in place. Never throws —
+  /// [liveGpsState] reports denied/unavailable instead.
+  Future<void> startLiveGps() async {
+    _ensureLiveGpsSubscribed();
+    await _operatorPose.startLive();
+    notifyListeners();
+  }
+
+  /// Stops the live GPS stream and clears follow mode. The marker
+  /// falls back to the simulated position (simulated mode) or
+  /// disappears (live mode, no position).
+  Future<void> stopLiveGps() async {
+    await _operatorPose.stopLive();
+    liveGpsFollow = false;
+    notifyListeners();
+  }
+
+  /// Follow on/off. Turning it on with no operator position is a
+  /// no-op (nothing to follow).
+  void setLiveGpsFollow(bool value) {
+    if (value && mapOperatorPosition == null) return;
+    liveGpsFollow = value;
+    notifyListeners();
+  }
+
   VoiceAlertService get voiceAlertService {
     final cur = _voiceService;
     if (cur != null) return cur;
@@ -2426,6 +2636,12 @@ class AppState extends ChangeNotifier {
   /// pattern. Cache-first; missing tiles degrade to the honestly
   /// labeled blank grid, never an invented map.
   final TileCache tileCache = TileCache();
+
+  /// Offline tile packs (v0.28.0, EXPERIMENTAL): state packs (Tier 1)
+  /// + area packs (Tier 2) as MBTiles files. Separate from the
+  /// 50 MB [tileCache] — a pack is never evicted. Owned here so the
+  /// Tracking screen and the packs screen share one store.
+  final TilePackStore tilePacks = TilePackStore();
 
   /// All built-in keyless tile sources (OSM + USGS only).
   List<TileSource> get tileSources => defaultTileSources;
@@ -4545,6 +4761,13 @@ class AppState extends ChangeNotifier {
     _disposed = true;
     _watchdog?.cancel();
     _watchdog = null;
+    // v0.28.0 live GPS: cancel the pose-provider subscriptions and
+    // close its live-stream controllers with the app state.
+    unawaited(_liveGpsFixSub?.cancel());
+    unawaited(_liveGpsStateSub?.cancel());
+    unawaited(_operatorPose.disposeLive());
+    // v0.28.0 tile packs: close any open pack databases.
+    tilePacks.dispose();
     // Review fix: these periodic timers were never cancelled on
     // dispose and kept firing (phone-fix refresh, heartbeat, and the
     // Remote ID Wi-Fi poll) against a disposed AppState.
@@ -4565,6 +4788,8 @@ class AppState extends ChangeNotifier {
     _cotListener = null;
     unawaited(_fleetService?.stop());
     _fleetService = null;
+    _fleetChatService?.dispose();
+    _fleetChatService = null;
     for (final p in _pollers) {
       p.timer?.cancel();
       try {

@@ -58,11 +58,17 @@ class OperatorPosition {
     required this.lat,
     required this.lon,
     required this.at,
+    this.accuracyM,
   });
 
   final double lat;
   final double lon;
   final DateTime at;
+
+  /// Horizontal accuracy in meters, when known. Live-stream fixes
+  /// carry it (the accuracy ring on the map); one-shot captures
+  /// leave it null — the marker draws without a ring.
+  final double? accuracyM;
 
   /// True when this fix is fresh enough to build a direction from.
   bool freshAt(DateTime now) =>

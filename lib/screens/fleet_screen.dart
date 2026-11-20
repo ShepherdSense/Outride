@@ -18,6 +18,7 @@ import '../services/fleet_dialer.dart';
 import '../services/fleet_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import 'fleet_chat_screen.dart';
 
 class FleetScreen extends StatefulWidget {
   const FleetScreen({super.key, required this.state});
@@ -230,6 +231,24 @@ class _FleetScreenState extends State<FleetScreen> {
               ],
               if (!_busy && inFleet) ...[
                 const SizedBox(height: 8),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          FleetChatScreen(state: _state),
+                    ),
+                  ),
+                  child: const Text('OPEN CHAT — EXPERIMENTAL'),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Fleet channel + direct messages. Encrypted '
+                  'between fleet members only — no cloud, no '
+                  'server. History is on this device only.',
+                  style:
+                      TextStyle(color: OutrideColors.muted, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
                 OutlinedButton(
                   onPressed: _forget,
                   child: const Text('FORGET FLEET'),
@@ -329,29 +348,44 @@ class _FleetScreenState extends State<FleetScreen> {
         : link == 'STALE'
             ? OutrideColors.amber
             : OutrideColors.red;
-    return OutridePanel(
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(p.callsign,
-                    style: OutrideType.rowValue(OutrideColors.onDark)),
-                const SizedBox(height: 4),
-                Text(
-                  'LAST SEEN ${p.lastSeenSecondsAgo(now)}s AGO · '
-                  '${p.memberCount} MEMBERS',
-                  style: const TextStyle(
-                      color: OutrideColors.muted, fontSize: 11),
-                ),
-              ],
-            ),
+    // Tap a team member to open their DM thread (fleet chat,
+    // EXPERIMENTAL). A peer row is otherwise display-only.
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => FleetChatScreen(
+            state: _state,
+            initialDmPeer: p.nodeId,
           ),
-          _roleBadge(p.roleLabel),
-          const SizedBox(width: 8),
-          OutrideChip(label: link, color: linkColor),
-        ],
+        ),
+      ),
+      child: OutridePanel(
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(p.callsign,
+                      style: OutrideType.rowValue(OutrideColors.onDark)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'LAST SEEN ${p.lastSeenSecondsAgo(now)}s AGO · '
+                    '${p.memberCount} MEMBERS — TAP TO MESSAGE',
+                    style: const TextStyle(
+                        color: OutrideColors.muted, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            _roleBadge(p.roleLabel),
+            const SizedBox(width: 8),
+            OutrideChip(label: link, color: linkColor),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right,
+                color: OutrideColors.purple),
+          ],
+        ),
       ),
     );
   }

@@ -7,6 +7,16 @@
 /// (see [OperatorPosition.freshAt]) and the phrase builder treats it
 /// as no position at all.
 ///
+/// LIVE STREAM (v0.28.0, EXPERIMENTAL): [startLive] subscribes to
+/// [GpsPositioning.watchPosition] and pushes every fix to
+/// [liveFixes] with its accuracy, for the Field map's "you are here"
+/// marker + accuracy ring. A denied/unavailable stream sets
+/// [liveState] and the map falls back to the simulated operator
+/// position — never a crash, never a blank map. Fixes from the
+/// stream also refresh the cached [_last] position, so voice alerts
+/// benefit from them too. Stream fixes are never transmitted or
+/// persisted anywhere; they live in memory for the map only.
+///
 /// HEADING IS DEFERRED IN v1: there is no compass heading here.
 /// sensors_plus exposes a raw magnetometer + accelerometer, and a
 /// tilt-compensated heading from them is only trustworthy after
@@ -37,11 +47,43 @@ typedef OperatorFixFetcher = Future<
       double altitudeM,
     })> Function();
 
+/// Watches the EUD position as a stream. Injectable so tests can
+/// drive the live path without the platform location channel.
+typedef OperatorWatchFetcher = Stream<
+    ({
+      double lat,
+      double lon,
+      double accuracyM,
+      double altitudeM,
+    })> Function({int distanceFilterM});
+
+/// State of the live GPS stream (v0.28.0).
+enum LiveGpsState {
+  /// No live stream running.
+  off,
+
+  /// Permission/service checks running; no fix yet.
+  starting,
+
+  /// Fixes flowing.
+  live,
+
+  /// The user denied location permission (or denied it forever).
+  /// The map falls back to the simulated operator position.
+  denied,
+
+  /// Location services off, or the stream failed for another
+  /// reason. Same fallback as [denied].
+  unavailable,
+}
+
 class OperatorPoseProvider {
-  OperatorPoseProvider({OperatorFixFetcher? fetchFix})
-      : _fetchFix = fetchFix ?? GpsPositioning.currentFix;
+  OperatorPoseProvider({OperatorFixFetcher? fetchFix, OperatorWatchFetcher? watchFix})
+      : _fetchFix = fetchFix ?? GpsPositioning.currentFix,
+        _watchFix = watchFix ?? GpsPositioning.watchPosition;
 
   final OperatorFixFetcher _fetchFix;
+  final OperatorWatchFetcher _watchFix;
 
   /// Minimum gap between GPS refresh attempts (a fix lookup can
   /// take seconds on a cold start; hammering it would stall the
@@ -51,6 +93,100 @@ class OperatorPoseProvider {
   OperatorPosition? _last;
   DateTime? _lastAttempt;
   bool _refreshing = false;
+
+  // --- Live stream (v0.28.0) ---------------------------------------
+
+  StreamSubscription<({double lat, double lon, double accuracyM, double altitudeM})>?
+      _liveSub;
+  LiveGpsState _liveState = LiveGpsState.off;
+  OperatorPosition? _liveFix;
+  final _liveFixController = StreamController<OperatorPosition>.broadcast();
+  final _liveStateController = StreamController<LiveGpsState>.broadcast();
+
+  /// Latest live-stream fix, or null when the stream never produced
+  /// one (or was stopped).
+  OperatorPosition? get liveFix => _liveFix;
+
+  /// Current live-stream state.
+  LiveGpsState get liveState => _liveState;
+
+  /// Every live fix, as it arrives. Broadcast — the AppState
+  /// subscribes for map updates; tests subscribe directly.
+  Stream<OperatorPosition> get liveFixes => _liveFixController.stream;
+
+  /// Every live-state change. Broadcast.
+  Stream<LiveGpsState> get liveStates => _liveStateController.stream;
+
+  void _setLiveState(LiveGpsState state) {
+    _liveState = state;
+    if (!_liveStateController.isClosed) _liveStateController.add(state);
+  }
+
+  /// Starts the live position stream. Never throws: a denial or
+  /// failure sets [liveState] to [LiveGpsState.denied] /
+  /// [LiveGpsState.unavailable] and the caller falls back to the
+  /// simulated operator position. A second call while live is a
+  /// no-op. Each fix updates the cached [_last] position too.
+  Future<void> startLive({int distanceFilterM = 2}) async {
+    if (_liveSub != null) return;
+    _setLiveState(LiveGpsState.starting);
+    Stream<({double lat, double lon, double accuracyM, double altitudeM})> stream;
+    try {
+      stream = _watchFix(distanceFilterM: distanceFilterM);
+    } catch (e) {
+      _setLiveState(
+          _isDenied(e) ? LiveGpsState.denied : LiveGpsState.unavailable);
+      return;
+    }
+    _liveSub = stream.listen(
+      (fix) {
+        final pos = OperatorPosition(
+          lat: fix.lat,
+          lon: fix.lon,
+          at: DateTime.now(),
+          accuracyM: fix.accuracyM,
+        );
+        _liveFix = pos;
+        _last = pos;
+        _setLiveState(LiveGpsState.live);
+        if (!_liveFixController.isClosed) _liveFixController.add(pos);
+      },
+      onError: (Object e) {
+        _liveSub = null;
+        _setLiveState(
+            _isDenied(e) ? LiveGpsState.denied : LiveGpsState.unavailable);
+      },
+      onDone: () {
+        _liveSub = null;
+        if (_liveState != LiveGpsState.denied &&
+            _liveState != LiveGpsState.unavailable) {
+          _setLiveState(LiveGpsState.off);
+        }
+      },
+      cancelOnError: true,
+    );
+  }
+
+  /// Stops the live stream. The last live fix is dropped, so the
+  /// map falls back to the simulated operator position.
+  Future<void> stopLive() async {
+    await _liveSub?.cancel();
+    _liveSub = null;
+    _liveFix = null;
+    _setLiveState(LiveGpsState.off);
+  }
+
+  /// Closes the live-stream controllers. Call once, when the owner
+  /// (AppState) is disposed.
+  Future<void> disposeLive() async {
+    await _liveSub?.cancel();
+    _liveSub = null;
+    if (!_liveFixController.isClosed) await _liveFixController.close();
+    if (!_liveStateController.isClosed) await _liveStateController.close();
+  }
+
+  static bool _isDenied(Object e) =>
+      e is GpsException && e.message.contains('DENIED');
 
   /// Last good fix, or null when none has ever arrived.
   OperatorPosition? get lastPosition => _last;
@@ -82,7 +218,12 @@ class OperatorPoseProvider {
     _refreshing = true;
     try {
       final fix = await _fetchFix();
-      _last = OperatorPosition(lat: fix.lat, lon: fix.lon, at: DateTime.now());
+      _last = OperatorPosition(
+        lat: fix.lat,
+        lon: fix.lon,
+        at: DateTime.now(),
+        accuracyM: fix.accuracyM,
+      );
     } catch (e) {
       // No fix: keep the last good one. The phrase builder treats
       // a stale/missing position as "no position" and speaks the
@@ -102,7 +243,12 @@ class OperatorPoseProvider {
   /// loop — the operator asked for it, so waiting is correct.
   Future<OperatorPosition> captureNow() async {
     final fix = await _fetchFix();
-    final pos = OperatorPosition(lat: fix.lat, lon: fix.lon, at: DateTime.now());
+    final pos = OperatorPosition(
+      lat: fix.lat,
+      lon: fix.lon,
+      at: DateTime.now(),
+      accuracyM: fix.accuracyM,
+    );
     _last = pos;
     _lastAttempt = DateTime.now();
     return pos;

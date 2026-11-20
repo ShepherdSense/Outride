@@ -6,11 +6,14 @@ import 'package:flutter/material.dart';
 import '../services/discovery.dart';
 import '../services/remote_id.dart';
 import '../services/adaptive_baseline.dart';
+import '../services/experimental_sensors.dart';
 import '../services/radio_driver.dart';
 import '../services/recorder.dart';
+import '../services/tile_pack.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import 'fleet_screen.dart';
+import 'offline_maps_screen.dart';
 import 'zmeta_join_dialog.dart';
 
 /// Settings: radio manager (multi-driver), detector tuning, Wi-Fi
@@ -742,6 +745,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 'e.g. http://192.168.1.50/shot.jpg'),
           ],
         ]),
+        // Sensors list filter: experimental instruments (Fetch,
+        // Spectrum) stay hidden until the operator opts in here.
+        // The choice is UI-only and lives in the ExperimentalSensors
+        // service, not in AppState — it never touches sensing.
+        _section('Sensors', [
+          ListenableBuilder(
+            listenable: experimentalSensors,
+            builder: (context, _) => SwitchListTile(
+              title: Text('EXPERIMENTAL SENSORS',
+                  style: OutrideType.rowValue(OutrideColors.onDark)),
+              subtitle: Text(
+                'SHOW SENSORS STILL IN TESTING IN THE SENSORS LIST. '
+                'THEY ARE LABELLED EXPERIMENTAL WHEREVER THEY APPEAR.',
+                style: OutrideType.section(10).copyWith(height: 1.6),
+              ),
+              value: experimentalSensors.shown,
+              onChanged: (v) => unawaited(experimentalSensors.set(v)),
+            ),
+          ),
+        ]),
         _section('Fetch voice alerts — EXPERIMENTAL', [
           SwitchListTile(
             title: Text('FETCH VOICE ALERTS',
@@ -888,6 +911,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (mounted) setState(() {});
             },
             child: const Text('RELOAD USER SIGNATURES'),
+          ),
+        ]),
+        _section('Offline map packs — EXPERIMENTAL', [
+          ListenableBuilder(
+            listenable: widget.state.tilePacks,
+            builder: (context, _) {
+              final packs = widget.state.tilePacks.packs;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'DOWNLOAD A MAP BEFORE YOU LEAVE WI-FI — STATE '
+                    'PACKS (ONE TAP PER STATE, ZOOM 0–12) AND AREA '
+                    'PACKS (AROUND THE SEARCH AREA, UP TO ZOOM 16/17). '
+                    'THE FIELD MAP RENDERS FROM THE PACK WITH NO '
+                    'CONNECTIVITY. TILES: USGS NATIONAL MAP (U.S. '
+                    'PUBLIC DOMAIN).',
+                    style:
+                        OutrideType.section(10).copyWith(height: 1.6),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.state.tilePacks.supported
+                        ? '${packs.length} PACK${packs.length == 1 ? '' : 'S'} · '
+                            '${formatBytes(widget.state.tilePacks.totalBytes)} ON DISK'
+                        : 'TILE PACKS ARE NOT AVAILABLE ON WEB.',
+                    style: OutrideType.rowValue(
+                        widget.state.tilePacks.supported
+                            ? OutrideColors.green
+                            : OutrideColors.amber),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            OfflineMapsScreen(state: widget.state),
+                      ),
+                    ),
+                    child: const Text('MANAGE OFFLINE MAP PACKS'),
+                  ),
+                ],
+              );
+            },
           ),
         ]),
         _section('Record & replay', [

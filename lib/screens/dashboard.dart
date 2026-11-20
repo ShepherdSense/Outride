@@ -7,9 +7,10 @@ import '../services/phone_tier.dart';
 import '../services/radio_driver.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
-import 'evidence_sheet.dart';
+import 'events_list_screen.dart';
 import 'fleet_screen.dart';
 import 'hunt_screen.dart';
+import 'radios_links_screen.dart';
 
 /// Dot color for a crossing event's size estimate. Pure function so the
 /// timeline and the detection card agree — and so it's unit-testable.
@@ -70,17 +71,17 @@ class DashboardScreen extends StatelessWidget {
             const SizedBox(height: 12),
             _controlRow(context),
             const SizedBox(height: 12),
-            _radiosCard(),
+            RadiosCard(state: state),
             const SizedBox(height: 12),
             _latestDetection(),
             const SizedBox(height: 12),
-            _linksCompact(disturbed),
+            LinksCard(state: state, disturbed: disturbed),
             const SizedBox(height: 12),
             _spectrumCard(),
             if (state.hasSdrDriver) const SizedBox(height: 12),
             _timelineStrip(context),
             const SizedBox(height: 12),
-            _eventsCard(context),
+            EventsListCard(state: state),
             const SizedBox(height: 12),
             const _ScopeNote(),
           ],
@@ -414,124 +415,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  /// Most recent confirmed crossing, with size estimate and duration.
-  /// Per-radio status: which drivers are polling, their link counts,
-  /// and any errors. The banner above fires if ANY driver detects.
-  Widget _radiosCard() {
-    final statuses = state.driverStatuses;
-    return OutridePanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text('RADIOS', style: OutrideType.section()),
-              const Spacer(),
-              Text(
-                state.settings.simulatedMode
-                    ? 'SIMULATED'
-                    : '${statuses.length} DRIVER${statuses.length == 1 ? '' : 'S'}',
-                style: OutrideType.section(10).copyWith(
-                    color: OutrideColors.muted),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (!state.polling)
-            Text('NOT POLLING — PRESS START.',
-                style: OutrideType.section(10)
-                    .copyWith(color: OutrideColors.muted))
-          else if (statuses.isEmpty)
-            Text('NO RADIOS ENABLED — ADD ONE IN SETTINGS.',
-                style: OutrideType.section(10)
-                    .copyWith(color: OutrideColors.orange))
-          else
-            for (final s in statuses)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 9,
-                      height: 9,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: s.error != null
-                            ? OutrideColors.red
-                            : driverColor(s.driverId),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        s.label,
-                        style: OutrideType.rowValue(
-                                OutrideColors.onDark)
-                            .copyWith(fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Text(
-                      s.error ??
-                          '${s.linkCount} LINKS',
-                      style: OutrideType.section(10).copyWith(
-                          color: s.error != null
-                              ? OutrideColors.red
-                              : OutrideColors.muted),
-                    ),
-                  ],
-                ),
-              ),
-          if (state.polling) _takLinkRow(),
-        ],
-      ),
-    );
-  }
-
-  /// TAK/CoT emit link state, same card as the radios. Only shown
-  /// while polling; OFF is dimmed, LINKED/MULTICAST are neutral,
-  /// RETRYING is amber.
-  Widget _takLinkRow() {
-    final link = state.cotLinkStatus;
-    final color = link == 'LINKED' || link == 'MULTICAST'
-        ? OutrideColors.muted
-        : link == 'RETRYING'
-            ? OutrideColors.orange
-            : OutrideColors.muted.withValues(alpha: 0.5);
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Row(
-        children: [
-          Container(
-            width: 9,
-            height: 9,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: link == 'LINKED'
-                  ? OutrideColors.green
-                  : link == 'RETRYING'
-                      ? OutrideColors.orange
-                      : OutrideColors.muted.withValues(alpha: 0.5),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'TAK LINK',
-              style: OutrideType.rowValue(OutrideColors.onDark)
-                  .copyWith(fontSize: 12),
-            ),
-          ),
-          Text(
-            link,
-            style: OutrideType.section(10).copyWith(color: color),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _latestDetection() {
     if (state.events.isEmpty) {
       return OutridePanel(
@@ -569,7 +452,7 @@ class DashboardScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          _dataRow('TIME', _fmtTime(e.timestamp), OutrideColors.onDark),
+          _dataRow('TIME', fmtEventTime(e.timestamp), OutrideColors.onDark),
           const SizedBox(height: 6),
           _dataRow('LINK', shortLinkKey(e.linkKey), OutrideColors.onDark),
           const SizedBox(height: 6),
@@ -607,52 +490,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  /// One compact row per link direction — health only, no charts.
-  Widget _linksCompact(List<String> disturbed) {
-    final keys = state.history.keys.toList()..sort();
-    return OutridePanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('MESH LINKS', style: OutrideType.section()),
-          const SizedBox(height: 10),
-          if (keys.isEmpty)
-            Text('NO LINK DATA YET', style: OutrideType.rowLabel()),
-          for (final k in keys)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5),
-              child: Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: disturbed.contains(k)
-                          ? OutrideColors.amber
-                          : OutrideColors.green,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(shortLinkKey(k), style: OutrideType.rowValue(OutrideColors.onDark)),
-                  ),
-                  Text(
-                    'SNR ${state.history[k]!.last.snrLabel}  ·  DIP ${state.history[k]!.last.dipLabel}',
-                    style: OutrideType.rowLabel().copyWith(fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// Horizontal event timeline: one dot per crossing (colored by size
-  /// estimate), tap for the evidence sheet. Oldest first, newest last.
-  /// Works on the live event list and on replayed recordings alike —
-  /// both land in [AppState.events].
   Widget _timelineStrip(BuildContext context) {
     final evts = timelineEvents(state.events);
     return OutridePanel(
@@ -683,7 +520,7 @@ class DashboardScreen extends StatelessWidget {
                   final e = evts[i];
                   return InkWell(
                     borderRadius: BorderRadius.circular(8),
-                    onTap: () => _openEvidence(context, e),
+                    onTap: () => openEvidenceSheet(context, state, e),
                     child: Padding(
                       padding:
                           const EdgeInsets.symmetric(horizontal: 8),
@@ -699,7 +536,7 @@ class DashboardScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 5),
-                          Text(_fmtTime(e.timestamp),
+                          Text(fmtEventTime(e.timestamp),
                               style: OutrideType.section(9)),
                         ],
                       ),
@@ -712,11 +549,11 @@ class DashboardScreen extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(_fmtTime(evts.first.timestamp),
+                Text(fmtEventTime(evts.first.timestamp),
                     style: OutrideType.section(9)),
                 Text('SIZE: S/M/L (EST)',
                     style: OutrideType.section(9)),
-                Text(_fmtTime(evts.last.timestamp),
+                Text(fmtEventTime(evts.last.timestamp),
                     style: OutrideType.section(9)),
               ],
             ),
@@ -726,146 +563,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  void _openEvidence(BuildContext context, CrossingEvent e) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: OutrideColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => EvidenceSheet(event: e, state: state),
-    );
-  }
-
-  Widget _eventsCard(BuildContext context) {
-    final stats = state.triageStats;
-    return OutridePanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text('CROSSING EVENTS', style: OutrideType.section()),
-              const Spacer(),
-              Text(
-                'ACK ${stats['acked']} · FA ${stats['falseAlarm']} · '
-                'NEW ${stats['unreviewed']}',
-                style: OutrideType.section(10),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (state.events.isEmpty)
-            Text('NO CROSSINGS DETECTED YET',
-                style: OutrideType.rowLabel()),
-          for (final e in state.events.take(30)) _eventRow(context, e),
-        ],
-      ),
-    );
-  }
-
-  /// One event row: tap for evidence, ACK / FALSE ALARM for triage.
-  /// Acked rows dim; false alarms mute. Triage never deletes the event.
-  Widget _eventRow(BuildContext context, CrossingEvent e) {
-    final verdict = state.triage[AppState.triageKeyFor(e)];
-    final acked = verdict == AppState.triageAcked;
-    final falseAlarm = verdict == AppState.triageFalseAlarm;
-    final aiConf = e.aiConfidence;
-    final aiLabel = e.aiLabel == null
-        ? '—'
-        : aiConf == null
-            ? 'AI ${e.aiLabel} EST'
-            : 'AI ${e.aiLabel} ${(aiConf * 100).toStringAsFixed(0)}% EST';
-    final row = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: () => _openEvidence(context, e),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              falseAlarm
-                  ? Icons.do_not_disturb_on_outlined
-                  : Icons.warning_amber_rounded,
-              color:
-                  falseAlarm ? OutrideColors.muted : OutrideColors.amber,
-              size: 18,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${_fmtTime(e.timestamp)} · ${shortLinkKey(e.linkKey)} · $aiLabel',
-                    style: OutrideType.rowValue(falseAlarm
-                        ? OutrideColors.muted
-                        : OutrideColors.onDark),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'SIZE ${e.sizeEstimate} EST · ${e.direction == 'rise' ? 'RISE +' : 'DIP -'}${e.dipDepth.toStringAsFixed(0)} EST · LASTED ${e.durationLabel}',
-                    style: OutrideType.rowLabel().copyWith(
-                        fontSize: 11,
-                        color: falseAlarm ? OutrideColors.muted : null),
-                  ),
-                  const SizedBox(height: 5),
-                  Row(
-                    children: [
-                      _triageBtn(e, AppState.triageAcked, 'ACK',
-                          OutrideColors.green),
-                      const SizedBox(width: 8),
-                      _triageBtn(e, AppState.triageFalseAlarm,
-                          'FALSE ALARM', OutrideColors.red),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right,
-                color: OutrideColors.muted, size: 18),
-          ],
-        ),
-      ),
-    );
-    return Opacity(opacity: acked ? 0.55 : 1.0, child: row);
-  }
-
-  /// Small triage toggle button. Active state is highlighted; tapping
-  /// the active verdict again clears it.
-  Widget _triageBtn(
-      CrossingEvent e, String verdict, String label, Color color) {
-    final active =
-        state.triage[AppState.triageKeyFor(e)] == verdict;
-    return InkWell(
-      borderRadius: BorderRadius.circular(6),
-      onTap: () => state.triageEvent(e, verdict),
-      child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-        decoration: BoxDecoration(
-          border: Border.all(
-              color: active ? color : OutrideColors.border),
-          borderRadius: BorderRadius.circular(6),
-          color:
-              active ? color.withAlpha(28) : Colors.transparent,
-        ),
-        child: Text(
-          label,
-          style: OutrideType.chip(
-                  active ? color : OutrideColors.muted)
-              .copyWith(fontSize: 10),
-        ),
-      ),
-    );
-  }
-
-  /// Spectrum bands watched by live SDR drivers. One honest bar per
-  /// band — band-median energy (dBFS) with a noise-floor marker. No
-  /// waterfall: a waterfall would imply time resolution the sweep
-  /// doesn't have. Bars follow the same disturbed-link state as the
-  /// tripwire. Shown only when an SDR driver is active.
   Widget _spectrumCard() {
     if (!state.hasSdrDriver) return const SizedBox.shrink();
     final bands = state.sdrBands;
@@ -977,8 +674,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  String _fmtTime(DateTime t) =>
-      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:${t.second.toString().padLeft(2, '0')}';
 }
 
 class _ScopeNote extends StatelessWidget {

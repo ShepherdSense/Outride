@@ -1,14 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
-import 'screens/beam.dart';
-import 'screens/dashboard.dart';
-import 'screens/drone_tab.dart';
-import 'screens/fetch_screen.dart';
-import 'screens/spectrum_screen.dart';
-import 'screens/wifi_vision.dart';
+import 'screens/picture_screen.dart';
+import 'screens/sensors_screen.dart';
 import 'screens/settings.dart';
-import 'screens/tracking.dart';
+import 'services/experimental_sensors.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
 
@@ -17,6 +15,10 @@ void main() {
   // Drone tab video (media_kit/libmpv). Required before any Player
   // is constructed; a no-op cost when the tab is never opened.
   MediaKit.ensureInitialized();
+  // Experimental-sensors list filter (Settings switch): load the
+  // persisted choice before the first frame so the Sensors list
+  // starts in the right state, never flashing in.
+  unawaited(experimentalSensors.load());
   runApp(const OutrideApp());
 }
 
@@ -64,42 +66,27 @@ class _OutrideAppState extends State<OutrideApp> {
             ],
           ),
         ),
+        // Three destinations, not eight: one watch view (Picture),
+        // one instrument list (Sensors), and Settings. Every old tab
+        // still exists — the instruments live one tap away under
+        // Sensors, opened unchanged. Fleet join is an action, not a
+        // destination: Picture fleet chip + Settings Fleet section.
         body: _tab == 0
-            ? DashboardScreen(state: _state)
+            ? PictureScreen(state: _state)
             : _tab == 1
-                ? TrackingScreen(state: _state)
-                : _tab == 2
-                    ? BeamScreen(state: _state)
-                    : _tab == 3
-                        ? WifiVisionScreen(state: _state)
-                        : _tab == 4
-                            ? DroneTab(state: _state)
-                            : _tab == 5
-                                ? FetchScreen(state: _state)
-                                : _tab == 6
-                                    ? SpectrumScreen(state: _state)
-                                    : SettingsScreen(state: _state),
+                ? SensorsScreen(state: _state)
+                : SettingsScreen(state: _state),
         bottomNavigationBar: BottomNavigationBar(
-          // Eight destinations: fixed type keeps every label visible
+          // Three destinations: fixed type keeps every label visible
           // (the shifting default would hide unselected labels).
           type: BottomNavigationBarType.fixed,
           currentIndex: _tab,
           onTap: (i) => setState(() => _tab = i),
           items: const [
             BottomNavigationBarItem(
-                icon: Icon(Icons.radar), label: 'Alerts'),
+                icon: Icon(Icons.radar), label: 'Picture'),
             BottomNavigationBarItem(
-                icon: Icon(Icons.map), label: 'Tracking'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.view_in_ar), label: 'Beam'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.wifi), label: 'WiFi'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.flight), label: 'Drone'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.pets), label: 'Fetch'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.graphic_eq), label: 'Spectrum'),
+                icon: Icon(Icons.tune), label: 'Sensors'),
             BottomNavigationBarItem(
                 icon: Icon(Icons.settings), label: 'Settings'),
           ],

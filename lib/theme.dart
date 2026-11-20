@@ -143,6 +143,66 @@ class OutrideChip extends StatelessWidget {
   }
 }
 
+/// The one button style in the app: transparent purple, never a solid
+/// block. A translucent Outride purple (#A78BFA, ~12% opacity) fill
+/// over the dark background, purple text, hairline purple border.
+/// Draco's call: buttons read purple but none is a solid block.
+/// The global [ElevatedButton] theme below uses [primary], so every
+/// primary action in the app — START/STOP included — gets this style
+/// with no per-screen styling. [outline] is the border-only sibling
+/// for secondary actions (mute, hunt).
+class OutrideButtons {
+  static ButtonStyle get primary => ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.disabled)
+                ? OutrideColors.muted.withAlpha(16)
+                : OutrideColors.purple.withAlpha(31)),
+        foregroundColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.disabled)
+                ? OutrideColors.muted
+                : OutrideColors.purple),
+        side: WidgetStateProperty.resolveWith((states) => BorderSide(
+            color: states.contains(WidgetState.disabled)
+                ? OutrideColors.muted.withAlpha(60)
+                : OutrideColors.purple.withAlpha(110))),
+        shape: WidgetStateProperty.all(RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20))),
+        padding: WidgetStateProperty.all(
+            const EdgeInsets.symmetric(horizontal: 22, vertical: 12)),
+        textStyle: WidgetStateProperty.all(const TextStyle(
+          fontFamily: OutrideType.mono,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.5,
+          fontSize: 13,
+        )),
+      );
+
+  /// Border-only sibling of [primary]: same purple text and hairline
+  /// border, fully transparent fill.
+  static ButtonStyle get outline => ButtonStyle(
+        backgroundColor:
+            WidgetStateProperty.all(Colors.transparent),
+        foregroundColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.disabled)
+                ? OutrideColors.muted
+                : OutrideColors.purple),
+        side: WidgetStateProperty.resolveWith((states) => BorderSide(
+            color: states.contains(WidgetState.disabled)
+                ? OutrideColors.muted.withAlpha(60)
+                : OutrideColors.purple.withAlpha(110))),
+        shape: WidgetStateProperty.all(RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20))),
+        padding: WidgetStateProperty.all(
+            const EdgeInsets.symmetric(horizontal: 22, vertical: 12)),
+        textStyle: WidgetStateProperty.all(const TextStyle(
+          fontFamily: OutrideType.mono,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.5,
+          fontSize: 13,
+        )),
+      );
+}
+
 /// Small floating + / − / 1:1 zoom controls for the 3D views.
 class OutrideZoomControls extends StatelessWidget {
   const OutrideZoomControls({
@@ -256,20 +316,9 @@ ThemeData buildDarkTheme() {
           color: OutrideColors.muted, fontFamily: OutrideType.mono, fontSize: 12),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: OutrideColors.green,
-        foregroundColor: Colors.black,
-        textStyle: const TextStyle(
-          fontFamily: OutrideType.mono,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.5,
-          fontSize: 13,
-        ),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-      ),
+      // One style for every primary action: transparent purple, never
+      // a solid block (see OutrideButtons).
+      style: OutrideButtons.primary,
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
