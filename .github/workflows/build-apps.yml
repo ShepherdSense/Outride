@@ -1,6 +1,8 @@
 # Outride CI — builds the Android APK and Windows app on every push
 # that touches app code, so nobody has to build them by hand.
 # Public repo: GitHub Actions runners are free here.
+# Push a version tag (v0.29.5, ...) and the built apps are attached
+# to a GitHub Release automatically — that's the public download page.
 # First cut builds a debug APK (installs fine on your own devices);
 # release signing via a stored keystore can be added later.
 name: Build apps
@@ -16,6 +18,7 @@ on:
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - '.github/workflows/build-apps.yml'
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -58,3 +61,30 @@ jobs:
         with:
           name: outride-windows
           path: outride-windows.zip
+
+  release:
+    needs: [android, windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: outride-android-debug
+          path: release/
+      - uses: actions/download-artifact@v4
+        with:
+          name: outride-windows
+          path: release/
+      - run: mv release/app-debug.apk release/outride-android.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Outride ${{ github.ref_name }}
+          body: |
+            Android APK (debug build) and Windows app, built automatically.
+            No building needed — download and run.
+          files: |
+            release/outride-android.apk
+            release/outride-windows.zip
