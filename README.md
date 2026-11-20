@@ -9,6 +9,8 @@ Outride turns the RF links of a mesh radio network into a sensing field. When an
 
 Built by **ShepherdSense**.
 
+**Download the latest Outride:** [Android APK](https://github.com/ShepherdSense/Outride/releases/latest/download/outride-android.apk) · [Windows app](https://github.com/ShepherdSense/Outride/releases/latest/download/outride-windows.zip) — no building needed. [All versions](https://github.com/ShepherdSense/Outride/releases)
+
 **Try it in your browser:** [Outride web sim](https://ShepherdSense.github.io/Outride/sim/) — the real app running on simulated radios. No install, no hardware; place as many nodes as you like.
 
 ## Download
