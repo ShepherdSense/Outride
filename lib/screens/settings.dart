@@ -192,7 +192,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ),
     (
       'Offline map packs',
-      'DOWNLOAD A MAP BEFORE YOU LEAVE WI-FI — STATE PACKS (ONE TAP PER STATE, ZOOM 0–12) AND AREA PACKS (AROUND THE SEARCH AREA, UP TO ZOOM 16/17). THE FIELD MAP RENDERS FROM THE PACK WITH NO CONNECTIVITY. TILES: USGS NATIONAL MAP (U.S. PUBLIC DOMAIN).'
+      'DOWNLOAD A MAP BEFORE YOU LEAVE WI-FI — STATE PACKS (ONE TAP PER STATE, ZOOM 0–12) AND AREA PACKS (AROUND THE SEARCH AREA, UP TO ZOOM 16). THE FIELD MAP RENDERS FROM THE PACK WITH NO CONNECTIVITY. TILES: USGS NATIONAL MAP (U.S. PUBLIC DOMAIN). ON WEB, PACKS CANNOT BE DOWNLOADED — THE MAP LOADS USGS TILES LIVE WHEN ONLINE INSTEAD (TOPO BY DEFAULT; HELD IN MEMORY ONLY, NEVER STORED ON DISK).'
     ),
     (
       'Record & replay',
@@ -979,7 +979,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ]),
         _section('Offline map packs — EXPERIMENTAL', [
           ListenableBuilder(
-            listenable: widget.state.tilePacks,
+            // Both notifiers: pack changes and web-loader counts
+            // (tiles loaded this session) must repaint this row.
+            listenable: Listenable.merge(
+                [widget.state.tilePacks, widget.state.webTiles]),
             builder: (context, _) {
               final packs = widget.state.tilePacks.packs;
               return Column(
@@ -989,11 +992,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     widget.state.tilePacks.supported
                         ? '${packs.length} PACK${packs.length == 1 ? '' : 'S'} · '
                             '${formatBytes(widget.state.tilePacks.totalBytes)} ON DISK'
-                        : 'TILE PACKS ARE NOT AVAILABLE ON WEB.',
+                        : 'WEB LIVE TILES — ${widget.state.webTiles.source.displayName.toUpperCase()} · '
+                            '${widget.state.webTiles.tilesLoaded} LOADED THIS SESSION · '
+                            'HELD IN MEMORY ONLY. PACKS ARE NOT AVAILABLE ON WEB.',
                     style: OutrideType.rowValue(
                         widget.state.tilePacks.supported
                             ? OutrideColors.green
-                            : OutrideColors.amber),
+                            : widget.state.webTiles.tilesLoaded > 0
+                                ? OutrideColors.green
+                                : OutrideColors.amber),
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton(

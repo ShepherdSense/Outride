@@ -14,9 +14,11 @@
 ///   cached in memory (max 128 images, oldest dropped first).
 /// * A missing tile renders as NOTHING — the field canvas's own
 ///   10 m grid shows through. Never a crash, never an invented map.
-/// * No packs / no origin / web / a view the packs do not cover:
-///   the layer paints nothing and the map is exactly the field
-///   canvas it always was.
+/// * No packs / no origin / web with no loader / a view the packs
+///   do not cover: the layer paints nothing and the map is exactly
+///   the field canvas it always was. On web, [WebTileLoader]
+///   fetches USGS tiles live instead (see [_loadForWebView]) —
+///   same cap, same grid fallback when offline or out of coverage.
 ///
 /// Projection note: tile bounds are Web-Mercator lat/lon, projected
 /// through the [GeoProjection] anchored on the display origin — the
@@ -38,16 +40,29 @@ import '../services/gps_positioning.dart';
 import '../services/offline_map_source.dart';
 import '../services/tile_pack.dart';
 import '../services/tile_pack_store.dart';
+import '../services/web_tile_loader.dart';
 import '../utils/field_map_transform.dart';
+
+/// Synthetic pack id for web live tiles (see [_loadForWebView]).
+/// No pack ever carries this id — it routes tile reads to the
+/// [WebTileLoader] instead of [TilePackStore.readTileBytes].
+const String kWebTilePackId = 'web';
 
 /// What the tile layer is currently rendering, for the map status
 /// line. [packName] is null when no pack covers the view.
+/// [web] is true when the tiles came from the web loader.
 class TileLayerStatus {
-  const TileLayerStatus({this.packName, this.zoom, this.tilesLoaded = 0});
+  const TileLayerStatus({
+    this.packName,
+    this.zoom,
+    this.tilesLoaded = 0,
+    this.web = false,
+  });
 
   final String? packName;
   final int? zoom;
   final int tilesLoaded;
+  final bool web;
 
   bool get hasTiles => packName != null;
 
@@ -56,10 +71,11 @@ class TileLayerStatus {
       other is TileLayerStatus &&
       packName == other.packName &&
       zoom == other.zoom &&
-      tilesLoaded == other.tilesLoaded;
+      tilesLoaded == other.tilesLoaded &&
+      web == other.web;
 
   @override
-  int get hashCode => Object.hash(packName, zoom, tilesLoaded);
+  int get hashCode => Object.hash(packName, zoom, tilesLoaded, web);
 }
 
 /// Max tiles fetched for one view. A field-sized view needs a
@@ -77,6 +93,7 @@ class TilePackMapLayer extends StatefulWidget {
     required this.origin,
     required this.size,
     required this.tilePacks,
+    this.webTiles,
     this.onStatus,
   });
 
@@ -84,6 +101,12 @@ class TilePackMapLayer extends StatefulWidget {
   final GpsOrigin origin;
   final Size size;
   final TilePackStore tilePacks;
+
+  /// Web live-tile loader (v0.29.3). On web the store is empty by
+  /// design and the layer fetches USGS tiles through this instead.
+  /// Null on native, where packs are the only source. Ignored
+  /// entirely when the store is supported.
+  final WebTileLoader? webTiles;
 
   /// Fired (post-frame, only when changed) with what the layer is
   /// rendering, so the map status line can say so.
@@ -102,35 +125,77 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
   String? _viewPackId;
   int? _viewZoom;
 
+  /// Web source epoch (v0.29.3 reviewer fix): bumped whenever the
+  /// web tile source switches, so a fetch that started on the old
+  /// source can never land after the switch. See [_loadTile].
+  int _webEpoch = 0;
+  String? _lastWebSourceId;
+
   @override
   void initState() {
     super.initState();
-    widget.tilePacks.addListener(_onPacksChanged);
+    _lastWebSourceId = widget.webTiles?.source.id;
+    widget.tilePacks.addListener(_onTilesChanged);
+    widget.webTiles?.addListener(_onWebTilesChanged);
   }
 
   @override
   void didUpdateWidget(covariant TilePackMapLayer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tilePacks != widget.tilePacks) {
-      oldWidget.tilePacks.removeListener(_onPacksChanged);
-      widget.tilePacks.addListener(_onPacksChanged);
+      oldWidget.tilePacks.removeListener(_onTilesChanged);
+      widget.tilePacks.addListener(_onTilesChanged);
+    }
+    if (oldWidget.webTiles != widget.webTiles) {
+      oldWidget.webTiles?.removeListener(_onWebTilesChanged);
+      widget.webTiles?.addListener(_onWebTilesChanged);
+      _lastWebSourceId = widget.webTiles?.source.id;
     }
   }
 
-  void _onPacksChanged() {
-    // Pack set changed (a download finished, a pack was deleted):
+  void _onTilesChanged() {
+    // Tile set changed (a download finished, a pack was deleted):
     // the signature recomputes on the next build and reloads.
+    if (mounted) setState(() {});
+  }
+
+  /// Web loader notification: a source switch bumps the epoch so
+  /// in-flight old-source fetches are dropped in [_loadTile],
+  /// then the signature recomputes on the next build and the
+  /// layer reloads on the new source. A notification with the
+  /// source unchanged (e.g. cache clear) bumps nothing.
+  void _onWebTilesChanged() {
+    final current = widget.webTiles?.source.id;
+    if (current != null && current != _lastWebSourceId) {
+      _lastWebSourceId = current;
+      _webEpoch++;
+    }
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    widget.tilePacks.removeListener(_onPacksChanged);
+    widget.tilePacks.removeListener(_onTilesChanged);
+    widget.webTiles?.removeListener(_onWebTilesChanged);
     for (final image in _images.values) {
       image.dispose();
     }
     _images.clear();
     super.dispose();
+  }
+
+  /// Image-cache key for a tile. The web pack id is shared by
+  /// both USGS sources, so the web key carries the source id too
+  /// — without it a source switch kept painting the old source's
+  /// tiles under the new source's name (reviewer catch, v0.29.3:
+  /// Topo painted as "USGS IMAGERY (WEB)"). Native pack keys are
+  /// unchanged.
+  String _imageKey(String packId, TileCoord coord) {
+    if (packId == kWebTilePackId) {
+      final source = widget.webTiles?.source.id ?? '';
+      return '$packId|$source|${coord.z}|${coord.x}|${coord.y}';
+    }
+    return '$packId|${coord.z}|${coord.x}|${coord.y}';
   }
 
   String _signatureFor() {
@@ -143,7 +208,10 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
         '${widget.size.width.toStringAsFixed(0)}x'
         '${widget.size.height.toStringAsFixed(0)}|'
         '${widget.origin.lat.toStringAsFixed(6)}|'
-        '${widget.origin.lon.toStringAsFixed(6)}|$packs';
+        '${widget.origin.lon.toStringAsFixed(6)}|$packs|'
+        // Web source switch must reload even when the view is
+        // identical (same tiles, different map style).
+        'web:${widget.webTiles?.source.id ?? ''}';
   }
 
   @override
@@ -169,7 +237,7 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
     );
     final out = <TilePlacement>[];
     for (final coord in _viewTiles) {
-      final image = _images['$_viewPackId|${coord.z}|${coord.x}|${coord.y}'];
+      final image = _images[_imageKey(_viewPackId!, coord)];
       if (image == null) continue;
       final b = tileBounds(coord);
       final nw = geo.latLonToMeters(b.north, b.west);
@@ -197,24 +265,144 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
   }
 
   Future<void> _loadForView() async {
-    final store = widget.tilePacks;
-    if (!store.supported) {
-      _setView(null, null, const []);
-      _reportStatus(const TileLayerStatus());
-      return;
+    if (!widget.tilePacks.supported) {
+      return _loadForWebView();
     }
-    final packs = store.renderPacks;
+    final packs = widget.tilePacks.renderPacks;
     if (packs.isEmpty) {
       _setView(null, null, const []);
       _reportStatus(const TileLayerStatus());
       return;
     }
-    final scale = widget.transform.scale;
-    if (scale <= 0 || !scale.isFinite) {
+    final bounds = _viewBounds();
+    if (bounds == null) {
       _setView(null, null, const []);
       _reportStatus(const TileLayerStatus());
       return;
     }
+    TilePackMeta? chosen;
+    for (final pack in packs) {
+      if (bounds.centerLat <= pack.north &&
+          bounds.centerLat >= pack.south &&
+          bounds.centerLon >= pack.west &&
+          bounds.centerLon <= pack.east) {
+        chosen = pack;
+        break;
+      }
+    }
+    if (chosen == null) {
+      _setView(null, null, const []);
+      _reportStatus(const TileLayerStatus());
+      return;
+    }
+    final zoom = bestZoomForView(
+      viewMetersPerPixel: bounds.viewMpp,
+      latitude: bounds.centerLat,
+      minZoom: chosen.minZoom,
+      maxZoom: chosen.maxZoom,
+    );
+    final tiles = tilesForBounds(
+      bounds.north,
+      bounds.south,
+      bounds.west,
+      bounds.east,
+      zoom,
+    );
+    if (tiles.length > kTileLayerMaxTilesPerView) {
+      _setView(null, null, const []);
+      _reportStatus(const TileLayerStatus());
+      return;
+    }
+    _startTileLoads(
+      chosen.id,
+      zoom,
+      tiles,
+      chosen.displayName,
+      web: false,
+    );
+  }
+
+  /// Web path (v0.29.3): no packs on web, so the view's tiles come
+  /// from the live loader instead — same bounds/zoom math, same
+  /// per-view cap, same grid fallback when nothing loads. No
+  /// loader means no tiles (the layer paints nothing, as before).
+  Future<void> _loadForWebView() async {
+    final loader = widget.webTiles;
+    if (loader == null) {
+      _setView(null, null, const []);
+      _reportStatus(const TileLayerStatus());
+      return;
+    }
+    final bounds = _viewBounds();
+    if (bounds == null) {
+      _setView(null, null, const []);
+      _reportStatus(const TileLayerStatus(web: true));
+      return;
+    }
+    final zoom = bestZoomForView(
+      viewMetersPerPixel: bounds.viewMpp,
+      latitude: bounds.centerLat,
+      minZoom: 0,
+      maxZoom: kWebTileMaxZoom,
+    );
+    final tiles = tilesForBounds(
+      bounds.north,
+      bounds.south,
+      bounds.west,
+      bounds.east,
+      zoom,
+    );
+    if (tiles.length > kTileLayerMaxTilesPerView) {
+      _setView(null, null, const []);
+      _reportStatus(const TileLayerStatus(web: true));
+      return;
+    }
+    _startTileLoads(
+      kWebTilePackId,
+      zoom,
+      tiles,
+      '${loader.source.displayName.toUpperCase()} (WEB)',
+      web: true,
+    );
+  }
+
+  /// Shared tail of both load paths: register the view's tiles,
+  /// report what is rendering, and kick off a load per tile.
+  void _startTileLoads(
+    String packId,
+    int zoom,
+    List<TileCoord> tiles,
+    String displayName, {
+    required bool web,
+  }) {
+    _setView(packId, zoom, tiles);
+    _reportStatus(TileLayerStatus(
+      packName: displayName,
+      zoom: zoom,
+      tilesLoaded: _loadedCount(packId, tiles),
+      web: web,
+    ));
+    for (final coord in tiles) {
+      final key = _imageKey(packId, coord);
+      if (_images.containsKey(key) || _loading.contains(key)) continue;
+      _loading.add(key);
+      unawaited(_loadTile(packId, coord, key));
+    }
+  }
+
+  /// View lat/lon bounds from the screen corners, or null when the
+  /// transform scale is unusable. Shared by the pack and web paths.
+  ({
+    double north,
+    double south,
+    double west,
+    double east,
+    double centerLat,
+    double centerLon,
+    double viewMpp,
+  })? _viewBounds() {
+    final scale = widget.transform.scale;
+    if (scale <= 0 || !scale.isFinite) return null;
     // View lat/lon bounds: screen corners -> world meters -> WGS84.
     final geo = GeoProjection(
       originLat: widget.origin.lat,
@@ -237,56 +425,21 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
       if (ll.lon < west) west = ll.lon;
       if (ll.lon > east) east = ll.lon;
     }
-    final centerLat = (north + south) / 2;
-    final centerLon = (west + east) / 2;
-    final viewMpp = 1 / scale;
-
-    TilePackMeta? chosen;
-    for (final pack in packs) {
-      if (centerLat <= pack.north &&
-          centerLat >= pack.south &&
-          centerLon >= pack.west &&
-          centerLon <= pack.east) {
-        chosen = pack;
-        break;
-      }
-    }
-    if (chosen == null) {
-      _setView(null, null, const []);
-      _reportStatus(const TileLayerStatus());
-      return;
-    }
-    final zoom = bestZoomForView(
-      viewMetersPerPixel: viewMpp,
-      latitude: centerLat,
-      minZoom: chosen.minZoom,
-      maxZoom: chosen.maxZoom,
+    return (
+      north: north,
+      south: south,
+      west: west,
+      east: east,
+      centerLat: (north + south) / 2,
+      centerLon: (west + east) / 2,
+      viewMpp: 1 / scale,
     );
-    final tiles = tilesForBounds(north, south, west, east, zoom);
-    if (tiles.length > kTileLayerMaxTilesPerView) {
-      _setView(null, null, const []);
-      _reportStatus(const TileLayerStatus());
-      return;
-    }
-    final packId = chosen.id;
-    _setView(packId, zoom, tiles);
-    _reportStatus(TileLayerStatus(
-      packName: chosen.displayName,
-      zoom: zoom,
-      tilesLoaded: _loadedCount(packId, tiles),
-    ));
-    for (final coord in tiles) {
-      final key = '$packId|${coord.z}|${coord.x}|${coord.y}';
-      if (_images.containsKey(key) || _loading.contains(key)) continue;
-      _loading.add(key);
-      unawaited(_loadTile(packId, coord, key));
-    }
   }
 
   int _loadedCount(String packId, List<TileCoord> tiles) {
     var n = 0;
     for (final c in tiles) {
-      if (_images.containsKey('$packId|${c.z}|${c.x}|${c.y}')) n++;
+      if (_images.containsKey(_imageKey(packId, c))) n++;
     }
     return n;
   }
@@ -298,7 +451,8 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
     // Prune the image cache to the current view + a little slack.
     if (_images.length > kTileLayerMaxCachedImages) {
       final keep = {
-        for (final c in tiles) '$packId|${c.z}|${c.x}|${c.y}',
+        if (packId != null)
+          for (final c in tiles) _imageKey(packId, c),
       };
       final drop = _images.keys
           .where((k) => !keep.contains(k))
@@ -312,11 +466,27 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
   }
 
   Future<void> _loadTile(String packId, TileCoord coord, String key) async {
+    // The web epoch at fetch start: a source switch while this
+    // fetch is in flight invalidates it (reviewer catch, v0.29.3).
+    final epoch = _webEpoch;
     try {
-      final bytes = await widget.tilePacks.readTileBytes(packId, coord);
+      // Web live tiles come from the loader; pack tiles from the
+      // store. Either way a missing tile is a missing tile.
+      final bytes = packId == kWebTilePackId
+          ? await widget.webTiles?.fetchTile(coord)
+          : await widget.tilePacks.readTileBytes(packId, coord);
       if (bytes == null || bytes.isEmpty) return;
       final image = await _decode(bytes);
       if (!mounted) {
+        image.dispose();
+        return;
+      }
+      // A source switch while this fetch was in flight: these
+      // bytes belong to the old source — drop them, never paint
+      // them under the new source's name. (The source-keyed
+      // cache would keep them out of the painted view anyway;
+      // this keeps them out of memory too.)
+      if (packId == kWebTilePackId && epoch != _webEpoch) {
         image.dispose();
         return;
       }
@@ -331,9 +501,10 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
         _reportStatus(TileLayerStatus(
           packName: _viewPackId == null
               ? null
-              : widget.tilePacks.packById(_viewPackId!)?.displayName,
+              : _displayNameFor(_viewPackId!),
           zoom: _viewZoom,
           tilesLoaded: _loadedCount(packId, _viewTiles),
+          web: _viewPackId == kWebTilePackId,
         ));
       }
     } catch (_) {
@@ -342,6 +513,18 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
     } finally {
       _loading.remove(key);
     }
+  }
+
+  /// Display name for a view's pack id: the pack's name on native,
+  /// the web source name on web. Upper-cased to match the pack
+  /// names (and the app's all-caps UI copy).
+  String? _displayNameFor(String packId) {
+    if (packId == kWebTilePackId) {
+      final loader = widget.webTiles;
+      if (loader == null) return null;
+      return '${loader.source.displayName.toUpperCase()} (WEB)';
+    }
+    return widget.tilePacks.packById(packId)?.displayName;
   }
 
   /// Decodes tile bytes to a [ui.Image]. Fails cleanly on corrupt

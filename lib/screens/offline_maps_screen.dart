@@ -108,7 +108,9 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('OFFLINE MAP PACKS')),
       body: ListenableBuilder(
-        listenable: store,
+        // Both notifiers: pack changes and web-loader counts
+        // (tiles loaded this session) must repaint this screen.
+        listenable: Listenable.merge([store, state.webTiles]),
         builder: (context, _) {
           final packs = store.packs;
           return ListView(
@@ -141,12 +143,20 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
               style: OutrideType.section()),
           const SizedBox(height: 6),
           Text(
-            'DOWNLOAD A MAP BEFORE YOU LEAVE WI-FI. THE FIELD MAP '
-            'THEN RENDERS FROM THE PACK WITH NO CONNECTIVITY. TILES: '
-            'USGS NATIONAL MAP (U.S. PUBLIC DOMAIN — FREE, NO '
-            'RESTRICTIONS). OSM STANDARD AND ESRI ARE NOT OFFERED '
-            'FOR PACKS: THEIR TERMS PROHIBIT BULK / OFFLINE '
-            'DOWNLOADING.',
+            store.supported
+                ? 'DOWNLOAD A MAP BEFORE YOU LEAVE WI-FI. THE FIELD MAP '
+                    'THEN RENDERS FROM THE PACK WITH NO CONNECTIVITY. TILES: '
+                    'USGS NATIONAL MAP (U.S. PUBLIC DOMAIN — FREE, NO '
+                    'RESTRICTIONS). OSM STANDARD AND ESRI ARE NOT OFFERED '
+                    'FOR PACKS: THEIR TERMS PROHIBIT BULK / OFFLINE '
+                    'DOWNLOADING.'
+                : 'ON WEB, MAPS LOAD LIVE: THE FIELD MAP FETCHES USGS '
+                    'TILES WHEN ONLINE (TOPO BY DEFAULT, IMAGERY AS THE '
+                    'ALTERNATE — CHANGE IT IN SETTINGS → OFFLINE MAP TILE '
+                    'SOURCE) AND HOLDS THEM IN MEMORY ONLY. NOTHING IS '
+                    'STORED ON DISK HERE, AND PACKS CANNOT BE DOWNLOADED. '
+                    'TILES: USGS NATIONAL MAP (U.S. PUBLIC DOMAIN — FREE, '
+                    'NO RESTRICTIONS).',
             style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 8),
@@ -154,11 +164,15 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
             store.supported
                 ? '$packCount PACK${packCount == 1 ? '' : 'S'} · '
                     '${formatBytes(store.totalBytes)} ON DISK'
-                : 'TILE PACKS ARE NOT AVAILABLE ON WEB — THE MAP '
-                    'RENDERS THE FIELD CANVAS ONLY.',
+                : 'WEB LIVE TILES — ${state.webTiles.source.displayName.toUpperCase()} · '
+                    '${state.webTiles.tilesLoaded} LOADED THIS SESSION'
+                    '${state.webTiles.failedFetches > 0 ? ' · ${state.webTiles.failedFetches} FAILED' : ''} · '
+                    'FETCHED ON DEMAND WHEN ONLINE, HELD IN MEMORY ONLY',
             style: OutrideType.rowValue(store.supported
                 ? OutrideColors.green
-                : OutrideColors.amber),
+                : state.webTiles.tilesLoaded > 0
+                    ? OutrideColors.green
+                    : OutrideColors.amber),
           ),
         ],
       ),
@@ -357,7 +371,10 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
             ),
           ),
           if (!store.supported)
-            Text('NOT ON WEB', style: OutrideType.section(10))
+            // Pack downloads are still unavailable on web (the
+            // live loader fetches tiles on demand instead) — said
+            // as a download limit, not as "no tiles on web".
+            Text('DOWNLOAD N/A ON WEB', style: OutrideType.section(10))
           else if (!def.oneTap)
             Text('USE AN AREA PACK', style: OutrideType.section(10))
           else if (existing == null)
@@ -674,14 +691,28 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
 
   Widget _footerNote() {
     return OutridePanel(
-      child: Text(
-        'PACKS LIVE IN THE APP DOCUMENTS FOLDER (tile_packs/) AS ONE '
-        '.mbtiles FILE EACH. A PACK IS A SNAPSHOT — RE-DOWNLOAD TO '
-        'REFRESH IT. A STATE PACK IS IDENTICAL FOR EVERYONE IN THE '
-        'STATE, SO IT CAN BE PRE-BUILT ONCE AND SHARED; AREA PACKS '
-        'ARE BUILT PER MISSION ON THIS DEVICE. USGS TOPO / IMAGERY '
-        'COVER THE UNITED STATES ONLY.',
-        style: OutrideType.section(10).copyWith(height: 1.6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'PACKS LIVE IN THE APP DOCUMENTS FOLDER (tile_packs/) AS ONE '
+            '.mbtiles FILE EACH. A PACK IS A SNAPSHOT — RE-DOWNLOAD TO '
+            'REFRESH IT. A STATE PACK IS IDENTICAL FOR EVERYONE IN THE '
+            'STATE, SO IT CAN BE PRE-BUILT ONCE AND SHARED; AREA PACKS '
+            'ARE BUILT PER MISSION ON THIS DEVICE. USGS TOPO / IMAGERY '
+            'COVER THE UNITED STATES ONLY.',
+            style: OutrideType.section(10).copyWith(height: 1.6),
+          ),
+          if (!store.supported) ...[
+            const SizedBox(height: 6),
+            Text(
+              'ON WEB, TILES LOAD LIVE FROM USGS WHEN ONLINE AND ARE '
+              'HELD IN MEMORY ONLY — NOTHING IS STORED ON DISK AND '
+              'PACKS CANNOT BE DOWNLOADED HERE.',
+              style: OutrideType.section(10).copyWith(height: 1.6),
+            ),
+          ],
+        ],
       ),
     );
   }

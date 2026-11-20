@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -79,7 +80,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   /// What the tile-pack layer is currently rendering (pack name +
   /// zoom), for the status line under the map. Null = no tiles.
-  TileLayerStatus _tileStatus = const TileLayerStatus();
+  /// Starts as web on web so the first frame never claims tiles
+  /// are unavailable there — the loader is the tile source, even
+  /// before its first tile lands.
+  TileLayerStatus _tileStatus = const TileLayerStatus(web: kIsWeb);
 
   /// Compact layer-toggle buttons for the field-map header: tight
   /// padding so all four fit across a phone-width card when wrapped.
@@ -316,13 +320,17 @@ class _TrackingScreenState extends State<TrackingScreen> {
           children: [
             // Offline tile packs (v0.28.0, EXPERIMENTAL): pack tiles
             // under the field overlay. No origin or no packs means
-            // no layer — the field canvas is exactly as before.
+            // no layer — the field canvas is exactly as before. On
+            // web the packs are unavailable by design and the layer
+            // fetches USGS tiles live through the web loader instead
+            // (v0.29.3) — same cap, same grid fallback.
             if (state.displayOrigin != null)
               TilePackMapLayer(
                 transform: tr,
                 origin: state.displayOrigin!,
                 size: size,
                 tilePacks: state.tilePacks,
+                webTiles: state.webTiles,
                 onStatus: (s) => setState(() => _tileStatus = s),
               ),
             Listener(
@@ -517,11 +525,16 @@ class _TrackingScreenState extends State<TrackingScreen> {
     } else {
       you = 'YOU: NO POSITION — TAP LIVE GPS';
     }
-    final tiles = !state.tilePacks.supported
-        ? 'TILES: NOT AVAILABLE ON WEB — GRID ONLY'
-        : _tileStatus.hasTiles
-            ? 'TILES: ${_tileStatus.packName} · Z${_tileStatus.zoom}'
-            : 'TILES: NONE — GRID ONLY';
+    final tiles = _tileStatus.hasTiles && _tileStatus.tilesLoaded > 0
+        ? 'TILES: ${_tileStatus.packName} · Z${_tileStatus.zoom}'
+        : _tileStatus.web
+            // Web loader is the tile source but nothing loaded
+            // (offline, or outside USGS coverage): the grid is the
+            // map, said plainly.
+            ? 'TILES: WEB — NO TILES — GRID ONLY'
+            : !state.tilePacks.supported
+                ? 'TILES: NOT AVAILABLE ON WEB — GRID ONLY'
+                : 'TILES: NONE — GRID ONLY';
     return Text(
       '$you · $tiles',
       style: OutrideType.section(10),

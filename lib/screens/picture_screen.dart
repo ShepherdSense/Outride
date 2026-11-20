@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../services/build_age.dart';
@@ -785,10 +786,13 @@ class PictureScreen extends StatelessWidget {
 /// never a fake position.
 ///
 /// WEB: tile packs are deliberately unsupported on web
-/// ([TilePackStore.supported] is false there), so the layer paints
-/// nothing and the status line says so; the field grid + live GPS
-/// position still render. The visitor's position stays in their
-/// browser — it is never sent, stored or logged.
+/// ([TilePackStore.supported] is false there), so on web the layer
+/// fetches USGS tiles live through the web loader instead (v0.29.3)
+/// — Topo by default, Imagery as the alternate, held in memory
+/// only. Offline or out of coverage, the field grid + live GPS
+/// position still render and the status line says so. The visitor's
+/// position stays in their browser — it is never sent, stored or
+/// logged.
 class _LiveMapCard extends StatefulWidget {
   const _LiveMapCard({required this.state});
 
@@ -799,7 +803,10 @@ class _LiveMapCard extends StatefulWidget {
 }
 
 class _LiveMapCardState extends State<_LiveMapCard> {
-  TileLayerStatus _tileStatus = const TileLayerStatus();
+  // Starts as web on web so the first frame never claims tiles are
+  // unavailable there — the loader is the tile source, even before
+  // its first tile lands.
+  TileLayerStatus _tileStatus = const TileLayerStatus(web: kIsWeb);
 
   AppState get state => widget.state;
 
@@ -952,6 +959,7 @@ class _LiveMapCardState extends State<_LiveMapCard> {
                           origin: origin,
                           size: size,
                           tilePacks: state.tilePacks,
+                          webTiles: state.webTiles,
                           onStatus: (s) =>
                               setState(() => _tileStatus = s),
                         ),
@@ -1031,8 +1039,9 @@ class _LiveMapCardState extends State<_LiveMapCard> {
   }
 
   /// One-line map status: where YOU are (live GPS / simulated /
-  /// denied fallback) and what tiles are rendering. Honest about
-  /// the web tile-pack limit: packs are not available on web.
+  /// denied fallback) and what tiles are rendering. On web the
+  /// tiles come from the live loader (v0.29.3) — packs are not
+  /// available on web, but the map is no longer grid-only there.
   String _mapStatusLine() {
     final op = state.mapOperatorPosition;
     final String you;
@@ -1055,10 +1064,18 @@ class _LiveMapCardState extends State<_LiveMapCard> {
       you = 'YOU: NO POSITION — TAP LIVE GPS';
     }
     final String tiles;
-    if (!state.tilePacks.supported) {
-      tiles = 'TILES: NOT AVAILABLE ON WEB — GRID ONLY';
-    } else if (_tileStatus.hasTiles) {
+    // A source name is shown only once at least one tile is
+    // actually painted — a covering source with zero tiles loaded
+    // (offline web, or a pack whose tiles all failed to decode)
+    // reads as no tiles, not as a map that is there.
+    if (_tileStatus.hasTiles && _tileStatus.tilesLoaded > 0) {
       tiles = 'TILES: ${_tileStatus.packName} · Z${_tileStatus.zoom}';
+    } else if (_tileStatus.web) {
+      // Web loader is the tile source but nothing loaded (offline,
+      // or outside USGS coverage): the grid is the map, said plainly.
+      tiles = 'TILES: WEB — NO TILES — GRID ONLY';
+    } else if (!state.tilePacks.supported) {
+      tiles = 'TILES: NOT AVAILABLE ON WEB — GRID ONLY';
     } else {
       tiles = 'TILES: NONE — GRID ONLY';
     }

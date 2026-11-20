@@ -58,6 +58,7 @@ import '../services/device_signatures.dart';
 import '../services/hunt_tracker.dart';
 import '../services/offline_map_source.dart';
 import '../services/tile_pack_store.dart';
+import '../services/web_tile_loader.dart';
 import '../services/phone_tier.dart';
 import '../services/device_autoconnect.dart';
 import '../services/fleet_service.dart';
@@ -2652,6 +2653,24 @@ class AppState extends ChangeNotifier {
   /// Tracking screen and the packs screen share one store.
   final TilePackStore tilePacks = TilePackStore();
 
+  /// Web live-tile loader (v0.29.3, EXPERIMENTAL): fetches USGS
+  /// tiles over the network for the map when the app runs in a
+  /// browser, where packs are unavailable by design. Owned here so
+  /// the Tracking screen and the Picture compact map share one
+  /// loader (and one memory cache). On native it is never used —
+  /// the layer takes the pack path whenever the store is supported.
+  /// The source follows the selected tile source when it is a USGS
+  /// source, otherwise USGS Topo (see [syncWebTileSource]).
+  final WebTileLoader webTiles = WebTileLoader();
+
+  /// Keeps the web loader on the selected tile source (USGS only —
+  /// any other selection falls back to USGS Topo). Called after
+  /// persisted settings load and after every settings save; a
+  /// no-op when the resolved source is unchanged.
+  void syncWebTileSource() {
+    webTiles.setSource(webTileSourceFor(settings.tileSourceId));
+  }
+
   /// All built-in keyless tile sources (OSM + USGS only).
   List<TileSource> get tileSources => defaultTileSources;
 
@@ -2834,6 +2853,9 @@ class AppState extends ChangeNotifier {
     final wasWifi = wifiVisionEnabled;
     stop();
     settings = s;
+    // v0.29.3: a settings save can change the tile source — keep
+    // the web loader on the selected USGS source.
+    syncWebTileSource();
     unawaited(_saveSettings());
     NodeUdpHub.setAllowedSourcesFromText(s.trustedSources);
     // A settings save is also how a completed (re-)join lands: drop
@@ -4301,6 +4323,9 @@ class AppState extends ChangeNotifier {
     // after the next settings save.
     _applySkydioSettings();
     unawaited(_configureCot());
+    // v0.29.3: the web tile loader follows the persisted tile
+    // source from boot (USGS only, else USGS Topo).
+    syncWebTileSource();
     notifyListeners();
   }
 
@@ -4777,6 +4802,8 @@ class AppState extends ChangeNotifier {
     unawaited(_operatorPose.disposeLive());
     // v0.28.0 tile packs: close any open pack databases.
     tilePacks.dispose();
+    // v0.29.3 web tiles: drop the loader's listeners.
+    webTiles.dispose();
     // Review fix: these periodic timers were never cancelled on
     // dispose and kept firing (phone-fix refresh, heartbeat, and the
     // Remote ID Wi-Fi poll) against a disposed AppState.
