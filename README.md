@@ -179,6 +179,14 @@ docs/         specs and screenshots
 build_exe.bat / build_apk.bat   one-shot builders
 ```
 
+## Release archive
+
+Every version keeps its own built apps — download whichever version you want, no building needed. New versions are added here as they ship.
+
+| Version | Android | Windows | What's new |
+|---|---|---|---|
+| [v0.29.5](https://github.com/ShepherdSense/Outride/releases/tag/v0.29.5) | [outride-android.apk](https://github.com/ShepherdSense/Outride/releases/download/v0.29.5/outride-android.apk) | [outride-windows.zip](https://github.com/ShepherdSense/Outride/releases/download/v0.29.5/outride-windows.zip) | 1:1 tiles by default, three-tab UI, encrypted fleet chat (experimental), live GPS map |
+
 ## License
 
 Copyright (c) 2026 Draco — GPLv3, see [LICENSE](LICENSE). Contributions welcome: fork, branch, pull request.
