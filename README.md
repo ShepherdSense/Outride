@@ -13,7 +13,14 @@ Built by **ShepherdSense**.
 
 ## Download
 
-**Latest Outride source (ZIP):** [Download ZIP](https://github.com/ShepherdSense/Outride/archive/refs/heads/main.zip) — always the newest commit on main. Unzip it, then build with `build_exe.bat` (Windows) or `build_apk.bat` (Android) as described under Install below. For sensor-node firmware and installer tools, see Field Kit below.
+**Just want the app?** Grab the latest release — no building needed:
+
+- **Android:** [outride-android.apk](https://github.com/ShepherdSense/Outride/releases/latest/download/outride-android.apk) — install on your phone / EUD (debug build; grant location permission for GPS node capture)
+- **Windows:** [outride-windows.zip](https://github.com/ShepherdSense/Outride/releases/latest/download/outride-windows.zip) — unzip and run; unsigned, so SmartScreen → *More info → Run anyway*
+
+Every tagged release is built automatically by GitHub Actions — see [all releases](https://github.com/ShepherdSense/Outride/releases). The newest build from any commit is on the [Actions tab](https://github.com/ShepherdSense/Outride/actions). Outride needs mesh-radio hardware (Silvus, Meshtastic, ESP32 nodes, or an SDR) to sense — without hardware it runs in simulated / phone-only mode. [Try it in your browser first](https://ShepherdSense.github.io/Outride/sim/) — no install, no hardware.
+
+**Build it yourself — latest Outride source (ZIP):** [Download ZIP](https://github.com/ShepherdSense/Outride/archive/refs/heads/main.zip) — always the newest commit on main. Unzip it, then build with `build_exe.bat` (Windows) or `build_apk.bat` (Android) as described under Install below. For sensor-node firmware and installer tools, see Field Kit below.
 
 
 > **Status note — v0.17.0:** the v0.17.0 features (adaptive baseline, RTI imaging weights, ESP32 CSI pipeline, Doppler refinement, WPP-IDP passive radar, validation benches) are implemented and tested in CI, but **field validation is still pending** — they have not yet been proven against live targets. Treat v0.17.0 capabilities as experimental until field-tested.
