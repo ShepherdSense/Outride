@@ -16,7 +16,7 @@ library;
 
 /// Date this version was cut. Update at every version bump.
 /// (DateTime has no const constructor, so this is final, not const.)
-final DateTime buildDate = DateTime(2026, 11, 19);
+final DateTime buildDate = DateTime(2026, 11, 20);
 
 /// Days after the build date before the banner appears.
 const int buildAgeWarningDays = 90;

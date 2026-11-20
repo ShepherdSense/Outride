@@ -19,9 +19,19 @@ class EventsListScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('CROSSING EVENTS')),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [EventsListCard(state: state)],
+      // v0.29.1: the list must listen to AppState itself. This screen
+      // is a pushed route, so it sits outside every destination's
+      // ListenableBuilder (and main.dart has no top-level listener):
+      // before this, triageEvent updated the record and notified, but
+      // nothing in this route rebuilt, so ACK / FALSE ALARM taps never
+      // moved the counters. Wrapping the body here also lets new
+      // events appear while the list is open.
+      body: ListenableBuilder(
+        listenable: state,
+        builder: (context, _) => ListView(
+          padding: const EdgeInsets.all(12),
+          children: [EventsListCard(state: state)],
+        ),
       ),
     );
   }
