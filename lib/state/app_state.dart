@@ -1142,6 +1142,15 @@ class AppState extends ChangeNotifier {
         },
       );
 
+  /// Test-only: replace the chat service (e.g. with one wired to a
+  /// fake mesh) so widget tests can drive a successful send without
+  /// real fleet peers. Disposes the previous service, if any.
+  @visibleForTesting
+  set fleetChatServiceForTest(FleetChatService service) {
+    _fleetChatService?.dispose();
+    _fleetChatService = service;
+  }
+
   /// Start fleet chat (called when the chat screen opens).
   /// Idempotent; never throws. On web this is a no-op — there is
   /// no mesh there, and the chat screen shows the simulated /

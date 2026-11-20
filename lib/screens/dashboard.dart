@@ -140,7 +140,7 @@ class DashboardScreen extends StatelessWidget {
             : blind
                 ? 'NOT MONITORING - CLEAR CANNOT BE ASSUMED'
                 : degraded
-                    ? 'CLEAR ON ${h.liveLinks} OF ${h.expectedLinks} LINK DIRECTION(S)'
+                    ? degradedSubtitle(h)
                     : starting
                         ? 'WAITING FOR LINK DATA'
                         : 'MONITORING ${h.liveLinks} LINK DIRECTION(S)';

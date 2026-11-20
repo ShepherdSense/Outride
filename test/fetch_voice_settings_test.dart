@@ -229,6 +229,20 @@ void main() {
 
     expect(find.byType(Slider), findsWidgets);
     expect(find.textContaining('SPEECH RATE'), findsOneWidget);
+    // v0.29.2: the honest-scope copy moved from the Fetch section
+    // into the help tile at the bottom of Settings (collapsed by
+    // default) — expand it first, then the copy must be there.
+    for (var i = 0;
+        i < 20 && find.text('SETTINGS HELP').evaluate().isEmpty;
+        i++) {
+      await tester.drag(find.byType(ListView), const Offset(0, -800));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.ensureVisible(find.text('SETTINGS HELP'));
+    await tester.pump();
+    await tester.tap(find.text('SETTINGS HELP'));
+    await tester.pump();
     expect(find.textContaining('Direction comes from GPS positions only'),
         findsOneWidget);
     expect(find.textContaining('never identifies anyone as an enemy'),

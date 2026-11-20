@@ -51,10 +51,16 @@ class EventsListCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          // Header stacks (v0.29.2 review): title and counts on
+          // separate lines. A side-by-side Row split the width
+          // 50/50, so the counts string (~176 px at the
+          // letterspaced mono type) truncated at 320–400 px with
+          // double-digit counts. Stacked, both fit at 320 px.
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('CROSSING EVENTS', style: OutrideType.section()),
-              const Spacer(),
+              const SizedBox(height: 2),
               Text(
                 'ACK ${stats['acked']} · FA ${stats['falseAlarm']} · '
                 'NEW ${stats['unreviewed']}',

@@ -52,18 +52,52 @@ class _OutrideAppState extends State<OutrideApp> {
       themeMode: ThemeMode.dark,
       home: Scaffold(
         appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('OUTRIDE',
-                  style: OutrideType.section(16).copyWith(
-                    color: OutrideColors.onDark,
-                    letterSpacing: 5,
-                    fontWeight: FontWeight.w700,
-                  )),
-              Text('RF MESH SENSING OBSERVATORY',
-                  style: OutrideType.section(9)),
-            ],
+          // Mock top bar: OUTRIDE wordmark (RIDE in purple) + a
+          // SIMULATED / LIVE pill. No subtitle — the mock has none.
+          title: ListenableBuilder(
+            listenable: _state,
+            builder: (context, _) {
+              final simulated = _state.settings.simulatedMode;
+              return Row(
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      style: OutrideType.section(20).copyWith(
+                        color: OutrideColors.onDark,
+                        letterSpacing: 1,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      children: const [
+                        TextSpan(text: 'OUT'),
+                        TextSpan(
+                          text: 'RIDE',
+                          style: TextStyle(color: OutrideColors.purple),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: OutrideColors.purpleDeep,
+                      border: Border.all(color: OutrideColors.purpleStrong),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      simulated ? 'SIMULATED' : 'LIVE',
+                      style: const TextStyle(
+                        color: Color(0xFFE9D5FF),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
         // Three destinations, not eight: one watch view (Picture),

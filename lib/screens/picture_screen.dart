@@ -1,21 +1,29 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../services/build_age.dart';
 import '../services/health.dart';
+import '../services/operator_pose.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../utils/field_map_transform.dart';
 import 'dashboard.dart' show eventSizeColor;
 import 'events_list_screen.dart';
 import 'fleet_screen.dart';
 import 'hunt_screen.dart';
 import 'radios_links_screen.dart';
+import 'tile_pack_layer.dart';
+import 'tracking.dart';
 
 /// Picture — the one-glance watch view. Answers one question: is
-/// anything coming, where, and how far? Top to bottom: status banner,
-/// nearest-event card, one big START/STOP, fleet chip, voice row,
-/// 3-event timeline tail.
+/// anything coming, where, and how far? Mock structure
+/// (outride-ui-mock.html): centered verdict, compact live GPS map
+/// where the mock's radar scope sits, 2x2 readout grid from the
+/// nearest-event data, callout card, full-width fleet chip, node
+/// health row — then the working controls the mock does not show:
+/// START/STOP, radios/links, voice/HUNT, latest-events tail.
 ///
 /// Honesty contract, same as the old Alerts tab this replaces:
 /// direction, distance, speed and heading come ONLY from the fused
@@ -40,26 +48,36 @@ class PictureScreen extends StatelessWidget {
       listenable: state,
       builder: (context, _) {
         return ListView(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
           children: [
             _statusBanner(),
-            const SizedBox(height: 12),
-            _radiosLinksRow(context),
-            const SizedBox(height: 12),
-            _nearestEventCard(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
+            _LiveMapCard(state: state),
+            const SizedBox(height: 14),
+            _readoutGrid(),
+            const SizedBox(height: 14),
+            _callout(),
+            if (state.events.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              _eventDetail(),
+            ],
+            const SizedBox(height: 14),
             _startStopButton(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             _fleetChip(context),
             if (buildAgeWarning(now: DateTime.now()) != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               _buildAgeBanner(),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
+            _nodeHealthRow(),
+            const SizedBox(height: 14),
+            _radiosLinksRow(context),
+            const SizedBox(height: 14),
             _voiceRow(context),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             _timelineTail(context),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             const _ScopeNote(),
           ],
         );
@@ -73,8 +91,7 @@ class PictureScreen extends StatelessWidget {
   /// disturbed link with no fused track; TRACK (red) needs a fused
   /// track that is INBOUND. (The old Alerts tab's panel titled the
   /// detected state DETECTED and had no TRACK state.)
-  ({Color color, IconData icon, String title, String subtitle})
-      _bannerState() {
+  ({Color color, String title, String subtitle}) _bannerState() {
     final disturbed = state.disturbedLinks;
     final idle = !state.polling;
     final detected = !idle && disturbed.isNotEmpty;
@@ -83,7 +100,6 @@ class PictureScreen extends StatelessWidget {
     if (idle) {
       return (
         color: OutrideColors.muted,
-        icon: Icons.pause_circle_outline,
         title: 'PAUSED',
         subtitle: 'PRESS START TO BEGIN MONITORING',
       );
@@ -91,7 +107,6 @@ class PictureScreen extends StatelessWidget {
     if (detected && t != null && t.relation == 'INBOUND') {
       return (
         color: OutrideColors.red,
-        icon: Icons.flight_takeoff,
         title: 'TRACK',
         subtitle: 'TRACK — INBOUND · ${t.headingCompass} '
             '${t.headingDeg?.toStringAsFixed(0) ?? '—'}° · '
@@ -101,7 +116,6 @@ class PictureScreen extends StatelessWidget {
     if (detected) {
       return (
         color: OutrideColors.amber,
-        icon: Icons.warning_amber_rounded,
         title: 'POSSIBLE MOVEMENT',
         subtitle: '${disturbed.length} LINK DIRECTION(S) DISTURBED',
       );
@@ -109,7 +123,6 @@ class PictureScreen extends StatelessWidget {
     if (h.level == Coverage.blind) {
       return (
         color: OutrideColors.red,
-        icon: Icons.sensors_off,
         title: 'NO DATA',
         subtitle: 'NOT MONITORING — CLEAR CANNOT BE ASSUMED',
       );
@@ -117,28 +130,31 @@ class PictureScreen extends StatelessWidget {
     if (h.level == Coverage.degraded) {
       return (
         color: OutrideColors.orange,
-        icon: Icons.error_outline,
         title: 'DEGRADED',
-        subtitle: 'CLEAR ON ${h.liveLinks} OF ${h.expectedLinks} '
-            'LINK DIRECTION(S)',
+        // v0.29.2: the subtitle names the actual reason
+        // (see degradedSubtitle) — never "CLEAR ON 12 OF 12"
+        // under a DEGRADED banner.
+        subtitle: degradedSubtitle(h),
       );
     }
     if (h.level == Coverage.starting) {
       return (
         color: OutrideColors.muted,
-        icon: Icons.hourglass_empty,
         title: 'STARTING',
         subtitle: 'WAITING FOR LINK DATA',
       );
     }
     return (
       color: OutrideColors.green,
-      icon: Icons.shield_outlined,
       title: 'CLEAR',
       subtitle: 'MONITORING ${h.liveLinks} LINK DIRECTION(S)',
     );
   }
 
+  /// Mock verdict: big centered title (34 px) + dim subtitle
+  /// (17 px). The LIVE/SIM chip stays in the top row — the mock
+  /// puts SIMULATED in the top bar, and the banner is the only
+  /// place on this screen that still says which mode is live.
   Widget _statusBanner() {
     final b = _bannerState();
     final live = !state.settings.simulatedMode;
@@ -186,59 +202,205 @@ class PictureScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Icon(b.icon, color: b.color, size: 52),
-              const SizedBox(width: 16),
-              Expanded(
-                // Long titles ("POSSIBLE MOVEMENT") shrink to fit one
-                // line instead of overflowing a narrow phone.
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    b.title,
-                    style: OutrideType.readout(32, b.color)
-                        .copyWith(letterSpacing: 3),
-                  ),
+          Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                b.title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                  color: b.color,
                 ),
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 8),
-          Text(b.subtitle, style: OutrideType.section(11)),
+          const SizedBox(height: 6),
+          Text(
+            // The banner title doubles as the verdict word; the
+            // subtitle is the plain-language reading of it.
+            switch (b.title) {
+              'CLEAR' => 'Nothing moving inside the perimeter.',
+              'POSSIBLE MOVEMENT' =>
+                'Something disturbed the RF field. Not confirmed yet.',
+              'TRACK' => 'A fused track is closing on your position.',
+              'DEGRADED' => b.subtitle,
+              'NO DATA' => 'Not monitoring — clear cannot be assumed.',
+              'STARTING' => 'Waiting for link data.',
+              _ => 'Press START to begin monitoring.',
+            },
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                fontSize: 17, color: OutrideColors.dim, height: 1.4),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(b.subtitle,
+                textAlign: TextAlign.center,
+                style: OutrideType.section(11)),
+          ),
         ],
       ),
     );
   }
 
-  /// Nearest event: the latest crossing plus the fused track's
-  /// direction / distance / speed / heading when a track exists.
-  /// Without a track those rows read "—" — position, heading and
-  /// speed need 3+ mesh nodes and are never guessed from one link.
-  Widget _nearestEventCard() {
-    if (state.events.isEmpty) {
-      return OutridePanel(
-        child: Row(
+  /// 2x2 readout grid from the nearest-event data (mock .readout):
+  /// Distance / Direction / Speed / Confidence. Every cell reads
+  /// "—" without a fused track — position, heading and speed need
+  /// 3+ mesh nodes and are never guessed from one link.
+  Widget _readoutGrid() {
+    final t = state.track;
+    final e = state.events.isEmpty ? null : state.events.first;
+    final distM = t == null
+        ? null
+        : math.sqrt(math.pow(t.x - state.defended.x, 2) +
+            math.pow(t.y - state.defended.y, 2));
+    final conf = state.trackConfidence?.displayed ?? e?.aiConfidence;
+    return Column(
+      children: [
+        Row(
           children: [
-            const Icon(Icons.radar,
-                color: OutrideColors.muted, size: 28),
-            const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('NEAREST EVENT', style: OutrideType.section()),
-                  const SizedBox(height: 6),
-                  Text('NO CROSSINGS DETECTED YET',
-                      style: OutrideType.rowLabel()),
-                ],
-              ),
-            ),
+                child: _readoutCell('Distance',
+                    distM == null ? '—' : '≈ ${distM.toStringAsFixed(0)} m')),
+            const SizedBox(width: 10),
+            Expanded(
+                child: _readoutCell(
+                    'Direction',
+                    t == null
+                        ? '—'
+                        : '${t.headingCompass} '
+                            '${t.headingDeg?.toStringAsFixed(0) ?? '—'}°')),
           ],
         ),
-      );
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+                child: _readoutCell(
+                    'Speed',
+                    t?.speedMps == null
+                        ? '—'
+                        : '${t!.speedMps!.toStringAsFixed(1)} m/s')),
+            const SizedBox(width: 10),
+            Expanded(
+                child: _readoutCell(
+                    'Confidence',
+                    conf == null
+                        ? '—'
+                        : '${(conf * 100).toStringAsFixed(0)}%')),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _readoutCell(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: OutrideColors.surface,
+        border: Border.all(color: OutrideColors.border),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label.toUpperCase(),
+              style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: OutrideColors.faint)),
+          const SizedBox(height: 4),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: OutrideColors.onDark)),
+        ],
+      ),
+    );
+  }
+
+  /// Mock callout: title + body, border tinted by banner state.
+  /// Carries the first honesty note when there is no fused track:
+  /// direction / distance / speed need 3+ nodes. The second note
+  /// (size and AI labels are heuristic estimates) lives in the
+  /// scope note at the bottom of the screen.
+  Widget _callout() {
+    final b = _bannerState();
+    final disturbed = state.disturbedLinks;
+    final t = state.track;
+    final e = state.events.isEmpty ? null : state.events.first;
+    final String title;
+    final String body;
+    if (!state.polling) {
+      title = 'Monitoring paused';
+      body = 'Press START — nothing is being watched right now.';
+    } else if (t != null && t.relation == 'INBOUND') {
+      title = 'Act now — closing on you';
+      final distM = math.sqrt(math.pow(t.x - state.defended.x, 2) +
+          math.pow(t.y - state.defended.y, 2));
+      final eta = t.speedMps != null && t.speedMps! > 0
+          ? (distM / t.speedMps!).round()
+          : null;
+      body = 'A fused track is inbound from the ${t.headingCompass}, '
+          'about ${distM.toStringAsFixed(0)} m out'
+          '${eta != null ? ', roughly $eta seconds away' : ''}. '
+          '${e?.aiLabel != null ? 'Possible ${e!.aiLabel} (estimate). ' : ''}'
+          // Honest wording (v0.29.2 review): a fused track here
+          // comes from disturbed mesh links alone — one RF
+          // modality, no second sensor required — so the callout
+          // must not claim two sensors corroborate.
+          'A fused mesh track, not a maybe.';
+    } else if (disturbed.isNotEmpty) {
+      title = 'Possible movement — not confirmed';
+      body = '${disturbed.length} link direction(s) disturbed. '
+          'Direction, distance and speed need 3+ nodes — with 2 '
+          'radios this is a single-link tripwire, so where it is '
+          'cannot be said yet.';
+    } else if (e == null) {
+      title = 'Perimeter quiet';
+      body = 'No crossings detected yet. Direction, distance and '
+          'speed need 3+ nodes — with 2 radios this is a '
+          'single-link tripwire.';
+    } else {
+      title = 'Latest crossing ${_fmtTime(e.timestamp)}';
+      body = 'Size ${e.sizeEstimate} (estimate) · dip '
+          '-${e.dipDepth.toStringAsFixed(0)} on ${shortLinkKey(e.linkKey)}. '
+          'Size and AI labels are heuristic estimates, not identification.';
     }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: OutrideColors.surface2,
+        border: Border.all(color: b.color.withAlpha(120)),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: OutrideColors.onDark)),
+          const SizedBox(height: 2),
+          Text(body,
+              style: const TextStyle(
+                  fontSize: 17, color: OutrideColors.onDark, height: 1.45)),
+        ],
+      ),
+    );
+  }
+
+  /// Nearest-event detail rows (time / direction / distance /
+  /// speed / movement / link / dip / AI classify), mock panel
+  /// styling. Only when an event exists.
+  Widget _eventDetail() {
     final e = state.events.first;
     final t = state.track;
     final sizeColor = eventSizeColor(e.sizeEstimate);
@@ -302,19 +464,6 @@ class PictureScreen extends StatelessWidget {
                       ? '${e.aiLabel} EST'
                       : '${e.aiLabel} ${(e.aiConfidence! * 100).toStringAsFixed(0)}% EST',
               OutrideColors.purple),
-          if (t == null) ...[
-            const SizedBox(height: 10),
-            Text(
-              'DIRECTION · DISTANCE · SPEED NEED 3+ NODES — WITH 2 '
-              'RADIOS THIS IS A SINGLE-LINK TRIPWIRE.',
-              style: OutrideType.section(9),
-            ),
-          ],
-          const SizedBox(height: 10),
-          Text(
-            'SIZE AND AI LABELS ARE HEURISTIC ESTIMATES, NOT IDENTIFICATION.',
-            style: OutrideType.section(9),
-          ),
         ],
       ),
     );
@@ -344,11 +493,13 @@ class PictureScreen extends StatelessWidget {
     );
   }
 
-  /// Fleet chip: one-line fleet status, tap opens the Fleet screen
-  /// (PIN dialer lives there, unchanged). Same as the old Alerts tab.
+  /// Fleet chip, mock style: full-width, surface-2, purple border,
+  /// 60 px, main line 17 px + dim sub-line, chevron. Tap opens the
+  /// Fleet screen (PIN dialer lives there, unchanged).
   Widget _fleetChip(BuildContext context) {
     final inFleet = state.inFleet;
     return InkWell(
+      borderRadius: BorderRadius.circular(16),
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
@@ -356,25 +507,112 @@ class PictureScreen extends StatelessWidget {
           ),
         );
       },
-      child: OutridePanel(
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 60),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: OutrideColors.surface2,
+          border: Border.all(color: OutrideColors.purpleStrong),
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Row(
           children: [
-            Icon(Icons.group,
-                color: inFleet ? OutrideColors.green : OutrideColors.muted,
-                size: 18),
-            const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                state.fleetSummary,
-                style: OutrideType.chip(
-                    inFleet ? OutrideColors.green : OutrideColors.muted),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    state.fleetSummary,
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                        color: inFleet
+                            ? OutrideColors.green
+                            : OutrideColors.onDark),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    inFleet
+                        ? 'Tap to view members, chat and fleet settings'
+                        : 'Tap to join or manage the fleet with a 4-digit PIN',
+                    style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: OutrideColors.dim,
+                        height: 1.35),
+                  ),
+                ],
               ),
             ),
             const Icon(Icons.chevron_right,
-                color: OutrideColors.purple, size: 18),
+                color: OutrideColors.faint, size: 22),
           ],
         ),
       ),
+    );
+  }
+
+  /// Node health row (mock .fleet): one cell per node, dot + label.
+  /// Dot color is link freshness (green/amber/red/grey), same
+  /// derivation as the Field map health overlay.
+  Widget _nodeHealthRow() {
+    final nodes = state.effectiveNodes.values.toList();
+    if (nodes.isEmpty) {
+      return const Text('NO NODES YET — START POLLING FIRST',
+          style: TextStyle(fontSize: 12, color: OutrideColors.faint));
+    }
+    final health = state.nodeHealthMap;
+    return Row(
+      children: [
+        for (var i = 0; i < nodes.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              decoration: BoxDecoration(
+                color: OutrideColors.surface,
+                border: Border.all(color: OutrideColors.border),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: switch (health[nodes[i].nodeId]) {
+                        NodeHealthStatus.ok => OutrideColors.green,
+                        NodeHealthStatus.degraded => OutrideColors.amber,
+                        NodeHealthStatus.dead => OutrideColors.red,
+                        _ => OutrideColors.faint,
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${nodes[i].displayName.toUpperCase()} · '
+                    '${switch (health[nodes[i].nodeId]) {
+                      NodeHealthStatus.ok => 'SYNC',
+                      NodeHealthStatus.degraded => 'STALE',
+                      NodeHealthStatus.dead => 'DEAD',
+                      _ => '—',
+                    }}',
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: OutrideColors.dim),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -537,6 +775,297 @@ class PictureScreen extends StatelessWidget {
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:${t.second.toString().padLeft(2, '0')}';
 }
 
+/// Compact live GPS map for the Picture screen: the same field map
+/// as [TrackingScreen] (tile packs under the field overlay — nodes,
+/// links, defended point, track, operator marker), at a glance.
+/// Tapping it opens the full Field Map. The map is the live GPS map
+/// by Draco's call: the operator marker is the live fix when one is
+/// fresh, the labelled SIM demo anchor in simulated mode, and absent
+/// (with an honest status line) when there is no position at all —
+/// never a fake position.
+///
+/// WEB: tile packs are deliberately unsupported on web
+/// ([TilePackStore.supported] is false there), so the layer paints
+/// nothing and the status line says so; the field grid + live GPS
+/// position still render. The visitor's position stays in their
+/// browser — it is never sent, stored or logged.
+class _LiveMapCard extends StatefulWidget {
+  const _LiveMapCard({required this.state});
+
+  final AppState state;
+
+  @override
+  State<_LiveMapCard> createState() => _LiveMapCardState();
+}
+
+class _LiveMapCardState extends State<_LiveMapCard> {
+  TileLayerStatus _tileStatus = const TileLayerStatus();
+
+  AppState get state => widget.state;
+
+  void _openFullMap(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('FIELD MAP')),
+          body: TrackingScreen(state: state),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final nodes = state.effectiveNodes.values.toList();
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: OutrideColors.surface,
+        border: Border.all(color: OutrideColors.border),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Flexible(
+                child: Text('LIVE GPS MAP',
+                    style: OutrideType.section(),
+                    overflow: TextOverflow.ellipsis),
+              ),
+              IconButton(
+                tooltip: 'FULL FIELD MAP',
+                icon: const Icon(Icons.fullscreen,
+                    color: OutrideColors.muted, size: 20),
+                onPressed: () => _openFullMap(context),
+              ),
+            ],
+          ),
+          // LIVE GPS toggle on its own wrapping row: title +
+          // toggle + fullscreen icon do not fit one 360 px row in
+          // the mono section type (89 px overflow, v0.29.2).
+          Wrap(
+            spacing: 4,
+            runSpacing: 0,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              TextButton(
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () {
+                  if (state.liveGpsState == LiveGpsState.off ||
+                      state.liveGpsState == LiveGpsState.denied ||
+                      state.liveGpsState == LiveGpsState.unavailable) {
+                    unawaited(state.startLiveGps());
+                  } else {
+                    unawaited(state.stopLiveGps());
+                  }
+                },
+                child: Text(switch (state.liveGpsState) {
+                  LiveGpsState.off => 'LIVE GPS OFF',
+                  LiveGpsState.starting => 'LIVE GPS…',
+                  LiveGpsState.live => 'LIVE GPS ON',
+                  LiveGpsState.denied => 'LIVE GPS DENIED',
+                  LiveGpsState.unavailable => 'LIVE GPS N/A',
+                }),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: state.mapOperatorPosition == null
+                    ? null
+                    : () => state.setLiveGpsFollow(!state.liveGpsFollow),
+                child: Text(
+                    state.liveGpsFollow ? 'FOLLOW ON' : 'FOLLOW OFF'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // The range label below is computed from this map's
+          // actual transform (visible width / scale), not a fixed
+          // number: the fit extent varies with node spread.
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final mapSize = Size(constraints.maxWidth, 260);
+              final mapPts = <math.Point<double>>[
+                for (final n in nodes) math.Point(n.x, n.y),
+                math.Point(state.defended.x, state.defended.y),
+              ];
+              final mapTrack = state.track;
+              if (mapTrack != null) {
+                mapPts.add(math.Point(mapTrack.x, mapTrack.y));
+              }
+              final mapFit =
+                  FieldMapTransform.fit(mapSize, mapPts, zoom: 1.0);
+              // Visible width in meters, rounded sensibly.
+              final rangeM = mapSize.width / mapFit.scale;
+              final rangeText = rangeM >= 1000
+                  ? 'RANGE ≈ ${(rangeM / 1000).toStringAsFixed(1)} KM'
+                  : 'RANGE ≈ ${rangeM.toStringAsFixed(0)} M';
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+          GestureDetector(
+            onTap: () => _openFullMap(context),
+            child: SizedBox(
+              height: 260,
+              width: double.infinity,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final size = Size(
+                      constraints.maxWidth, constraints.maxHeight);
+                  final pts = <math.Point<double>>[
+                    for (final n in nodes)
+                      math.Point(n.x, n.y),
+                    math.Point(state.defended.x, state.defended.y),
+                  ];
+                  final t = state.track;
+                  if (t != null) pts.add(math.Point(t.x, t.y));
+                  final fit =
+                      FieldMapTransform.fit(size, pts, zoom: 1.0);
+                  final op = state.liveGpsFollow
+                      ? state.mapOperatorMeters
+                      : null;
+                  final tr = op != null
+                      ? FieldMapTransform.centered(
+                          size: size,
+                          centerX: op.x,
+                          centerY: op.y,
+                          scale: fit.scale,
+                        )
+                      : fit;
+                  final origin = state.displayOrigin;
+                  return Stack(
+                    children: [
+                      if (origin != null)
+                        TilePackMapLayer(
+                          transform: tr,
+                          origin: origin,
+                          size: size,
+                          tilePacks: state.tilePacks,
+                          onStatus: (s) =>
+                              setState(() => _tileStatus = s),
+                        ),
+                      CustomPaint(
+                        size: size,
+                        painter: TrackingMapPainter(
+                          transform: tr,
+                          nodes: nodes,
+                          disturbedPairs: state.disturbedPairs,
+                          defended: state.defended,
+                          track: state.track,
+                          shadow: state.shadow,
+                          showShadow: true,
+                          rti: state.rtiImage,
+                          showRti: true,
+                          operatorPos: state.mapOperatorMeters,
+                          operatorAccuracyM:
+                              state.mapOperatorAccuracyM,
+                          operatorLive: state.mapOperatorIsLive,
+                        ),
+                      ),
+                      const Positioned(
+                        left: 8,
+                        top: 8,
+                        child: Text('N',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: OutrideColors.faint)),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(rangeText,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12, color: OutrideColors.faint)),
+              ),
+              Flexible(
+                child: Text(
+                  state.track != null
+                      ? 'TRACK ${state.track!.relation}'
+                      : state.disturbedLinks.isNotEmpty
+                          ? '${state.disturbedLinks.length} UNCONFIRMED CONTACT(S)'
+                          : 'NO CONTACTS',
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                      fontSize: 12, color: OutrideColors.faint),
+                ),
+              ),
+            ],
+          ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _mapStatusLine(),
+            style: OutrideType.section(10),
+          ),
+          const SizedBox(height: 4),
+          const Text('TAP THE MAP FOR THE FULL FIELD MAP',
+              style: TextStyle(fontSize: 12, color: OutrideColors.faint)),
+        ],
+      ),
+    );
+  }
+
+  /// One-line map status: where YOU are (live GPS / simulated /
+  /// denied fallback) and what tiles are rendering. Honest about
+  /// the web tile-pack limit: packs are not available on web.
+  String _mapStatusLine() {
+    final op = state.mapOperatorPosition;
+    final String you;
+    if (state.mapOperatorIsLive) {
+      final acc = state.mapOperatorAccuracyM;
+      you = 'YOU: LIVE GPS${acc != null ? ' ±${acc.toStringAsFixed(0)} M' : ''}'
+          '${state.liveGpsFollow ? ' · FOLLOWING' : ''}';
+    } else if (state.liveGpsState == LiveGpsState.denied ||
+        state.liveGpsState == LiveGpsState.unavailable) {
+      // "SIMULATED FALLBACK" is only true when a fallback marker
+      // is actually drawn (simulated mode's demo anchor). Live
+      // mode with GPS denied and no fix draws no YOU marker, so
+      // the line must say NO POSITION instead (v0.29.2 review).
+      you = op != null
+          ? 'YOU: GPS ${state.liveGpsState == LiveGpsState.denied ? 'DENIED' : 'UNAVAILABLE'} — SIMULATED FALLBACK'
+          : 'YOU: NO POSITION — TAP LIVE GPS';
+    } else if (op != null) {
+      you = 'YOU: SIMULATED (DEMO ANCHOR)';
+    } else {
+      you = 'YOU: NO POSITION — TAP LIVE GPS';
+    }
+    final String tiles;
+    if (!state.tilePacks.supported) {
+      tiles = 'TILES: NOT AVAILABLE ON WEB — GRID ONLY';
+    } else if (_tileStatus.hasTiles) {
+      tiles = 'TILES: ${_tileStatus.packName} · Z${_tileStatus.zoom}';
+    } else {
+      tiles = 'TILES: NONE — GRID ONLY';
+    }
+    return '$you · $tiles';
+  }
+}
+
 class _ScopeNote extends StatelessWidget {
   const _ScopeNote();
 
@@ -546,7 +1075,8 @@ class _ScopeNote extends StatelessWidget {
       child: Text(
         'SCOPE — WITH 2 RADIOS THIS IS A SINGLE-LINK TRIPWIRE: CROSSING ALERTS '
         'PLUS A CRUDE SIZE ESTIMATE (S/M/L) FROM THE DIP. TYPE, HEADING, SPEED '
-        'AND POSITION NEED 3+ MESH NODES; THOSE READOUTS UNLOCK AS RADIOS JOIN.',
+        'AND POSITION NEED 3+ MESH NODES; THOSE READOUTS UNLOCK AS RADIOS JOIN. '
+        'SIZE AND AI LABELS ARE HEURISTIC ESTIMATES, NOT IDENTIFICATION.',
         style: OutrideType.section(10).copyWith(height: 1.6),
       ),
     );

@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../services/discovery.dart';
-import '../services/remote_id.dart';
 import '../services/adaptive_baseline.dart';
 import '../services/experimental_sensors.dart';
 import '../services/radio_driver.dart';
@@ -129,6 +128,109 @@ class _SettingsScreenState extends State<SettingsScreen> {
   double _scanProgress = 0;
   List<DiscoveredRadio> _found = [];
   String? _scanError;
+
+  /// Settings help tile (v0.29.2): collapsed by default. Every
+  /// explanatory paragraph that used to sit inline on this screen
+  /// lives here instead — nothing deleted, just minimized. Rows keep
+  /// at most a short one-line desc; the longer copy is below.
+  bool _helpExpanded = false;
+
+  /// (Heading, full explanation) pairs for the help tile. The text
+  /// is the original inline copy, verbatim.
+  static const _settingsHelp = <(String, String)>[
+    (
+      'Radios',
+      'EACH RADIO IS POLLED INDEPENDENTLY ON ITS OWN TIMER. NODE IDS ARE NAMESPACED PER DRIVER, SO MESHES NEVER COLLIDE. IN SIMULATED MODE THIS LIST IS IGNORED.'
+    ),
+    (
+      'Detector — poll interval',
+      'POLL INTERVAL IN SECONDS — THE SIM + DEFAULT FOR NEW RADIOS.'
+    ),
+    (
+      'Detector — confirm polls',
+      'CONFIRM POLLS — LOWER IS FASTER, HIGHER IS CALMER (1–5).'
+    ),
+    (
+      'Wi-Fi sensing — dip threshold',
+      'DIP THRESHOLD (DB, 3–12 — LOWER IS MORE SENSITIVE, HIGHER IS CALMER).'
+    ),
+    (
+      'Mesh calibration',
+      'GUIDED "DIAL IT IN" ROUTINE — EMPLACE NODES, KEEP THE AREA CLEAR 30–60 S, THEN NUDGE THE NAMED WORST NODE UNTIL FADE LEVELS STOP IMPROVING. SETS THE DRIFT-COMPENSATED REFERENCE ANCHORS; DETECTION ITSELF STAYS DETERMINISTIC. ONE ROUND ≈ 10 S AFTER MOVING THE NAMED NODE. STOP WHEN NO LINK IMPROVES > 1 DB ACROSS TWO ROUNDS, OR TAP DONE.'
+    ),
+    (
+      'SDR station',
+      'PASSIVE-DOPPLER GEOMETRY. CONVERTED TO FIELD-LOCAL METERS AT APPLY TIME (GPS FIELD ORIGIN WHEN SET, ELSE RELATIVE TO THE STATION). PERSISTED WITH THE OTHER SETTINGS. AUTO STATION: TAKE THE STATION POSITION FROM THIS DEVICE\'S GPS FIX — THE SDR HOST IN THE FIELD SETUP. RE-ARMS WHEN THE DEVICE MOVES >25 M; A FIX OLDER THAN 30 MIN DOES NOT ARM. THE eNB POSITION HAS NO AUTO SOURCE AND STAYS MANUAL. MANUAL STATION VALUES BELOW ARE KEPT, JUST NOT USED WHILE AUTO IS ON.'
+    ),
+    (
+      'Simulated mode',
+      'GENERATE SYNTHETIC LINK DATA — NO HARDWARE NEEDED. CLEARLY LABELED ON THE DASHBOARD.'
+    ),
+    (
+      'Wi-Fi vision',
+      'USE THIS DEVICE\'S WI-FI ADAPTER AS AN AMBIENT DISTURBANCE SENSOR. COARSE RSSI SENSING — DETECTS DISTURBANCES, CANNOT IMAGE OBJECTS.'
+    ),
+    (
+      'Camera confirmation',
+      'MOTION WEBHOOK (POST /motion) OR ONVIF EVENTS. CAMERA EVIDENCE MAY UPGRADE DISPLAYED CONFIDENCE BUT NEVER VETOES OR SUPPRESSES A DETECTION.'
+    ),
+    (
+      'Experimental sensors',
+      'SHOW SENSORS STILL IN TESTING IN THE SENSORS LIST. THEY ARE LABELLED EXPERIMENTAL WHEREVER THEY APPEAR.'
+    ),
+    (
+      'Fetch voice alerts',
+      'SPEAK FETCH TRIP ALERTS THROUGH THE EUD AUDIO OUTPUT INTO HEARING PROTECTION. DEFAULT OFF. Spoken Fetch trip alerts through the EUD audio output into hearing protection. Direction comes from GPS positions only — indoors GPS usually dies and alerts speak without direction rather than guessing. Reaches the operator carrying this EUD; whole-team distribution needs a radio bridge and is out of scope. The Fetch senses movement and presence — it never identifies anyone as an enemy, a friendly, or a civilian, and never states armed status. The operator decides what a detection is.'
+    ),
+    (
+      'Phone-only tier',
+      'WHEN ON, THE DASHBOARD SHOWS THE PHONE-ONLY BANNER — BUT ONLY WHEN NO MESH/SDR HARDWARE IS ATTACHED. MESH USERS SEE ZERO CHANGE FROM THIS DEFAULT-ON SWITCH. LABELS ARE ALWAYS PHONE-ONLY / PHONE-RANGE (TENS OF METERS, NOT AREA COVERAGE). (THIS SWITCH CONTROLS ONLY THE BANNER; HUNT IS REACHED FROM ITS OWN BUTTON AND IS NOT GATED BY THIS SWITCH.)'
+    ),
+    (
+      'Device signature library',
+      'MATCH PHONE-VISIBLE WI-FI / BLE OBSERVATIONS AGAINST A SIGNATURE CATALOG. EVERY MATCH IS A HYPOTHESIS — NOT IDENTITY. USER-ADDED ENTRIES COME FROM device_signatures.json IN THE APP DOCUMENTS DIRECTORY AND ARE LABELED USER-ADDED. DEFAULT OFF. MISSING device_signatures.json MEANS BUILT-IN ONLY — THAT IS NORMAL, NOT AN ERROR.'
+    ),
+    (
+      'Offline map packs',
+      'DOWNLOAD A MAP BEFORE YOU LEAVE WI-FI — STATE PACKS (ONE TAP PER STATE, ZOOM 0–12) AND AREA PACKS (AROUND THE SEARCH AREA, UP TO ZOOM 16/17). THE FIELD MAP RENDERS FROM THE PACK WITH NO CONNECTIVITY. TILES: USGS NATIONAL MAP (U.S. PUBLIC DOMAIN).'
+    ),
+    (
+      'Record & replay',
+      'CAPTURE RAW SAMPLES TO CSV FOR LATER REPLAY. REPLAY RUNS THE RECORDING THROUGH THE LIVE DETECTOR — TUNE THRESHOLDS, THEN REPLAY TO SEE WHAT THE NEW SETTINGS WOULD HAVE CAUGHT.'
+    ),
+    (
+      'Emit CoT tracks',
+      'PUBLISH THE FUSED TRACK AS CURSOR-ON-TARGET EVENTS. EMIT-ONLY, DEFENSIVE-ONLY — THE ONLY BYTES SENT ARE THIS MESH\'S OWN TRACK EVENTS, AND AFFILIATION IS ALWAYS UNKNOWN. DEFAULT OFF.'
+    ),
+    (
+      'Listen for emitter tracks',
+      'INGEST COT TRACKS WHOSE CALLSIGN MATCHES THE EMITTER PREFIX (RX-ONLY). SPATIAL COINCIDENCES WITH THE OUTRIDE TRACK UPGRADE CONFIDENCE ONLY — NEVER SUBTRACT, NEVER ORIGINATE A TRACK. DEFAULT OFF.'
+    ),
+    (
+      'Drones — friendly fleet',
+      'YOUR OWN AIRFRAMES, BY BATTERY-TRAY SERIAL. CONTROLLER COT (FRIENDLY AIR EVENTS ON THE LISTENER ABOVE) MAKES THEM CLASS B POSITION NODES; A SERIAL HERE LETS OUTRIDE NAME THEM AND CORROBORATE OTHER FEEDS. A MATCH CHANGES RENDERING ONLY — IT NEVER SUPPRESSES A TRACK OR AN ALERT.'
+    ),
+    (
+      'Remote ID',
+      'DECODE FAA REMOTE ID BROADCASTS (ASTM F3411) FROM BLE ADVERTISEMENTS AND WI-FI BEACONS — RECEIVE-ONLY. CIVIL DRONES ONLY: MILITARY D-MODEL AIRFRAMES (X10D) MAY BROADCAST NOTHING, SO NO CONTACT NEVER MEANS NO DRONE. DEFAULT OFF. WI-FI NAN REMOTE ID UNAVAILABLE ON STOCK ANDROID — BLE / WI-FI BEACON ONLY. BLE 5 EXTENDED ADVERTISING IS PLATFORM-DEPENDENT.'
+    ),
+    (
+      'Drone tab streams',
+      'DRONE TAB STREAMS — VIEWER-SIDE SELECTION ONLY. EO AND THERMAL ARE SEPARATE SIMULTANEOUS STREAMS FROM THE AIRCRAFT; THE TAB SWITCHES WHICH ONE YOU WATCH. THE EO STREAM IS THE PILOT’S FOCAL VIEW (WIDE/TELE IS THE PILOT’S CHOICE). OUTRIDE SENDS NOTHING TO THE AIRCRAFT.'
+    ),
+    (
+      'ZMeta export',
+      'HAVE AN INVITE CODE FROM A HUB OPERATOR? JOINING REGISTERS THIS MESH — OVER ENCRYPTED HTTPS WHEN THE HUB SUPPORTS IT (NO OTHER APP NEEDED), OR VIA WIREGUARD. EXPORT STAYS OFF UNTIL YOU ENABLE IT BELOW. SEND EACH DETECTION TO THE HUB AS OBSERVATION / INFERENCE EVENTS (EMIT-ONLY). ONE MESH = ONE PLATFORM ID — THE GATEWAY FUSES ACROSS MESHES. LINK SECURED: CONFIRM THE WIREGUARD TUNNEL TO THE GATEWAY IS ACTIVE. THE APP CANNOT VERIFY THIS ITSELF. MESH HEARTBEAT: PERIODIC "ALIVE, HERE IS THE PLATFORM" TO THE GATEWAY (SYSTEM_EVENT). FOR TEAMS ON THE MOVE. DEFAULT OFF.'
+    ),
+    (
+      'Fleet',
+      'EUDS ON THE SAME WI-FI FORM ONE FLEET WITH A 4-DIGIT PIN. NO MANUAL IP ENTRY, NO MANUAL PAIRING. A FLEET WITH A LIVE SILVUS RADIO SENSES; WITHOUT ONE IT IS A FUSION PEER.'
+    ),
+    (
+      'Auto-connect Silvus USB',
+      'WHEN A SILVUS RADIO APPEARS ON USB (172.17.97.X), VALIDATE IT AND ADD IT AUTOMATICALLY. UNPLUGGING NEVER REMOVES THE CONFIG — IT RECONNECTS ON REPLUG.'
+    ),
+  ];
 
   /// Cached replay listing: creating the Future in build() refires the
   /// disk scan on every rebuild. Refreshed when recordings change.
@@ -597,13 +699,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.all(12),
       children: [
         _section('Radios', [
-          Text(
-            'EACH RADIO IS POLLED INDEPENDENTLY ON ITS OWN TIMER. '
-            'NODE IDS ARE NAMESPACED PER DRIVER, SO MESHES NEVER COLLIDE. '
-            'IN SIMULATED MODE THIS LIST IS IGNORED.',
-            style: OutrideType.section(10).copyWith(height: 1.6),
-          ),
-          const SizedBox(height: 8),
           for (int i = 0;
               i < widget.state.radioConfigs.length;
               i++)
@@ -673,13 +768,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ]),
         _section('Detector', [
-          _field(_interval, 'Poll interval, seconds (sim + default for new radios)', 'e.g. 0.25',
+          _field(_interval, 'Poll interval (seconds)', 'e.g. 0.25',
               numeric: true),
           const SizedBox(height: 10),
           _field(_threshold, 'Dip threshold (radio units, est.)', 'e.g. 6.0',
               numeric: true),
           const SizedBox(height: 10),
-          _field(_confirm, 'Confirm polls — lower is faster, higher is calmer (1–5)',
+          _field(_confirm, 'Confirm polls (1–5)',
               'e.g. 2',
               numeric: true),
           const SizedBox(height: 10),
@@ -690,7 +785,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _section('Wi-Fi sensing', [
           _field(
               _wifiThreshold,
-              'Dip threshold (dB, 3–12 — lower is more sensitive, higher is calmer)',
+              'Dip threshold (dB, 3–12)',
               'e.g. 6.0',
               numeric: true),
         ]),
@@ -698,8 +793,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SwitchListTile(
             title: Text('SIMULATED MODE', style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
-              'GENERATE SYNTHETIC LINK DATA — NO HARDWARE NEEDED. '
-              'CLEARLY LABELED ON THE DASHBOARD.',
+              'GENERATE SYNTHETIC LINK DATA — NO HARDWARE NEEDED.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _simulated,
@@ -708,8 +802,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SwitchListTile(
             title: Text('WI-FI VISION', style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
-              'USE THIS DEVICE\'S WI-FI ADAPTER AS AN AMBIENT DISTURBANCE SENSOR. '
-              'COARSE RSSI SENSING — DETECTS DISTURBANCES, CANNOT IMAGE OBJECTS.',
+              'USE THIS DEVICE\'S WI-FI ADAPTER AS AN AMBIENT SENSOR.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _wifiVision,
@@ -722,9 +815,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text('CAMERA CONFIRMATION (UPGRADE)',
                 style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
-              'MOTION WEBHOOK (POST /motion) OR ONVIF EVENTS. CAMERA '
-              'EVIDENCE MAY UPGRADE DISPLAYED CONFIDENCE BUT NEVER '
-              'VETOES OR SUPPRESSES A DETECTION.',
+              'MOTION WEBHOOK OR ONVIF EVENTS — MAY UPGRADE CONFIDENCE, NEVER VETOES.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _camera,
@@ -756,8 +847,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: Text('EXPERIMENTAL SENSORS',
                   style: OutrideType.rowValue(OutrideColors.onDark)),
               subtitle: Text(
-                'SHOW SENSORS STILL IN TESTING IN THE SENSORS LIST. '
-                'THEY ARE LABELLED EXPERIMENTAL WHEREVER THEY APPEAR.',
+                'SHOW SENSORS STILL IN TESTING IN THE SENSORS LIST.',
                 style: OutrideType.section(10).copyWith(height: 1.6),
               ),
               value: experimentalSensors.shown,
@@ -770,8 +860,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text('FETCH VOICE ALERTS',
                 style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
-              'SPEAK FETCH TRIP ALERTS THROUGH THE EUD AUDIO OUTPUT '
-              'INTO HEARING PROTECTION. DEFAULT OFF.',
+              'SPEAK FETCH TRIP ALERTS THROUGH EUD AUDIO. DEFAULT OFF.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _fetchVoiceEnabled,
@@ -814,34 +903,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : null,
             child: const Text('Test voice'),
           ),
-          const SizedBox(height: 10),
-          Text(
-            'Spoken Fetch trip alerts through the EUD audio output '
-            'into hearing protection. Direction comes from GPS '
-            'positions only — indoors GPS usually dies and alerts '
-            'speak without direction rather than guessing. Reaches '
-            'the operator carrying this EUD; whole-team distribution '
-            'needs a radio bridge and is out of scope. The Fetch '
-            'senses movement and presence — it never identifies '
-            'anyone as an enemy, a friendly, or a civilian, and never '
-            'states armed status. The operator decides what a '
-            'detection is.',
-            style: OutrideType.section(10)
-                .copyWith(height: 1.6, color: OutrideColors.muted),
-          ),
         ]),
         _section('Phone tier, signatures & offline maps', [
           SwitchListTile(
             title: Text('PHONE-ONLY TIER',
                 style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
-              'WHEN ON, THE DASHBOARD SHOWS THE PHONE-ONLY BANNER '
-              '— BUT ONLY WHEN NO MESH/SDR HARDWARE IS ATTACHED. '
-              'MESH USERS SEE ZERO CHANGE FROM THIS DEFAULT-ON '
-              'SWITCH. LABELS ARE ALWAYS PHONE-ONLY / PHONE-RANGE '
-              '(TENS OF METERS, NOT AREA COVERAGE). (THIS SWITCH '
-              'CONTROLS ONLY THE BANNER; HUNT IS REACHED FROM ITS '
-              'OWN BUTTON AND IS NOT GATED BY THIS SWITCH.)',
+              'SHOWS THE PHONE-ONLY BANNER ONLY WHEN NO MESH/SDR HARDWARE IS ATTACHED.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _phoneTierEnabled,
@@ -851,11 +919,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text('DEVICE SIGNATURE LIBRARY',
                 style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
-              'MATCH PHONE-VISIBLE WI-FI / BLE OBSERVATIONS AGAINST '
-              'A SIGNATURE CATALOG. EVERY MATCH IS A HYPOTHESIS — '
-              'NOT IDENTITY. USER-ADDED ENTRIES COME FROM '
-              'device_signatures.json IN THE APP DOCUMENTS '
-              'DIRECTORY AND ARE LABELED USER-ADDED. DEFAULT OFF.',
+              'MATCH WI-FI / BLE OBSERVATIONS AGAINST A SIGNATURE CATALOG. EVERY MATCH IS A HYPOTHESIS — NOT IDENTITY.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _deviceSignaturesEnabled,
@@ -922,17 +986,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'DOWNLOAD A MAP BEFORE YOU LEAVE WI-FI — STATE '
-                    'PACKS (ONE TAP PER STATE, ZOOM 0–12) AND AREA '
-                    'PACKS (AROUND THE SEARCH AREA, UP TO ZOOM 16/17). '
-                    'THE FIELD MAP RENDERS FROM THE PACK WITH NO '
-                    'CONNECTIVITY. TILES: USGS NATIONAL MAP (U.S. '
-                    'PUBLIC DOMAIN).',
-                    style:
-                        OutrideType.section(10).copyWith(height: 1.6),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
                     widget.state.tilePacks.supported
                         ? '${packs.length} PACK${packs.length == 1 ? '' : 'S'} · '
                             '${formatBytes(widget.state.tilePacks.totalBytes)} ON DISK'
@@ -967,10 +1020,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text('EMIT COT TRACKS',
                 style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
-              'PUBLISH THE FUSED TRACK AS CURSOR-ON-TARGET EVENTS. '
-              'EMIT-ONLY, DEFENSIVE-ONLY — THE ONLY BYTES SENT ARE '
-              'THIS MESH\'S OWN TRACK EVENTS, AND AFFILIATION IS ALWAYS '
-              'UNKNOWN. DEFAULT OFF.',
+              'PUBLISH THE FUSED TRACK AS CURSOR-ON-TARGET EVENTS. EMIT-ONLY, DEFENSIVE-ONLY. DEFAULT OFF.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _cotEmitEnabled,
@@ -1029,10 +1079,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text('LISTEN FOR EMITTER TRACKS',
                 style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
-              'INGEST COT TRACKS WHOSE CALLSIGN MATCHES THE EMITTER '
-              'PREFIX (RX-ONLY). SPATIAL COINCIDENCES WITH THE OUTRIDE '
-              'TRACK UPGRADE CONFIDENCE ONLY — NEVER SUBTRACT, NEVER '
-              'ORIGINATE A TRACK. DEFAULT OFF.',
+              'INGEST COT TRACKS MATCHING THE EMITTER PREFIX (RX-ONLY). DEFAULT OFF.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _cotListenEnabled,
@@ -1074,15 +1121,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ]),
         _section('Drones — friendly fleet & Remote ID', [
-          Text(
-            'YOUR OWN AIRFRAMES, BY BATTERY-TRAY SERIAL. CONTROLLER COT '
-            '(FRIENDLY AIR EVENTS ON THE LISTENER ABOVE) MAKES THEM CLASS B '
-            'POSITION NODES; A SERIAL HERE LETS OUTRIDE NAME THEM AND '
-            'CORROBORATE OTHER FEEDS. A MATCH CHANGES RENDERING ONLY — '
-            'IT NEVER SUPPRESSES A TRACK OR AN ALERT.',
-            style: OutrideType.section(10).copyWith(height: 1.6),
-          ),
-          const SizedBox(height: 10),
           TextField(
             controller: _friendlySerials,
             minLines: 2,
@@ -1099,13 +1137,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text('REMOTE ID RECEIVER',
                 style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
-              'DECODE FAA REMOTE ID BROADCASTS (ASTM F3411) FROM BLE '
-              'ADVERTISEMENTS AND WI-FI BEACONS — RECEIVE-ONLY. CIVIL '
-              'DRONES ONLY: MILITARY D-MODEL AIRFRAMES (X10D) MAY '
-              'BROADCAST NOTHING, SO NO CONTACT NEVER MEANS NO DRONE. '
-              'DEFAULT OFF. '
-              '${kRidWifiNanUnavailableNote.toUpperCase()}. '
-              '${kRidBle5Note.toUpperCase()}.',
+              'DECODE FAA REMOTE ID BROADCASTS (ASTM F3411) — '
+              'RECEIVE-ONLY. DEFAULT OFF.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _remoteIdEnabled,
@@ -1113,15 +1146,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               setState(() => _remoteIdEnabled = v);
               unawaited(widget.state.setRemoteIdEnabled(v));
             },
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'DRONE TAB STREAMS — VIEWER-SIDE SELECTION ONLY. EO AND '
-            'THERMAL ARE SEPARATE SIMULTANEOUS STREAMS FROM THE '
-            'AIRCRAFT; THE TAB SWITCHES WHICH ONE YOU WATCH. THE EO '
-            'STREAM IS THE PILOT’S FOCAL VIEW (WIDE/TELE IS THE '
-            'PILOT’S CHOICE). OUTRIDE SENDS NOTHING TO THE AIRCRAFT.',
-            style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 10),
           _field(_droneEoUrl, 'EO stream URL (local link)',
@@ -1163,10 +1187,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'HAVE AN INVITE CODE FROM A HUB OPERATOR? JOINING REGISTERS '
-            'THIS MESH — OVER ENCRYPTED HTTPS WHEN THE HUB SUPPORTS IT '
-            '(NO OTHER APP NEEDED), OR VIA WIREGUARD. EXPORT STAYS OFF '
-            'UNTIL YOU ENABLE IT BELOW.',
+            'HAVE AN INVITE CODE? JOINING REGISTERS THIS MESH. EXPORT STAYS OFF UNTIL YOU ENABLE IT.',
             style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           if (_zmetaTransport == 'https' || _zmetaTransport == 'wireguard')
@@ -1210,13 +1231,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
               _zmetaTransport == 'https'
-                  ? 'SEND EACH DETECTION TO THE HUB AS OBSERVATION / INFERENCE EVENTS (HTTPS, EMIT-ONLY). '
-                      'ONE MESH = ONE PLATFORM ID — THE GATEWAY FUSES ACROSS MESHES.'
+                  ? 'SEND EACH DETECTION TO THE HUB OVER HTTPS (EMIT-ONLY).'
                   : _zmetaTransport == 'wireguard'
-                      ? 'SEND EACH DETECTION TO A ZMETA GATEWAY AS OBSERVATION / INFERENCE EVENTS (WIREGUARD, EMIT-ONLY). '
-                          'ONE MESH = ONE PLATFORM ID — THE GATEWAY FUSES ACROSS MESHES.'
-                      : 'SEND EACH DETECTION TO A ZMETA GATEWAY AS OBSERVATION / INFERENCE EVENTS (UDP, EMIT-ONLY). '
-                          'ONE MESH = ONE PLATFORM ID — THE GATEWAY FUSES ACROSS MESHES.',
+                      ? 'SEND EACH DETECTION TO A ZMETA GATEWAY OVER WIREGUARD (EMIT-ONLY).'
+                      : 'SEND EACH DETECTION TO A ZMETA GATEWAY OVER UDP (EMIT-ONLY).',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _zmetaEnabled,
@@ -1251,8 +1269,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: Text('LINK SECURED (WIREGUARD)',
                   style: OutrideType.rowValue(OutrideColors.onDark)),
               subtitle: Text(
-                'CONFIRM THE WIREGUARD TUNNEL TO THE GATEWAY IS ACTIVE. '
-                'THE APP CANNOT VERIFY THIS ITSELF.',
+                'CONFIRM THE WIREGUARD TUNNEL TO THE GATEWAY IS ACTIVE.',
                 style: OutrideType.section(10).copyWith(height: 1.6),
               ),
               value: _zmetaSecured,
@@ -1263,8 +1280,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: Text('MESH HEARTBEAT (PLATFORM_STATUS)',
                   style: OutrideType.rowValue(OutrideColors.onDark)),
               subtitle: Text(
-                'PERIODIC "ALIVE, HERE IS THE PLATFORM" TO THE GATEWAY '
-                '(SYSTEM_EVENT). FOR TEAMS ON THE MOVE. DEFAULT OFF.',
+                'PERIODIC "ALIVE" MESSAGE TO THE GATEWAY. DEFAULT OFF.',
                 style: OutrideType.section(10).copyWith(height: 1.6),
               ),
               value: _zmetaHeartbeatEnabled,
@@ -1302,10 +1318,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'EUDS ON THE SAME WI-FI FORM ONE FLEET WITH A 4-DIGIT '
-            'PIN. NO MANUAL IP ENTRY, NO MANUAL PAIRING. A FLEET '
-            'WITH A LIVE SILVUS RADIO SENSES; WITHOUT ONE IT IS A '
-            'FUSION PEER.',
+            'EUDS ON THE SAME WI-FI FORM ONE FLEET WITH A 4-DIGIT PIN. NO MANUAL IP ENTRY, NO MANUAL PAIRING.',
             style: OutrideType.section(10).copyWith(height: 1.6),
           ),
           const SizedBox(height: 10),
@@ -1410,9 +1423,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text('AUTO-CONNECT SILVUS USB',
                 style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
-              'WHEN A SILVUS RADIO APPEARS ON USB (172.17.97.X), '
-              'VALIDATE IT AND ADD IT AUTOMATICALLY. UNPLUGGING NEVER '
-              'REMOVES THE CONFIG — IT RECONNECTS ON REPLUG.',
+              'WHEN A SILVUS RADIO APPEARS ON USB, VALIDATE IT AND ADD IT AUTOMATICALLY.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _autoConnectSilvusUsb,
@@ -1435,7 +1446,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
+        _helpTile(),
+        const SizedBox(height: 16),
       ],
+    );
+  }
+
+  /// The single help tile at the bottom of Settings: collapsed by
+  /// default, tap to expand/collapse. Holds every explanatory
+  /// paragraph that used to sit inline ([_settingsHelp]).
+  Widget _helpTile() {
+    return OutridePanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => setState(() => _helpExpanded = !_helpExpanded),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text('SETTINGS HELP',
+                      style: OutrideType.section()),
+                ),
+                Text(
+                  _helpExpanded ? 'TAP TO COLLAPSE' : 'TAP TO EXPAND',
+                  style: OutrideType.section(10),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  _helpExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: OutrideColors.purple,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+          if (_helpExpanded) ...[
+            const SizedBox(height: 12),
+            for (final entry in _settingsHelp) ...[
+              Text(entry.$1,
+                  style: OutrideType.rowValue(OutrideColors.onDark)),
+              const SizedBox(height: 2),
+              Text(entry.$2,
+                  style: OutrideType.section(10).copyWith(height: 1.6)),
+              const SizedBox(height: 10),
+            ],
+          ],
+        ],
+      ),
     );
   }
 
@@ -1446,14 +1505,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final st = widget.state;
     final cs = st.calibrationState;
     final body = <Widget>[
-      Text(
-        'GUIDED "DIAL IT IN" ROUTINE — EMPLACE NODES, KEEP THE AREA '
-        'CLEAR 30–60 S, THEN NUDGE THE NAMED WORST NODE UNTIL FADE '
-        'LEVELS STOP IMPROVING. SETS THE DRIFT-COMPENSATED REFERENCE '
-        'ANCHORS; DETECTION ITSELF STAYS DETERMINISTIC.',
-        style: OutrideType.section(10).copyWith(height: 1.6),
-      ),
-      const SizedBox(height: 10),
     ];
     if (cs == CalibrationState.calibrating) {
       body.addAll([
@@ -1485,12 +1536,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(color: OutrideColors.red)),
             ),
           ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'ONE ROUND ≈ 10 S AFTER MOVING THE NAMED NODE. STOP WHEN NO '
-          'LINK IMPROVES > 1 DB ACROSS TWO ROUNDS, OR TAP DONE.',
-          style: OutrideType.section(10).copyWith(height: 1.6),
         ),
       ]);
     } else if (cs == CalibrationState.stable ||
@@ -1604,23 +1649,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ? OutrideColors.red
             : OutrideColors.muted;
     return [
-      Text(
-        'PASSIVE-DOPPLER GEOMETRY. CONVERTED TO FIELD-LOCAL METERS AT '
-        'APPLY TIME (GPS FIELD ORIGIN WHEN SET, ELSE RELATIVE TO THE '
-        'STATION). PERSISTED WITH THE OTHER SETTINGS.',
-        style: OutrideType.section(10).copyWith(height: 1.6),
-      ),
-      const SizedBox(height: 10),
       SwitchListTile(
         title: Text('AUTO STATION (GPS)',
             style: OutrideType.rowValue(OutrideColors.onDark)),
         subtitle: Text(
-          'TAKE THE STATION POSITION FROM THIS DEVICE\'S GPS FIX — THE '
-          'SDR HOST IN THE FIELD SETUP. RE-ARMS WHEN THE DEVICE MOVES '
-          '>25 M; A FIX OLDER THAN 30 MIN DOES NOT ARM. THE eNB '
-          'POSITION HAS NO AUTO SOURCE AND STAYS MANUAL. MANUAL '
-          'STATION VALUES BELOW ARE KEPT, JUST NOT USED WHILE AUTO '
-          'IS ON.',
+          'TAKE THE STATION POSITION FROM THIS DEVICE\'S GPS FIX — THE eNB STAYS MANUAL.',
           style: OutrideType.section(10).copyWith(height: 1.6),
         ),
         value: _sdrAutoStation,
@@ -1712,7 +1745,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           else
             Switch(
               value: c.enabled,
-              activeThumbColor: OutrideColors.green,
+              activeThumbColor: OutrideColors.purple,
               onChanged: (v) async {
                 await widget.state.setRadioEnabled(i, v);
                 if (mounted) setState(() {});
@@ -1806,9 +1839,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
             Text(
-              'RUNS THE RECORDING THROUGH THE LIVE DETECTOR — TUNE '
-              'THRESHOLDS, THEN REPLAY TO SEE WHAT THE NEW SETTINGS '
-              'WOULD HAVE CAUGHT.',
+              'REPLAYS A RECORDING THROUGH THE LIVE DETECTOR.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             const SizedBox(height: 6),

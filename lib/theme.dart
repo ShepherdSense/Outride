@@ -4,11 +4,16 @@ import 'package:flutter/material.dart';
 /// glass panels, monospace technical type, glowing accents.
 /// Dark only — there is intentionally no light theme.
 
+/// Mock visual language (outride-ui-mock.html, Draco: "That UI looks
+/// amazing"): bg #060809, surface #0b0f14, surface-2 #131a22, line
+/// #26313d, ink #f2eefc, dim #b3aad4, faint #7e76a3, purple #a78bfa /
+/// strong #8b5cf6 / deep #4c1d95, clear #4ade80, possible #fbbf24,
+/// track #f87171, radius 16px.
 class OutrideColors {
   static const background = Color(0xFF060809); // near-black
   static const surface = Color(0xFF0B0F14); // floating panel
-  static const surface2 = Color(0xFF121822); // inputs, wells
-  static const border = Color(0xFF1E2A36); // hairline panel borders
+  static const surface2 = Color(0xFF131A22); // inputs, wells
+  static const border = Color(0xFF26313D); // hairline panel borders
 
   static const green = Color(0xFF4ADE80); // ok / present / clear
   static const red = Color(0xFFF87171); // alert values
@@ -17,9 +22,15 @@ class OutrideColors {
   static const blue = Color(0xFF60A5FA); // signal values / links
   static const cyan = Color(0xFF22D3EE); // legacy accent (kept for compat)
   static const purple = Color(0xFFA78BFA); // scan actions
+  static const purpleStrong = Color(0xFF8B5CF6); // mock strong purple
+  static const purpleDeep = Color(0xFF4C1D95); // mock deep purple (pills)
   static const muted = Color(0xFF8A94A6); // secondary labels
+  /// Mock dim ink: secondary text on the mock screens.
+  static const dim = Color(0xFFB3AAD4);
+  /// Mock faint ink: captions, legends, count lines.
+  static const faint = Color(0xFF7E76A3);
 
-  static const onDark = Color(0xFFE8EEF4); // primary text
+  static const onDark = Color(0xFFF2EEFC); // primary text (mock ink)
 }
 
 /// Monospace technical typography, RuView style.
@@ -31,7 +42,7 @@ class OutrideType {
         fontFamily: mono,
         fontSize: size,
         letterSpacing: 2.4,
-        color: OutrideColors.muted,
+        color: OutrideColors.dim,
         fontWeight: FontWeight.w500,
       );
 
@@ -274,17 +285,19 @@ ThemeData buildDarkTheme() {
       ),
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: Color(0xFF080B0E),
-      selectedItemColor: OutrideColors.green,
-      unselectedItemColor: OutrideColors.muted,
+      // Mock: 3 buttons, 60px, active purple with ~12% purple bg.
+      backgroundColor: Color(0xFF0B0F14),
+      selectedItemColor: OutrideColors.purple,
+      unselectedItemColor: OutrideColors.faint,
     ),
     switchTheme: SwitchThemeData(
+      // Mock switch: 58x34, purple when on.
       thumbColor: WidgetStateProperty.resolveWith(
-        (s) => s.contains(WidgetState.selected) ? OutrideColors.green : OutrideColors.muted,
+        (s) => s.contains(WidgetState.selected) ? Colors.white : OutrideColors.dim,
       ),
       trackColor: WidgetStateProperty.resolveWith(
         (s) => s.contains(WidgetState.selected)
-            ? OutrideColors.green.withAlpha(90)
+            ? OutrideColors.purpleStrong
             : OutrideColors.surface2,
       ),
     ),

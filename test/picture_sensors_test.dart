@@ -25,7 +25,11 @@ void main() {
   group('PictureScreen', () {
     testWidgets('idle: PAUSED banner, START action, fleet chip, no events',
         (tester) async {
-      tester.view.physicalSize = const Size(360, 800);
+      // v0.29.2: Picture is taller now (live GPS map card + readout
+      // grid + callout above the tail), so the viewport is taller
+      // than a phone — ListView builds lazily and the tail must be
+      // built for the finds below.
+      tester.view.physicalSize = const Size(360, 2000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       final state = AppState();
@@ -41,7 +45,15 @@ void main() {
       expect(find.text('PRESS START TO BEGIN MONITORING'), findsOneWidget);
       expect(find.text('START'), findsOneWidget);
       expect(find.text('NOT IN A FLEET'), findsOneWidget);
-      expect(find.text('NO CROSSINGS DETECTED YET'), findsOneWidget);
+      // v0.29.2: the quiet state is the callout card now, mock
+      // sentence case instead of the old shouty panel line. Idle
+      // (not polling) shows the paused callout; polling with no
+      // events shows the quiet callout.
+      expect(find.text('Monitoring paused'), findsOneWidget);
+      state.polling = true;
+      state.notifyListeners();
+      await tester.pump();
+      expect(find.text('Perimeter quiet'), findsOneWidget);
       expect(find.text('LATEST EVENTS'), findsOneWidget);
       expect(find.text('NO EVENTS YET'), findsOneWidget);
       // The tired-operator question: with no polling and no events,
@@ -52,7 +64,9 @@ void main() {
 
     testWidgets('POSSIBLE MOVEMENT with disturbed links and no track',
         (tester) async {
-      tester.view.physicalSize = const Size(360, 800);
+      // v0.29.2: taller viewport — the radios/links row sits below
+      // the map + grid + callout and ListView builds lazily.
+      tester.view.physicalSize = const Size(360, 2000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       final state = AppState();
@@ -119,19 +133,20 @@ void main() {
       expect(find.text('TRACK'), findsOneWidget);
       expect(find.textContaining('TRACK — INBOUND'), findsOneWidget);
       expect(find.text('POSSIBLE MOVEMENT'), findsNothing);
-      // Red: banner title text and banner icon both carry it.
+      // Red: the banner title carries it (v0.29.2 banner is
+      // text-only per the mock — no icon widget is rendered).
       final title = tester.widget<Text>(find.text('TRACK'));
       expect(title.style?.color, OutrideColors.red);
-      final icon = tester.widget<Icon>(find.byIcon(Icons.flight_takeoff));
-      expect(icon.color, OutrideColors.red);
     });
 
     testWidgets('SEE ALL opens the full crossing-events list with triage',
         (tester) async {
       // Taller than the 800 px default: the nearest-event card is
       // full-height with an event in it, and ListView builds lazily
-      // — the tail sits below the fold at phone height.
-      tester.view.physicalSize = const Size(360, 1400);
+      // — the tail sits below the fold at phone height. v0.29.2:
+      // the live GPS map card + readout grid + callout sit above
+      // the tail, so this needs 2400 px now.
+      tester.view.physicalSize = const Size(360, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       final state = AppState();
@@ -163,7 +178,9 @@ void main() {
 
     testWidgets('radios/links row opens RADIOS & MESH LINKS',
         (tester) async {
-      tester.view.physicalSize = const Size(360, 800);
+      // v0.29.2: the radios row sits below the map card + readout
+      // grid + callout, so the viewport is taller than a phone.
+      tester.view.physicalSize = const Size(360, 1600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       final state = AppState();
@@ -200,13 +217,14 @@ void main() {
       );
       await tester.pump();
       expect(tester.takeException(), isNull);
-      expect(find.text('FIELD MAP'), findsOneWidget);
-      expect(find.text('BEAM'), findsOneWidget);
-      expect(find.text('WIFI'), findsOneWidget);
-      expect(find.text('DRONE'), findsOneWidget);
-      expect(find.text('FETCH'), findsNothing);
-      expect(find.text('SPECTRUM'), findsNothing);
-      expect(find.textContaining('4 OF 6 SHOWN'), findsOneWidget);
+      // v0.29.2: mock title-case names, sentence-case count line.
+      expect(find.text('Field map'), findsOneWidget);
+      expect(find.text('Beam'), findsOneWidget);
+      expect(find.text('WiFi'), findsOneWidget);
+      expect(find.text('Drone'), findsOneWidget);
+      expect(find.text('Fetch'), findsNothing);
+      expect(find.text('Spectrum'), findsNothing);
+      expect(find.textContaining('4 of 6 shown'), findsOneWidget);
       expect(find.text('EXPERIMENTAL'), findsNothing);
     });
 
@@ -230,10 +248,10 @@ void main() {
       await experimentalSensors.set(true);
       await tester.pump();
       expect(tester.takeException(), isNull);
-      expect(find.text('FETCH'), findsOneWidget);
-      expect(find.text('SPECTRUM'), findsOneWidget);
+      expect(find.text('Fetch'), findsOneWidget);
+      expect(find.text('Spectrum'), findsOneWidget);
       expect(find.text('EXPERIMENTAL'), findsNWidgets(2));
-      expect(find.textContaining('6 OF 6 SHOWN'), findsOneWidget);
+      expect(find.textContaining('6 of 6 shown'), findsOneWidget);
     });
   });
 

@@ -35,36 +35,30 @@ class SensorsScreen extends StatelessWidget {
         final visible =
             showExp ? rows : rows.where((r) => !r.experimental).toList();
         return ListView(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
           children: [
-            OutridePanel(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('SENSORS', style: OutrideType.section()),
-                  const SizedBox(height: 6),
-                  Text(
-                    'ONE TAP OPENS THE INSTRUMENT. NOTHING HERE WATCHES '
-                    'FOR YOU — THE PICTURE SCREEN DOES THAT.',
-                    style: OutrideType.section(10).copyWith(height: 1.6),
-                  ),
-                ],
-              ),
+            // Mock: uppercase dim heading + small dim count line, no
+            // intro panel — the count line carries the same info.
+            const Text('SENSORS',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: OutrideColors.dim,
+                )),
+            const SizedBox(height: 4),
+            Text(
+              showExp
+                  ? '${visible.length} of ${rows.length} shown — experimental sensors on.'
+                  : '${visible.length} of ${rows.length} shown — experimental sensors hidden. Turn them on in Settings.',
+              style: const TextStyle(
+                  fontSize: 13, color: OutrideColors.faint, height: 1.45),
             ),
             const SizedBox(height: 12),
             for (final row in visible) ...[
               _sensorRow(context, row),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
             ],
-            OutridePanel(
-              child: Text(
-                showExp
-                    ? '6 OF 6 SHOWN — EXPERIMENTAL SENSORS ON.'
-                    : '4 OF 6 SHOWN — EXPERIMENTAL SENSORS HIDDEN. '
-                        'TURN THEM ON IN SETTINGS.',
-                style: OutrideType.section(10).copyWith(height: 1.6),
-              ),
-            ),
           ],
         );
       },
@@ -177,55 +171,121 @@ class SensorsScreen extends StatelessWidget {
     );
   }
 
+  /// Mock row: 76 px tall at mock width, 48 px purple icon tile,
+  /// name 19 px + desc 14 px, status pill, chevron, EXPERIMENTAL
+  /// tag inline beside the name (mock .exp-inline).
+  ///
+  /// Two narrow-screen concessions (the mock is 430 px wide; at
+  /// 360 px the pill text alone is ~135 px in the fallback font):
+  /// the status pill sits under the description instead of beside
+  /// the name, and the tag scales down rather than overflowing.
+  /// Nothing is dropped — every element the mock shows is here.
   Widget _sensorRow(BuildContext context, _SensorRow row) {
-    // Two-line row on purpose: name + status pill on top, the
-    // EXPERIMENTAL tag and description below, indented to the name.
-    // A tag beside the name would not fit next to the status pill on
-    // a narrow phone — the pill's inner Row cannot shrink below its
-    // intrinsic width and the row would overflow.
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () => row.open(context),
-      child: OutridePanel(
-        child: Column(
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 76),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: OutrideColors.surface,
+          border: Border.all(color: OutrideColors.border),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(row.icon, color: OutrideColors.purple, size: 26),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(row.name.toUpperCase(),
-                      style: OutrideType.rowValue(OutrideColors.onDark),
-                      overflow: TextOverflow.ellipsis),
-                ),
-                const SizedBox(width: 8),
-                OutrideChip(label: row.status, color: row.statusColor),
-                const SizedBox(width: 4),
-                const Icon(Icons.chevron_right,
-                    color: OutrideColors.muted, size: 18),
-              ],
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: OutrideColors.purpleDeep,
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(row.icon,
+                  color: const Color(0xFFDDD6FE), size: 26),
             ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.only(left: 38),
+            const SizedBox(width: 14),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (row.experimental) ...[
-                    const OutrideChip(
-                        label: 'EXPERIMENTAL',
-                        color: OutrideColors.amber),
-                    const SizedBox(height: 6),
-                  ],
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(row.name,
+                            style: const TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                                color: OutrideColors.onDark),
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      if (row.experimental) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          fit: FlexFit.loose,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                    color:
+                                        OutrideColors.amber.withAlpha(128)),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: const Text('EXPERIMENTAL',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5,
+                                      color: OutrideColors.amber)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
                   Text(row.desc,
-                      style: OutrideType.section(10).copyWith(height: 1.5)),
+                      style: const TextStyle(
+                          fontSize: 14,
+                          color: OutrideColors.dim,
+                          height: 1.35)),
+                  const SizedBox(height: 8),
+                  _statusPill(row.status, row.statusColor),
                 ],
               ),
+            ),
+            const SizedBox(width: 2),
+            const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: Icon(Icons.chevron_right,
+                  color: OutrideColors.faint, size: 22),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// Mock status pill: bold, tinted bg, colored text. 11 px so the
+  /// widest label ('NOT ON WEB') still fits a 320 px row.
+  Widget _statusPill(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withAlpha(38),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: color)),
     );
   }
 }

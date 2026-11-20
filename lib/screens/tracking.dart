@@ -344,7 +344,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 }),
                 child: CustomPaint(
                   size: size,
-                  painter: _TrackingMapPainter(
+                  painter: TrackingMapPainter(
                     transform: tr,
                     nodes: nodes,
                     disturbedPairs: state.disturbedPairs,
@@ -505,15 +505,23 @@ class _TrackingScreenState extends State<TrackingScreen> {
           '${state.liveGpsFollow ? ' · FOLLOWING' : ''}';
     } else if (state.liveGpsState == LiveGpsState.denied ||
         state.liveGpsState == LiveGpsState.unavailable) {
-      you = 'YOU: GPS ${state.liveGpsState == LiveGpsState.denied ? 'DENIED' : 'UNAVAILABLE'} — SIMULATED FALLBACK';
+      // "SIMULATED FALLBACK" is only true when a fallback marker
+      // is actually drawn (simulated mode's demo anchor). Live
+      // mode with GPS denied and no fix draws no YOU marker, so
+      // the line must say NO POSITION instead (v0.29.2 review).
+      you = op != null
+          ? 'YOU: GPS ${state.liveGpsState == LiveGpsState.denied ? 'DENIED' : 'UNAVAILABLE'} — SIMULATED FALLBACK'
+          : 'YOU: NO POSITION — TAP LIVE GPS';
     } else if (op != null) {
       you = 'YOU: SIMULATED (DEMO ANCHOR)';
     } else {
       you = 'YOU: NO POSITION — TAP LIVE GPS';
     }
-    final tiles = _tileStatus.hasTiles
-        ? 'TILES: ${_tileStatus.packName} · Z${_tileStatus.zoom}'
-        : 'TILES: NONE — GRID ONLY';
+    final tiles = !state.tilePacks.supported
+        ? 'TILES: NOT AVAILABLE ON WEB — GRID ONLY'
+        : _tileStatus.hasTiles
+            ? 'TILES: ${_tileStatus.packName} · Z${_tileStatus.zoom}'
+            : 'TILES: NONE — GRID ONLY';
     return Text(
       '$you · $tiles',
       style: OutrideType.section(10),
@@ -1135,8 +1143,8 @@ class _TrackScopeNote extends StatelessWidget {
   }
 }
 
-class _TrackingMapPainter extends CustomPainter {
-  _TrackingMapPainter({
+class TrackingMapPainter extends CustomPainter {
+  TrackingMapPainter({
     required this.transform,
     required this.nodes,
     required this.disturbedPairs,
@@ -1448,7 +1456,7 @@ class _TrackingMapPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _TrackingMapPainter old) => true;
+  bool shouldRepaint(covariant TrackingMapPainter old) => true;
 }
 
 /// Compass rose overlay for the tracking map. The map is north-up, so

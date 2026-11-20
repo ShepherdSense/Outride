@@ -225,3 +225,22 @@ HealthReport assessHealth({
 }
 
 String _short(String s) => s.length <= 90 ? s : '${s.substring(0, 87)}…';
+
+/// Subtitle for the DEGRADED banner (v0.29.2 fix: the old subtitle
+/// always read "CLEAR ON x OF y LINK DIRECTION(S)", built from link
+/// counts only — but [assessHealth] degrades for six reasons, so a
+/// deep-fade link with all links live read DEGRADED + "CLEAR ON 12
+/// OF 12". The "CLEAR ON x OF y" form is now used only when the
+/// cause really is missing links; otherwise the subtitle names the
+/// top health reason, most important first.
+String degradedSubtitle(HealthReport h) {
+  if (h.liveLinks < h.expectedLinks) {
+    return 'CLEAR ON ${h.liveLinks} OF ${h.expectedLinks} '
+        'LINK DIRECTION(S)';
+  }
+  if (h.reasons.isNotEmpty) {
+    return _short(h.reasons.first).toUpperCase();
+  }
+  return 'CLEAR ON ${h.liveLinks} OF ${h.expectedLinks} '
+      'LINK DIRECTION(S)';
+}

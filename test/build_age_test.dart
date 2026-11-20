@@ -60,7 +60,7 @@ void main() {
   });
 
   group('shipped buildDate', () {
-    test('is 2026-11-20, the v0.29.1 cut date', () {
+    test('is 2026-11-20, the v0.29.2 cut date', () {
       expect(buildDate, DateTime(2026, 11, 20));
       expect(buildAgeWarningDays, 90);
     });
