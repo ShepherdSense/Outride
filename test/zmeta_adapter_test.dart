@@ -197,7 +197,7 @@ void main() {
         sigHint: 'fhss-2g4',
         energyDbfs: -68.5,
       );
-      final out = File('/tmp/zmeta_outride_sample.jsonl');
+      final out = File('${Directory.systemTemp.path}/zmeta_outride_sample.jsonl');
       out.writeAsStringSync('${[obs, inf, sdrObs].map(jsonEncode).join('\n')}\n');
       expect(out.existsSync(), isTrue);
     });
