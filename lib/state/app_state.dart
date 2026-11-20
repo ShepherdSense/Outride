@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -2678,6 +2679,15 @@ class AppState extends ChangeNotifier {
   /// unknown ids fall back to OpenStreetMap Standard.
   TileSource get selectedTileSource =>
       selectTileSource(settings.tileSourceId);
+
+  /// The tile source actually in use: on web the loader resolves a
+  /// non-USGS selection to USGS Topo (see [syncWebTileSource]), so
+  /// the Settings dropdown must show this, not [selectedTileSource]
+  /// — a stored OSM selection renders as Topo on web, and the
+  /// dropdown showing OSM disagreed with the live map (v0.29.4).
+  /// Native: identical to [selectedTileSource].
+  TileSource get effectiveTileSource =>
+      kIsWeb ? webTileSourceFor(settings.tileSourceId) : selectedTileSource;
 
   /// Current Hunt session, if one is running. Created by
   /// [startHuntSession], ended by [endHuntSession]. The session

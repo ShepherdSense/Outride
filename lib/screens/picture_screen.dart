@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import '../services/build_age.dart';
 import '../services/health.dart';
 import '../services/operator_pose.dart';
+import '../services/tile_pack.dart';
+import '../services/web_tile_loader.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../utils/field_map_transform.dart';
@@ -808,7 +810,33 @@ class _LiveMapCardState extends State<_LiveMapCard> {
   // its first tile lands.
   TileLayerStatus _tileStatus = const TileLayerStatus(web: kIsWeb);
 
+  /// True 1:1 tile scale for the compact map (v0.29.4): when on,
+  /// the map renders at the tile-native scale — one tile pixel =
+  /// one screen pixel, tiles crisp — instead of the fit zoom,
+  /// where a z16 tile renders ~23x stretched. Off is the usual
+  /// field view. Tap the map (or the fullscreen icon) for the
+  /// full Field Map, which has the same 1:1 on its zoom controls.
+  bool _tileOneToOne = false;
+
   AppState get state => widget.state;
+
+  /// The tile-native view scale (screen px per meter) for this
+  /// map when 1:1 is on, else null. Shared by the range label and
+  /// the map transform so both agree on the scale in use.
+  double? _compactOneToOneScale(Size size, List<math.Point<double>> pts) {
+    if (!_tileOneToOne) return null;
+    final origin = state.displayOrigin;
+    if (origin == null) return null;
+    final fit = FieldMapTransform.fit(size, pts, zoom: 1.0);
+    final tileZoom = _tileStatus.zoom ??
+        bestZoomForView(
+          viewMetersPerPixel: 1 / fit.scale,
+          latitude: origin.lat,
+          minZoom: 0,
+          maxZoom: kWebTileMaxZoom,
+        );
+    return tileNativeScalePxPerMeter(tileZoom, origin.lat);
+  }
 
   void _openFullMap(BuildContext context) {
     Navigator.of(context).push(
@@ -913,8 +941,11 @@ class _LiveMapCardState extends State<_LiveMapCard> {
               }
               final mapFit =
                   FieldMapTransform.fit(mapSize, mapPts, zoom: 1.0);
-              // Visible width in meters, rounded sensibly.
-              final rangeM = mapSize.width / mapFit.scale;
+              // Visible width in meters, rounded sensibly. When
+              // 1:1 is on the map is at the tile-native scale, so
+              // the range comes from that scale, not the fit.
+              final rangeM = mapSize.width /
+                  (_compactOneToOneScale(mapSize, mapPts) ?? mapFit.scale);
               final rangeText = rangeM >= 1000
                   ? 'RANGE ≈ ${(rangeM / 1000).toStringAsFixed(1)} KM'
                   : 'RANGE ≈ ${rangeM.toStringAsFixed(0)} M';
@@ -942,14 +973,25 @@ class _LiveMapCardState extends State<_LiveMapCard> {
                   final op = state.liveGpsFollow
                       ? state.mapOperatorMeters
                       : null;
-                  final tr = op != null
+                  // 1:1 (v0.29.4): same center as the fit view, at
+                  // the tile-native scale — crisp tiles. Follow
+                  // still centers on the operator, at that scale.
+                  final oneToOneScale = _compactOneToOneScale(size, pts);
+                  final tr = oneToOneScale != null
                       ? FieldMapTransform.centered(
                           size: size,
-                          centerX: op.x,
-                          centerY: op.y,
-                          scale: fit.scale,
+                          centerX: op?.x ?? fit.toWorldX(size.width / 2),
+                          centerY: op?.y ?? fit.toWorldY(size.height / 2),
+                          scale: oneToOneScale,
                         )
-                      : fit;
+                      : op != null
+                          ? FieldMapTransform.centered(
+                              size: size,
+                              centerX: op.x,
+                              centerY: op.y,
+                              scale: fit.scale,
+                            )
+                          : fit;
                   final origin = state.displayOrigin;
                   return Stack(
                     children: [
@@ -989,6 +1031,33 @@ class _LiveMapCardState extends State<_LiveMapCard> {
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
                                 color: OutrideColors.faint)),
+                      ),
+                      // 1:1 tile scale toggle (v0.29.4): crisp tiles
+                      // at one tile pixel = one screen pixel. The
+                      // tap that opens the full map is on the
+                      // ancestor GestureDetector; this button wins
+                      // the tap arena, so tapping it toggles
+                      // instead of opening the full map.
+                      Positioned(
+                        right: 4,
+                        bottom: 4,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            minimumSize: const Size(0, 28),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            backgroundColor: _tileOneToOne
+                                ? OutrideColors.purple.withAlpha(60)
+                                : OutrideColors.surface.withAlpha(220),
+                          ),
+                          onPressed: () => setState(
+                              () => _tileOneToOne = !_tileOneToOne),
+                          child: Text(
+                            _tileOneToOne ? '1:1 ON' : '1:1',
+                            style: OutrideType.chip(OutrideColors.onDark),
+                          ),
+                        ),
                       ),
                     ],
                   );
@@ -1067,9 +1136,15 @@ class _LiveMapCardState extends State<_LiveMapCard> {
     // A source name is shown only once at least one tile is
     // actually painted — a covering source with zero tiles loaded
     // (offline web, or a pack whose tiles all failed to decode)
-    // reads as no tiles, not as a map that is there.
+    // reads as no tiles, not as a map that is there. The render
+    // scale rides along: 1:1 at the tile-native scale, ×N
+    // stretched otherwise (v0.29.4).
+    final scaleLabel = _tileStatus.renderScale == null
+        ? ''
+        : ' · ${tileRenderScaleLabel(_tileStatus.renderScale!)}';
     if (_tileStatus.hasTiles && _tileStatus.tilesLoaded > 0) {
-      tiles = 'TILES: ${_tileStatus.packName} · Z${_tileStatus.zoom}';
+      tiles =
+          'TILES: ${_tileStatus.packName} · Z${_tileStatus.zoom}$scaleLabel';
     } else if (_tileStatus.web) {
       // Web loader is the tile source but nothing loaded (offline,
       // or outside USGS coverage): the grid is the map, said plainly.

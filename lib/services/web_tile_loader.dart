@@ -80,6 +80,30 @@ TileSource webTileSourceFor(String? id) {
   return kUsgsTopo;
 }
 
+/// The tile-source id the Settings dropdown must show for a stored
+/// id: on web it is the EFFECTIVE source (the loader's resolution
+/// above — a stored OSM selection shows as USGS Topo, because that
+/// is what the map actually renders); on native the stored id is
+/// shown as-is. Pure function of ([storedId], [isWeb]) so the
+/// dropdown logic is unit-testable — `kIsWeb` is false under
+/// `flutter test`, so the web branch cannot be reached from a
+/// widget test.
+String effectiveTileSourceIdFor({
+  required String storedId,
+  required bool isWeb,
+}) =>
+    isWeb ? webTileSourceFor(storedId).id : storedId;
+
+/// The sources the Settings dropdown may offer: USGS-only on web
+/// (the loader never fetches OSM there, so offering it would show
+/// a source the map cannot render), all built-in sources native.
+List<TileSource> tileSourceOptionsFor({required bool isWeb}) =>
+    isWeb
+        ? defaultTileSources
+            .where((s) => packSourceAllowed(s.id))
+            .toList()
+        : defaultTileSources;
+
 class WebTileLoader extends ChangeNotifier {
   WebTileLoader({
     http.Client? client,

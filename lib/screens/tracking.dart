@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 import '../models/tracking.dart';
 import '../services/gps_positioning.dart';
 import '../services/operator_pose.dart';
+import '../services/tile_pack.dart';
 import '../services/tracker.dart';
+import '../services/web_tile_loader.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../utils/field_map_transform.dart';
@@ -94,8 +96,55 @@ class _TrackingScreenState extends State<TrackingScreen> {
   );
 
   void _bumpMapZoom(double f) => setState(() {
-        _mapZoom = (_mapZoom * f).clamp(0.5, 4.0);
+        // Wide clamp (v0.29.4): the 1:1 tile scale sits near
+        // _mapZoom 0.04 — the old 0.5 floor would have snapped a
+        // 1:1 view back to 0.5 on the next wheel tick or +/− tap.
+        // Floor 0.001, not 0.01: on a wide (2560px) window the
+        // fit scale can reach 60 px/m, so 1:1 needs zoom 0.0085 —
+        // a 0.01 floor would clamp it to x1.2 and break the
+        // button's promise. The layer's 100-tile cap bounds the
+        // zoomed-out case, so the lower floor is safe.
+        _mapZoom = (_mapZoom * f).clamp(0.001, 8.0);
       });
+
+  /// True 1:1 (v0.29.4): set the map zoom so one tile pixel is
+  /// exactly one screen pixel at the current tile zoom. The old
+  /// reset just restored _mapZoom 1.0 — the fit zoom, ~12 px/m —
+  /// which left the same ~23x-stretched blocky tiles and the
+  /// button's "1:1" label a lie. The tile zoom is the layer's
+  /// reported zoom when tiles are rendering, else the zoom the
+  /// layer would pick for this view (already the USGS z16 cap at
+  /// field zoom). No origin means no tiles, so fall back to the
+  /// plain fit view.
+  void _resetMapZoomToTileOneToOne(Size size, List<NodePosition> nodes) {
+    final origin = state.displayOrigin;
+    if (origin == null) {
+      setState(() => _mapZoom = 1.0);
+      return;
+    }
+    final pts = <math.Point<double>>[];
+    for (final n in nodes) {
+      pts.add(math.Point(n.x, n.y));
+    }
+    pts.add(math.Point(state.defended.x, state.defended.y));
+    final t = state.track;
+    if (t != null) pts.add(math.Point(t.x, t.y));
+    final fit = FieldMapTransform.fit(size, pts, zoom: 1.0);
+    final tileZoom = _tileStatus.zoom ??
+        bestZoomForView(
+          viewMetersPerPixel: 1 / fit.scale,
+          latitude: origin.lat,
+          minZoom: 0,
+          maxZoom: kWebTileMaxZoom,
+        );
+    setState(() {
+      _mapZoom = mapZoomForTileOneToOne(
+        fitScalePxPerMeter: fit.scale,
+        tileZoom: tileZoom,
+        latitude: origin.lat,
+      ).clamp(0.001, 8.0);
+    });
+  }
 
   AppState get state => widget.state;
 
@@ -414,7 +463,9 @@ class _TrackingScreenState extends State<TrackingScreen> {
               child: OutrideZoomControls(
                 onZoomIn: () => _bumpMapZoom(1.25),
                 onZoomOut: () => _bumpMapZoom(1 / 1.25),
-                onReset: () => setState(() => _mapZoom = 1.0),
+                // 1:1 is the true tile-native scale (v0.29.4), not
+                // the fit zoom: one tile pixel = one screen pixel.
+                onReset: () => _resetMapZoomToTileOneToOne(size, nodes),
               ),
             ),
             // Compass rose: the map is north-up (world +y = north renders
@@ -525,8 +576,16 @@ class _TrackingScreenState extends State<TrackingScreen> {
     } else {
       you = 'YOU: NO POSITION — TAP LIVE GPS';
     }
+    // The render scale is what the +/− and scroll zoom actually
+    // move: 1:1 at the tile-native scale, ×N stretched otherwise.
+    // The Z readout is the TILE zoom — already at the USGS z16 cap
+    // at field zoom, so the buttons correctly leave it alone
+    // (v0.29.4: by design, not a dead control).
+    final scaleLabel = _tileStatus.renderScale == null
+        ? ''
+        : ' · ${tileRenderScaleLabel(_tileStatus.renderScale!)}';
     final tiles = _tileStatus.hasTiles && _tileStatus.tilesLoaded > 0
-        ? 'TILES: ${_tileStatus.packName} · Z${_tileStatus.zoom}'
+        ? 'TILES: ${_tileStatus.packName} · Z${_tileStatus.zoom}$scaleLabel'
         : _tileStatus.web
             // Web loader is the tile source but nothing loaded
             // (offline, or outside USGS coverage): the grid is the

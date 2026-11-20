@@ -173,7 +173,7 @@ const double kMaxMercatorLat = 85.05112878;
 /// Sent on every fetch/refresh; no contact address is baked in
 /// because none is configured for this app — the application name
 /// and version are the identification.
-const String kTileUserAgent = 'Outride/0.29.3 (offline tile cache)';
+const String kTileUserAgent = 'Outride/0.29.4 (offline tile cache)';
 
 /// WGS84 -> slippy tile at [zoom]. Pure Dart.
 ///
@@ -259,6 +259,15 @@ List<TileCoord> tilesForBounds(
 /// never stretched to fill it (v0.26.0 fix-pass: the old painter
 /// stretched the origin tile to the full canvas). Pure function
 /// so the geometry is unit-testable without a canvas.
+///
+/// NOTE (v0.29.4): the tile painters do NOT use this any more —
+/// see [tileFillRect]. A geographic tile placement is ~0.7%
+/// wider than tall (equirectangular projection vs Web-Mercator
+/// tile bounds at lat 35), so fit-centering left ~30 px of
+/// unpainted margin on each side of every tile at field zoom,
+/// which read as a black vertical stripe against the dark map
+/// background. The helper stays for callers whose placement rect
+/// genuinely differs in aspect from the image.
 Rect tileDestRect(Rect placement, Size imageSize) {
   if (imageSize.width <= 0 || imageSize.height <= 0) return placement;
   final scale = math.min(
@@ -273,6 +282,20 @@ Rect tileDestRect(Rect placement, Size imageSize) {
     w,
     h,
   );
+}
+
+/// Destination rect for a tile image in its geographic placement
+/// rect: the placement rect itself, filled edge to edge. A tile
+/// placement is a Web-Mercator tile projected through the
+/// equirectangular map projection, so its aspect is within ~1% of
+/// the square tile image — the fill stretches the image by that
+/// <1%, invisible at any zoom — while aspect-fit centering left
+/// unpainted side margins that rendered as black seams between
+/// tiles at field zoom (v0.29.4). Pure function so the geometry is
+/// unit-testable without a canvas.
+Rect tileFillRect(Rect placement, Size imageSize) {
+  if (imageSize.width <= 0 || imageSize.height <= 0) return placement;
+  return placement;
 }
 
 enum TileFetchStatus {
@@ -624,12 +647,18 @@ class TileBackgroundPainter extends CustomPainter {
     this.gridColor = const Color(0xFF3A3A4A),
     this.labelColor = const Color(0xFF9A9AB0),
     this.showMissingLabels = true,
+    this.missingLabel = 'NO CACHED TILE',
   });
 
   final List<TilePlacement> placements;
   final Color gridColor;
   final Color labelColor;
   final bool showMissingLabels;
+
+  /// Label drawn in a missing tile's grid cell. The default names
+  /// the pack-cache case; the live web layer passes 'NO TILE'
+  /// (nothing is cached on web — the tile failed to load).
+  final String missingLabel;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -640,12 +669,15 @@ class TileBackgroundPainter extends CustomPainter {
     for (final placement in placements) {
       final image = placement.image;
       if (image != null) {
-        // Correct aspect, centered, fitted inside the placement
-        // rect — never stretched to fill it (v0.26.0 fix-pass).
+        // Fill the placement rect edge to edge (v0.29.4): the
+        // placement is within ~1% of the square tile image, so
+        // the fill stretches it invisibly — while aspect-fit
+        // centering left unpainted side margins that rendered as
+        // black seams between tiles at field zoom.
         canvas.drawImageRect(
           image,
           Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-          tileDestRect(
+          tileFillRect(
             placement.rect,
             Size(image.width.toDouble(), image.height.toDouble()),
           ),
@@ -656,7 +688,7 @@ class TileBackgroundPainter extends CustomPainter {
         if (showMissingLabels && placement.rect.width > 40) {
           final textPainter = TextPainter(
             text: TextSpan(
-              text: 'NO CACHED TILE',
+              text: missingLabel,
               style: TextStyle(color: labelColor, fontSize: 10),
             ),
             textDirection: TextDirection.ltr,
@@ -682,6 +714,7 @@ class TileBackgroundPainter extends CustomPainter {
     }
     return gridColor != oldDelegate.gridColor ||
         labelColor != oldDelegate.labelColor ||
-        showMissingLabels != oldDelegate.showMissingLabels;
+        showMissingLabels != oldDelegate.showMissingLabels ||
+        missingLabel != oldDelegate.missingLabel;
   }
 }

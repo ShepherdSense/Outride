@@ -12,8 +12,22 @@
 /// * Best zoom from [bestZoomForView], clamped to the pack's zooms.
 /// * Tiles are read from the pack DB, decoded to [ui.Image], and
 ///   cached in memory (max 128 images, oldest dropped first).
-/// * A missing tile renders as NOTHING — the field canvas's own
-///   10 m grid shows through. Never a crash, never an invented map.
+/// * A tile still loading renders as nothing (the field canvas's
+///   own 10 m grid shows through while it is in flight). A tile
+///   that definitively FAILED renders as the honest labeled blank
+///   grid — never a black hole against the dark map (v0.29.4).
+///   Images fill their geographic placement rect edge to edge:
+///   the placement is within ~1% of the square tile image, so
+///   the fill is invisible, while aspect-fit centering left
+///   ~30 px unpainted side margins that read as black seams
+///   between tiles at field zoom (v0.29.4).
+/// * The layer reports the render scale (screen px per tile px)
+///   with its status, so the map status line can say 1:1 or ×N
+///   honestly: at field zoom a z16 tile renders at ~23x, because
+///   the finest USGS tile (~1.96 m/px at lat 35) is far coarser
+///   than the field view (~0.07 m/px). Crisp 1:1 tiles need the
+///   view at the tile-native scale — the maps' 1:1 controls set
+///   exactly that (v0.29.4).
 /// * No packs / no origin / web with no loader / a view the packs
 ///   do not cover: the layer paints nothing and the map is exactly
 ///   the field canvas it always was. On web, [WebTileLoader]
@@ -51,18 +65,24 @@ const String kWebTilePackId = 'web';
 /// What the tile layer is currently rendering, for the map status
 /// line. [packName] is null when no pack covers the view.
 /// [web] is true when the tiles came from the web loader.
+/// [renderScale] is screen pixels per tile pixel at the current
+/// view scale (1.0 = crisp 1:1, > 1 = stretched — a z16 tile at a
+/// field-zoom view renders at ~23x); null when no tile zoom is
+/// known yet, so the status line shows no scale claim.
 class TileLayerStatus {
   const TileLayerStatus({
     this.packName,
     this.zoom,
     this.tilesLoaded = 0,
     this.web = false,
+    this.renderScale,
   });
 
   final String? packName;
   final int? zoom;
   final int tilesLoaded;
   final bool web;
+  final double? renderScale;
 
   bool get hasTiles => packName != null;
 
@@ -72,10 +92,22 @@ class TileLayerStatus {
       packName == other.packName &&
       zoom == other.zoom &&
       tilesLoaded == other.tilesLoaded &&
-      web == other.web;
+      web == other.web &&
+      renderScale == other.renderScale;
 
   @override
-  int get hashCode => Object.hash(packName, zoom, tilesLoaded, web);
+  int get hashCode =>
+      Object.hash(packName, zoom, tilesLoaded, web, renderScale);
+}
+
+/// Status-line label for a render scale: '1:1' when the view is at
+/// (or within 5% of) the tile-native scale, otherwise '×N' — the
+/// stretch factor the +/− and scroll zoom actually change (the Z
+/// readout is the tile zoom, which is already at the USGS z16 cap
+/// at field zoom and so does not move with the buttons).
+String tileRenderScaleLabel(double renderScale) {
+  if ((renderScale - 1.0).abs() < 0.05) return '1:1';
+  return '×${renderScale.toStringAsFixed(renderScale < 10 ? 1 : 0)}';
 }
 
 /// Max tiles fetched for one view. A field-sized view needs a
@@ -119,11 +151,25 @@ class TilePackMapLayer extends StatefulWidget {
 class _TilePackMapLayerState extends State<TilePackMapLayer> {
   final Map<String, ui.Image> _images = {};
   final Set<String> _loading = {};
+
+  /// Tiles the view wants whose fetch/decoding definitively failed
+  /// (network failure, non-200, or corrupt bytes — NOT still
+  /// loading, NOT dropped by a source switch or view change).
+  /// These paint as the honest labeled blank grid instead of
+  /// nothing: painting nothing left a black hole against the dark
+  /// map background (v0.29.4). Keys are [_imageKey]s, pruned to
+  /// the current view in [_setView].
+  final Set<String> _failed = {};
+
   String _signature = '';
   TileLayerStatus _lastStatus = const TileLayerStatus();
   List<TileCoord> _viewTiles = [];
   String? _viewPackId;
   int? _viewZoom;
+
+  /// Center latitude of the current view, for the render-scale
+  /// readout ([tileRenderScale] needs the tile zoom's latitude).
+  double? _viewLat;
 
   /// Web source epoch (v0.29.3 reviewer fix): bumped whenever the
   /// web tile source switches, so a fetch that started on the old
@@ -237,8 +283,13 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
     );
     final out = <TilePlacement>[];
     for (final coord in _viewTiles) {
-      final image = _images[_imageKey(_viewPackId!, coord)];
-      if (image == null) continue;
+      final key = _imageKey(_viewPackId!, coord);
+      final image = _images[key];
+      // A tile still loading is skipped (the field grid shows
+      // through while it is in flight). A tile that FAILED paints
+      // as a null-image placement: the painter draws the honest
+      // labeled blank grid for it, never a black hole.
+      if (image == null && !_failed.contains(key)) continue;
       final b = tileBounds(coord);
       final nw = geo.latLonToMeters(b.north, b.west);
       final se = geo.latLonToMeters(b.south, b.east);
@@ -252,6 +303,15 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
     }
     return out;
   }
+
+  /// Screen pixels per tile pixel for the current view at [zoom]
+  /// and [latitude] — the render scale the status line reports.
+  double _renderScaleFor(int zoom, double latitude) =>
+      tileRenderScale(
+        viewScalePxPerMeter: widget.transform.scale,
+        zoom: zoom,
+        latitude: latitude,
+      );
 
   void _reportStatus(TileLayerStatus status) {
     if (status == _lastStatus) return;
@@ -319,6 +379,7 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
       tiles,
       chosen.displayName,
       web: false,
+      latitude: bounds.centerLat,
     );
   }
 
@@ -363,6 +424,7 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
       tiles,
       '${loader.source.displayName.toUpperCase()} (WEB)',
       web: true,
+      latitude: bounds.centerLat,
     );
   }
 
@@ -374,13 +436,16 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
     List<TileCoord> tiles,
     String displayName, {
     required bool web,
+    required double latitude,
   }) {
+    _viewLat = latitude;
     _setView(packId, zoom, tiles);
     _reportStatus(TileLayerStatus(
       packName: displayName,
       zoom: zoom,
       tilesLoaded: _loadedCount(packId, tiles),
       web: web,
+      renderScale: _renderScaleFor(zoom, latitude),
     ));
     for (final coord in tiles) {
       final key = _imageKey(packId, coord);
@@ -448,6 +513,18 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
     _viewPackId = packId;
     _viewZoom = zoom;
     _viewTiles = tiles;
+    // Prune the failed set to the current view: a tile that
+    // failed on an old view (or an old source — the key carries
+    // the source id) must not paint a grid cell it no longer
+    // covers, and the set stays bounded.
+    if (packId != null) {
+      final keep = {
+        for (final c in tiles) _imageKey(packId, c),
+      };
+      _failed.removeWhere((k) => !keep.contains(k));
+    } else {
+      _failed.clear();
+    }
     // Prune the image cache to the current view + a little slack.
     if (_images.length > kTileLayerMaxCachedImages) {
       final keep = {
@@ -475,7 +552,16 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
       final bytes = packId == kWebTilePackId
           ? await widget.webTiles?.fetchTile(coord)
           : await widget.tilePacks.readTileBytes(packId, coord);
-      if (bytes == null || bytes.isEmpty) return;
+      // No bytes is a definitive failure for this view: mark it
+      // so the tile paints as the labeled blank grid instead of
+      // a black hole. (A fetch dropped by a source switch or a
+      // view change below is NOT a failure — it never reaches
+      // this line as a failure, it just returns.)
+      if (bytes == null || bytes.isEmpty) {
+        _failed.add(key);
+        if (mounted) setState(() {});
+        return;
+      }
       final image = await _decode(bytes);
       if (!mounted) {
         image.dispose();
@@ -496,6 +582,8 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
         return;
       }
       _images[key] = image;
+      // A retry that landed: the tile is no longer failed.
+      _failed.remove(key);
       if (mounted) {
         setState(() {});
         _reportStatus(TileLayerStatus(
@@ -505,11 +593,17 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
           zoom: _viewZoom,
           tilesLoaded: _loadedCount(packId, _viewTiles),
           web: _viewPackId == kWebTilePackId,
+          renderScale: _viewZoom == null || _viewLat == null
+              ? null
+              : _renderScaleFor(_viewZoom!, _viewLat!),
         ));
       }
     } catch (_) {
-      // A failed tile decode is a missing tile: nothing renders,
-      // nothing throws. The field grid shows through.
+      // A failed tile decode is a missing tile: it paints as the
+      // labeled blank grid, nothing throws. The field grid shows
+      // through the cell's label area.
+      _failed.add(key);
+      if (mounted) setState(() {});
     } finally {
       _loading.remove(key);
     }
@@ -543,8 +637,12 @@ class _TilePackMapLayerState extends State<TilePackMapLayer> {
   }
 }
 
-/// Tile painter: draws present images, nothing for missing tiles.
-/// The field canvas's own grid shows through where tiles are absent.
+/// Tile painter: draws present images edge to edge in their
+/// geographic rect, and draws failed tiles as the honest labeled
+/// blank grid — never a black hole. Tiles still loading are not
+/// in [placements] at all (the field grid shows through while
+/// they are in flight). Delegates to [TileBackgroundPainter], the
+/// one painter that owns both halves of that contract.
 class _TilePackPainter extends CustomPainter {
   _TilePackPainter({required this.placements});
 
@@ -552,19 +650,12 @@ class _TilePackPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final placement in placements) {
-      final image = placement.image;
-      if (image == null) continue;
-      canvas.drawImageRect(
-        image,
-        Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-        tileDestRect(
-          placement.rect,
-          Size(image.width.toDouble(), image.height.toDouble()),
-        ),
-        Paint(),
-      );
-    }
+    TileBackgroundPainter(
+      placements: placements,
+      // Nothing is cached on web: a failed live tile is just
+      // 'NO TILE', not a cache miss.
+      missingLabel: 'NO TILE',
+    ).paint(canvas, size);
   }
 
   @override

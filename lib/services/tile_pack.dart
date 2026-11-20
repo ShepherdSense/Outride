@@ -371,16 +371,58 @@ int bestZoomForView({
   required int minZoom,
   required int maxZoom,
 }) {
-  // Meters per pixel of a tile at zoom z (Web-Mercator, 256 px tiles).
-  double tileMpp(int z) =>
-      156543.03392 * math.cos(latitude * math.pi / 180.0) / (1 << z);
   var best = minZoom;
   for (var z = minZoom; z <= maxZoom; z++) {
-    if (tileMpp(z) >= viewMetersPerPixel) {
+    if (tileMetersPerPixel(z, latitude) >= viewMetersPerPixel) {
       best = z;
     } else {
       break;
     }
   }
   return best;
+}
+
+/// Meters on the ground per tile pixel at [zoom] and [latitude]
+/// (Web-Mercator, 256 px tiles). At lat 35 a z16 tile pixel is
+/// ~1.96 m — the finest USGS tile there is (z17 404s).
+double tileMetersPerPixel(int zoom, double latitude) =>
+    156543.03392 * math.cos(latitude * math.pi / 180.0) / (1 << zoom);
+
+/// View scale (screen px per ground meter) at which one tile pixel
+/// is exactly one screen pixel at [zoom] and [latitude] — the true
+/// 1:1 tile scale. At lat 35, z16: ~0.51 px/m. A field map fits an
+/// ~80–160 m field across the screen at ~6–50 px/m, i.e. 12–100x
+/// finer than the tile raster, so at field zoom every tile pixel
+/// covers dozens of screen pixels: heavy pixelation is inherent
+/// to the view scale, not a placement bug. Crisp tiles need the
+/// view at (or near) this scale — that is what the maps' 1:1
+/// controls set (see [mapZoomForTileOneToOne]).
+double tileNativeScalePxPerMeter(int zoom, double latitude) =>
+    1 / tileMetersPerPixel(zoom, latitude);
+
+/// Screen pixels per tile pixel at a view scale: 1.0 is crisp 1:1,
+/// > 1 is stretched (a z16 tile at a 12 px/m field view renders
+/// at ~23x — each tile pixel ~23 screen px). Pure function so the
+/// status line and the 1:1 controls share one definition of the
+/// render scale, and tests can pin it.
+double tileRenderScale({
+  required double viewScalePxPerMeter,
+  required int zoom,
+  required double latitude,
+}) =>
+    viewScalePxPerMeter * tileMetersPerPixel(zoom, latitude);
+
+/// Map-zoom multiplier (relative to a fit-at-zoom-1 transform)
+/// that puts the view at the tile-native 1:1 scale for [tileZoom]
+/// at [latitude]: `fitScale * result == tileNativeScale`. Returns
+/// 1.0 when the fit scale is unusable, so the caller keeps the
+/// plain fit view instead of dividing by zero.
+double mapZoomForTileOneToOne({
+  required double fitScalePxPerMeter,
+  required int tileZoom,
+  required double latitude,
+}) {
+  if (fitScalePxPerMeter <= 0 || !fitScalePxPerMeter.isFinite) return 1.0;
+  return tileNativeScalePxPerMeter(tileZoom, latitude) /
+      fitScalePxPerMeter;
 }

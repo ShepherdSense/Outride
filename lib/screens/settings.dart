@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../services/discovery.dart';
@@ -9,6 +10,7 @@ import '../services/experimental_sensors.dart';
 import '../services/radio_driver.dart';
 import '../services/recorder.dart';
 import '../services/tile_pack.dart';
+import '../services/web_tile_loader.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import 'fleet_screen.dart';
@@ -303,7 +305,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _fetchVoiceEnabled = widget.state.fetchVoiceEnabled;
     _fetchVoiceMuted = widget.state.fetchVoiceMuted;
     _fetchVoiceRate = widget.state.fetchVoiceRate;
-    _tileSourceId = s.tileSourceId;
+    // On web the stored id is normalized to the EFFECTIVE source
+    // (v0.29.4): a stored OSM selection renders as USGS Topo on
+    // web, so the dropdown must open on Topo — showing OSM while
+    // the map painted Topo was the disagreement. Saving then
+    // persists the honest value. Uses the shared helper so the
+    // dropdown and the loader can never drift apart again.
+    _tileSourceId = effectiveTileSourceIdFor(
+      storedId: s.tileSourceId,
+      isWeb: kIsWeb,
+    );
     _droneEoUrl = TextEditingController(text: s.droneEoUrl);
     _droneIrUrl = TextEditingController(text: s.droneIrUrl);
     _droneCloudEoUrl = TextEditingController(text: s.droneCloudEoUrl);
@@ -928,16 +939,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            initialValue: widget.state.tileSources
+            // The value is the EFFECTIVE source (v0.29.4): on web
+            // a stored OSM selection resolves to USGS Topo, and
+            // OSM is not offered at all there — the loader never
+            // fetches it, so listing it would show a source the
+            // map cannot render. Options come from the shared
+            // helper so the dropdown and the loader can never
+            // drift apart again.
+            initialValue: tileSourceOptionsFor(isWeb: kIsWeb)
                     .any((s) => s.id == _tileSourceId)
                 ? _tileSourceId
-                : widget.state.selectedTileSource.id,
+                : widget.state.effectiveTileSource.id,
             dropdownColor: OutrideColors.surface2,
             style: OutrideType.rowValue(OutrideColors.onDark),
             decoration: const InputDecoration(
                 labelText: 'OFFLINE MAP TILE SOURCE (KEYLESS ONLY)'),
             items: [
-              for (final s in widget.state.tileSources)
+              for (final s in tileSourceOptionsFor(isWeb: kIsWeb))
                 DropdownMenuItem(
                   value: s.id,
                   child: Text(s.displayName),
@@ -946,6 +964,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: (v) =>
                 setState(() => _tileSourceId = v ?? 'osm_standard'),
           ),
+          if (kIsWeb) ...[
+            const SizedBox(height: 4),
+            Text(
+              'ON WEB THE MAP SHOWS THE EFFECTIVE SOURCE — '
+              'OPENSTREETMAP IS NOT FETCHED ON WEB (USGS ONLY).',
+              style: OutrideType.section(10).copyWith(height: 1.6),
+            ),
+          ],
           const SizedBox(height: 10),
           Text(
             'CATALOG: ${widget.state.deviceSignatures.builtIn.length} '
