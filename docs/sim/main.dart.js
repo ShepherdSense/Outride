@@ -118565,7 +118565,7 @@ if(p){q=A.bfd()
 q=B.bP.ghv().aS(q)}else q=q.b
 p=m.y
 if(p==null)p="0000000000000000"
-s=B.am.aS(B.Z.h3(new A.aiT(o,q,p,m.gAi(),"0.29.5",m.b.$0(),m.gqt().length+1,B.e.a_(r.eL().a,1000)).d8(),null))
+s=B.am.aS(B.Z.h3(new A.aiT(o,q,p,m.gAi(),"0.29.6",m.b.$0(),m.gqt().length+1,B.e.a_(r.eL().a,1000)).d8(),null))
 l.VT(s,A.G5("239.2.3.2"),6970)}catch(n){}},
 jy(a){return this.aJg(a)},
 aJg(a){var s=0,r=A.o(t.lt),q,p=this,o,n,m,l,k,j
@@ -119686,7 +119686,7 @@ break}m=a.a+"_"+b.a+"_"+b.b+"_"+b.c
 p=9
 j=t.N
 s=12
-return A.f(n.a.Fe("GET",A.ee(a.UW(b)),A.ab(["User-Agent","Outride/0.29.5 (offline tile cache)"],j,j)),$async$tW)
+return A.f(n.a.Fe("GET",A.ee(a.UW(b)),A.ab(["User-Agent","Outride/0.29.6 (offline tile cache)"],j,j)),$async$tW)
 case 12:l=d
 if(l.b!==200||l.w.length===0)throw A.h(B.OD)
 s=13
@@ -121072,7 +121072,7 @@ case 4:if(!(l<3)){s=6
 break}if(g.a||g.b){s=6
 break}q=8
 s=11
-return A.f(j.Fe("GET",A.ee(i.UW(n)),A.ab(["User-Agent","Outride/0.29.5 (offline tile cache)"],h,h)).fs(B.dL),$async$$0)
+return A.f(j.Fe("GET",A.ee(i.UW(n)),A.ab(["User-Agent","Outride/0.29.6 (offline tile cache)"],h,h)).fs(B.dL),$async$$0)
 case 11:k=a4
 if(k.b===200&&!B.v.ga8(k.w)&&A.br8(k.w)){f.push(new A.aI(n,k.w,e))
 m=!0
@@ -121906,7 +121906,7 @@ l=n.a,k=t.N,j=t.H,i=0
 case 3:if(!(i<2)){s=5
 break}p=7
 s=10
-return A.f(l.Fe("GET",A.ee(n.b.UW(a)),A.ab(["User-Agent","Outride/0.29.5 (offline tile cache)"],k,k)).fs(B.dL),$async$yQ)
+return A.f(l.Fe("GET",A.ee(n.b.UW(a)),A.ab(["User-Agent","Outride/0.29.6 (offline tile cache)"],k,k)).fs(B.dL),$async$yQ)
 case 10:m=d
 if(m.b===200&&!B.v.ga8(m.w)&&A.brz(m.w)){g=m.w
 s=5
