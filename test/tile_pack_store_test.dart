@@ -167,7 +167,16 @@ void main() {
       maxZoom: 12,
     );
     expect(meta.expectedTiles, greaterThan(50));
-    await Future<void>.delayed(const Duration(milliseconds: 400));
+    // Wait for the first tile to land instead of a fixed delay: on a
+    // loaded CI runner (sqflite setup + runner load) zero tiles may
+    // have landed after a fixed 400 ms, which made this test a timing
+    // flake. Poll until at least one tile is recorded, then pause
+    // immediately so the pack is still partial.
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (meta.downloadedTiles == 0) {
+      if (DateTime.now().isAfter(deadline)) break;
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    }
     await store.pausePack(meta.id);
     await store.downloadFuture(meta.id);
     expect(meta.status, TilePackStatus.paused);
