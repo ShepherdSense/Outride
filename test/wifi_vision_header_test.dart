@@ -20,7 +20,20 @@ void main() {
     addTearDown(tester.view.reset);
     final state = AppState();
     addTearDown(state.dispose);
+    // These are layout tests: run the service on the simulated source.
+    // With the v0.29.7 default-LIVE change a fresh AppState opens LIVE,
+    // so on Windows toggleWifiVision(true) starts the real netsh source
+    // and its Process.run leaves a zero-duration timer pending at
+    // teardown ("A Timer is still pending", Windows CI run 45081155848).
+    // The simulated source does no process I/O. The async settings load
+    // only rewrites the flag, never restarts the service, so setting it
+    // here — before the toggle reads it — is enough.
+    state.settings.simulatedMode = true;
     state.toggleWifiVision(true);
+    // Pin the line above: on Linux the fallback source is simulated
+    // either way, so only this assertion catches a regression here.
+    expect(state.settings.simulatedMode, isTrue,
+        reason: 'header tests must run the simulated wifi source');
     await tester.pumpWidget(
       MaterialApp(home: Scaffold(body: WifiVisionScreen(state: state))),
     );
@@ -64,7 +77,13 @@ void main() {
     addTearDown(tester.view.reset);
     final state = AppState();
     addTearDown(state.dispose);
+    // Layout test: simulated source — see the first test. On Windows a
+    // LIVE default would start the real netsh source and its Process.run
+    // leaves a pending timer at teardown (CI run 45081155848).
+    state.settings.simulatedMode = true;
     state.toggleWifiVision(true);
+    expect(state.settings.simulatedMode, isTrue,
+        reason: 'header tests must run the simulated wifi source');
     // Register the AP first: ingest() closes any crossing whose AP
     // is not in the registry, so a bare injected crossing would be
     // swept away by the first poll before the panel ever paints.
