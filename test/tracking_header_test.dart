@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:outride/screens/tracking.dart';
 import 'package:outride/state/app_state.dart';
 
@@ -13,6 +16,13 @@ void main() {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
+    // This test checks the simulated header (SIMULATED LAYOUT, no
+    // RESET LAYOUT button), so it stores a simulated choice: the
+    // fresh-install default is now LIVE (see simulated_mode), and
+    // LIVE renders a second LAYOUT match.
+    SharedPreferences.setMockInitialValues({
+      'rf_sentry_zmeta_v1': jsonEncode({'simulatedMode': true}),
+    });
     final state = AppState();
     addTearDown(state.dispose);
     await tester.pumpWidget(

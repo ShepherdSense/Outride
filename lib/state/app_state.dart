@@ -46,13 +46,17 @@ import '../services/track_stitcher.dart';
 import '../services/zmeta_adapter.dart';
 import '../services/zmeta_https_ingest.dart';
 import '../services/zmeta_ingest_store.dart';
-import '../services/zmeta_pairing.dart' show zmetaIsUsableIngestUrl;
+import '../services/zmeta_pairing.dart'
+    show zmetaIsUsableIngestUrl, zmetaIsValidIpv4, zmetaParseTarget;
+import '../services/cloudflare_auto.dart';
+import '../services/zerotier_detect.dart';
 import '../utils/node_ids.dart';
 import '../services/wifi_aware.dart';
 import '../services/wifi_rtt.dart';
 import '../services/wifi_sense.dart';
 import '../services/airframe_identity.dart';
 import '../services/simulated.dart';
+import '../services/simulated_mode.dart';
 import '../services/remote_id.dart';
 import '../services/remote_id_service.dart';
 import '../services/device_signatures.dart';
@@ -106,7 +110,12 @@ class AppSettings {
     this.dipThreshold = 6.0,
     this.confirmPolls = 2,
     this.baselineWindow = 120,
-    this.simulatedMode = true,
+    // v0.29.7: fresh installs open LIVE at full capability (real
+    // radios, real sensors). Was true — every fresh download opened
+    // in simulated mode and the top bar read SIMULATED. The web sim
+    // is forced back to simulated at startup (see resolveSimulatedMode
+    // and the AppState web force), so the demo stays a demo.
+    this.simulatedMode = false,
     this.autoConnectSilvusUsb = true,
     this.wifiDipThresholdDb = 6.0,
     this.zmetaEnabled = false,
@@ -117,6 +126,14 @@ class AppSettings {
     this.zmetaIngestUrl = '',
     this.zmetaIngestFp = '',
     this.zmetaJoinedPlatformId = '',
+    this.zmetaCloudflareAuto = true,
+    this.zmetaPreCloudflareTransport = '',
+    this.zerotierNetworkId = '',
+    this.zerotierNodeId = '',
+    this.zerotierIp = '',
+    this.zerotierIpStatus = '',
+    this.zerotierIpConfirmed = false,
+    this.zmetaTargetZt = '',
     this.zmetaSecured = false,
     this.zmetaHeartbeatEnabled = false,
     this.zmetaHeartbeatIntervalSec = 60,
@@ -181,8 +198,10 @@ class AppSettings {
 
   /// Transport for ZMeta export: 'udp' (manual host/port, default),
   /// 'https' (hub-issued ingest URL + bearer token — the no-WireGuard
-  /// path for forward-deployed operators), or 'wireguard' (joined via
-  /// invite code; still UDP underneath, to the tunnel address).
+  /// path for forward-deployed operators), 'wireguard' (joined via
+  /// invite code; still UDP underneath, to the tunnel address), or
+  /// 'zerotier' (joined via invite code with a ZeroTier node ID; still
+  /// UDP underneath, to the ZeroTier target 10.99.1.1:5555).
   String zmetaTransport;
 
   /// HTTPS ingest endpoint for [zmetaTransport] == 'https', set by the
@@ -200,6 +219,43 @@ class AppSettings {
   /// operator later edits [zmetaPlatformId] to something else, the stored
   /// token / hub peer no longer matches — see [zmetaPlatformMismatch].
   String zmetaJoinedPlatformId;
+
+  /// Cloudflare auto-path toggle (in-app Settings switch, default ON):
+  /// when a Cloudflare-mode ingest URL is stored and the hub answers,
+  /// the transport flips to HTTPS by itself. Turning it off falls back
+  /// to [zmetaPreCloudflareTransport] and never flips again until it is
+  /// turned back on; a manual connect still works while it is off.
+  bool zmetaCloudflareAuto;
+
+  /// Transport the auto-path flipped FROM when it last selected HTTPS
+  /// (usually 'udp'). Recorded by the auto-eval only — never by a
+  /// manual connect or a join — so turning auto-use off restores the
+  /// link the operator had before the auto-path took over. Empty when
+  /// the auto-path has never flipped the transport.
+  String zmetaPreCloudflareTransport;
+
+  /// ZeroTier join (set by the join flow, cleared by a later
+  /// HTTPS/WireGuard join or a platform-ID change). The tunnel itself
+  /// comes from the ZeroTier One app — these fields only record what
+  /// the hub allocated at redeem time. Nothing ZeroTier is ever
+  /// hard-coded: the network ID arrives from the hub, the node ID is
+  /// typed by the operator from the ZeroTier app.
+  ///
+  /// [zerotierIpStatus] is 'reserved' or 'confirmed' ('' when no ZT
+  /// join). A RESERVED IP is a hub reservation, NOT confirmed by the
+  /// controller — never show it as "Your ZeroTier IP". Only a
+  /// 'confirmed' IP (controller read-back verified the member's real
+  /// managed IP) is the mesh's ZeroTier IP.
+  String zerotierNetworkId;
+  String zerotierNodeId;
+  String zerotierIp;
+  String zerotierIpStatus;
+  bool zerotierIpConfirmed;
+
+  /// ZMeta target over ZeroTier (e.g. '10.99.1.1:5555'). Outride's
+  /// ZMeta export host/port are set to this target when the ZeroTier
+  /// transport is active.
+  String zmetaTargetZt;
 
   /// Operator's acknowledgment that the ZMeta link is secured (WireGuard
   /// tunnel). The app can't verify the tunnel itself — this is the
@@ -343,6 +399,10 @@ class AppSettings {
   /// settings block currently stored — radio configs, node layout and
   /// the GPS origin have their own keys). Missing keys keep defaults.
   Map<String, dynamic> toJson() => {
+        // v0.29.7: the operator's simulated-mode choice persists.
+        // Before this it was never stored, so every cold start fell
+        // back to the constructor default.
+        'simulatedMode': simulatedMode,
         'autoConnectSilvusUsb': autoConnectSilvusUsb,
         'zmetaEnabled': zmetaEnabled,
         'zmetaHost': zmetaHost,
@@ -352,6 +412,14 @@ class AppSettings {
         'zmetaIngestUrl': zmetaIngestUrl,
         'zmetaIngestFp': zmetaIngestFp,
         'zmetaJoinedPlatformId': zmetaJoinedPlatformId,
+        'zmetaCloudflareAuto': zmetaCloudflareAuto,
+        'zmetaPreCloudflareTransport': zmetaPreCloudflareTransport,
+        'zerotierNetworkId': zerotierNetworkId,
+        'zerotierNodeId': zerotierNodeId,
+        'zerotierIp': zerotierIp,
+        'zerotierIpStatus': zerotierIpStatus,
+        'zerotierIpConfirmed': zerotierIpConfirmed,
+        'zmetaTargetZt': zmetaTargetZt,
         'zmetaSecured': zmetaSecured,
         'zmetaHeartbeatEnabled': zmetaHeartbeatEnabled,
         'zmetaHeartbeatIntervalSec': zmetaHeartbeatIntervalSec,
@@ -391,6 +459,11 @@ class AppSettings {
       };
 
   void applyJson(Map<String, dynamic> j) {
+    // v0.29.7: the stored simulated-mode choice, when present. A
+    // missing key keeps the constructor default (LIVE on real apps);
+    // the web force in _loadZmetaSettings still overrides it.
+    final sm = j['simulatedMode'];
+    if (sm is bool) simulatedMode = sm;
     final ac = j['autoConnectSilvusUsb'];
     if (ac is bool) autoConnectSilvusUsb = ac;
     final sa = j['sdrAutoStation'];
@@ -404,7 +477,11 @@ class AppSettings {
     final id = j['zmetaPlatformId'];
     if (id is String && id.isNotEmpty) zmetaPlatformId = id;
     final tr = j['zmetaTransport'];
-    if (tr is String && (tr == 'udp' || tr == 'https' || tr == 'wireguard')) {
+    if (tr is String &&
+        (tr == 'udp' ||
+            tr == 'https' ||
+            tr == 'wireguard' ||
+            tr == 'zerotier')) {
       zmetaTransport = tr;
     }
     final iu = j['zmetaIngestUrl'];
@@ -415,10 +492,66 @@ class AppSettings {
     }
     final jid = j['zmetaJoinedPlatformId'];
     if (jid is String) zmetaJoinedPlatformId = jid;
+    final cfa = j['zmetaCloudflareAuto'];
+    if (cfa is bool) zmetaCloudflareAuto = cfa;
+    final pcf = j['zmetaPreCloudflareTransport'];
+    if (pcf is String &&
+        (pcf == 'udp' ||
+            pcf == 'https' ||
+            pcf == 'wireguard' ||
+            pcf == 'zerotier')) {
+      zmetaPreCloudflareTransport = pcf;
+    }
+    // ZeroTier join fields. Validated like everything else here: a
+    // malformed stored value drops to its empty default, never into
+    // the emitter. The node ID is normalized to lowercase (it is a
+    // public identifier, not a credential).
+    final ztn = j['zerotierNetworkId'];
+    if (ztn is String) {
+      final t = ztn.trim().toLowerCase();
+      zerotierNetworkId =
+          RegExp(r'^[0-9a-f]{16}$').hasMatch(t) ? t : '';
+    }
+    final ztNode = j['zerotierNodeId'];
+    if (ztNode is String) {
+      final t = ztNode.trim().toLowerCase();
+      zerotierNodeId = RegExp(r'^[0-9a-f]{10}$').hasMatch(t) ? t : '';
+    }
+    final ztIp = j['zerotierIp'];
+    if (ztIp is String) {
+      final t = ztIp.trim();
+      zerotierIp =
+          (zmetaIsValidIpv4(t) && t.startsWith('10.99.1.')) ? t : '';
+    }
+    final ztStatus = j['zerotierIpStatus'];
+    if (ztStatus is String) {
+      final t = ztStatus.trim().toLowerCase();
+      zerotierIpStatus =
+          (t == 'reserved' || t == 'confirmed') ? t : '';
+    }
+    final ztConf = j['zerotierIpConfirmed'];
+    if (ztConf is bool) zerotierIpConfirmed = ztConf;
+    final ztTarget = j['zmetaTargetZt'];
+    if (ztTarget is String) {
+      final t = ztTarget.trim();
+      zmetaTargetZt = zmetaParseTarget(t) != null ? t : '';
+    }
     // Migration: meshes joined via the WireGuard flow before the
-    // transport field existed target the hub's tunnel subnet.
-    if (zmetaTransport == 'udp' && zmetaHost.startsWith('10.99.')) {
+    // transport field existed target the hub's tunnel subnet. The two
+    // tunnel pools are DIFFERENT subnets — split them, or a ZeroTier
+    // mesh reads as WireGuard (and the Cloudflare guard would then
+    // protect the wrong transport):
+    //   10.99.1.x (ZeroTier pool) -> 'zerotier'
+    //   10.99.0.x (WireGuard pool, and any other 10.99. host) -> 'wireguard'
+    // A stored 'wireguard' transport whose host is really a ZeroTier
+    // address is the same mislabel — correct it too.
+    if (zmetaTransport == 'udp' && zmetaHost.startsWith('10.99.1.')) {
+      zmetaTransport = 'zerotier';
+    } else if (zmetaTransport == 'udp' && zmetaHost.startsWith('10.99.')) {
       zmetaTransport = 'wireguard';
+    } else if (zmetaTransport == 'wireguard' &&
+        zmetaHost.startsWith('10.99.1.')) {
+      zmetaTransport = 'zerotier';
     }
     final s = j['zmetaSecured'];
     if (s is bool) zmetaSecured = s;
@@ -583,7 +716,29 @@ enum CalibrationState {
 }
 
 class AppState extends ChangeNotifier {
-  AppState() {
+  /// [cloudflareProbe] overrides the Cloudflare ingest-host probe
+  /// (tests only): the real probe opens a real socket, whose error
+  /// completion never delivers inside flutter_test's fake-async zone —
+  /// a refused connect hangs the widget test instead of failing fast.
+  /// Production passes nothing and gets the real probe.
+  /// [zerotierProbe] is the same seam for the ZeroTier tunnel check:
+  /// production lists the real interfaces, tests inject true/false.
+  /// [isWebOverride] is the same seam for the web sim force (tests
+  /// only): production passes nothing and gets the real kIsWeb. The
+  /// public web sim always runs simulated — it has no radios — so
+  /// AppState forces simulatedMode when this is true, at construction
+  /// and again after the async settings load.
+  AppState({
+    Future<bool?> Function(String url)? cloudflareProbe,
+    Future<bool?> Function()? zerotierProbe,
+    bool? isWebOverride,
+  })  : _cloudflareProbe = cloudflareProbe ?? probeCloudflareIngest,
+        _zerotierProbe = zerotierProbe ?? zerotierTunnelUp,
+        _isWeb = isWebOverride ?? kIsWeb {
+    // v0.29.7: the web sim always runs simulated. Force it now so the
+    // first frame is right even before the async settings load; the
+    // load re-applies the same force after reading stored settings.
+    if (_isWeb) settings.simulatedMode = true;
     _tripwire.attachAdaptiveBaseline(_adaptive);
     _loadLayout();
     _loadGpsOrigin();
@@ -604,6 +759,25 @@ class AppState extends ChangeNotifier {
     DisturbanceClassifier.load().then((c) => _classifier = c);
     TrackStitcher.load().then((s) => _stitcher = s);
   }
+
+  /// Cloudflare ingest-host probe (see the constructor doc): the real
+  /// [probeCloudflareIngest] in production, an injected fake in tests.
+  final Future<bool?> Function(String url) _cloudflareProbe;
+
+  /// ZeroTier tunnel probe (see the constructor doc): the real
+  /// [zerotierTunnelUp] in production, an injected fake in tests.
+  final Future<bool?> Function() _zerotierProbe;
+
+  /// Whether this is the web build (see the constructor doc): the real
+  /// [kIsWeb] in production, an injected value in tests.
+  final bool _isWeb;
+
+  /// Public read of [_isWeb] for screens that must behave differently
+  /// on web (e.g. the Settings simulated-mode switch, which is
+  /// disabled on the web sim). The screen cannot use kIsWeb here:
+  /// kIsWeb is false under flutter_test, so the disabled state would
+  /// be untestable.
+  bool get isWeb => _isWeb;
 
   /// Completes when the saved radio list has been read. START waits for
   /// it: otherwise a quick START on a cold launch saw an empty list,
@@ -689,7 +863,7 @@ class AppState extends ChangeNotifier {
   /// they re-join under the new id.
   bool get zmetaPlatformMismatch {
     final t = settings.zmetaTransport;
-    if (t != 'https' && t != 'wireguard') return false;
+    if (t != 'https' && t != 'wireguard' && t != 'zerotier') return false;
     final joined = settings.zmetaJoinedPlatformId.trim();
     if (joined.isEmpty) return false;
     return joined != settings.zmetaPlatformId.trim();
@@ -717,6 +891,257 @@ class AppState extends ChangeNotifier {
       return _zmetaHttpsEmitter().send;
     }
     return _zmetaEmitter().send;
+  }
+
+  /// Cloudflare auto-path status: true when the stored Cloudflare-mode
+  /// ingest URL is selected AND its host answered the probe — i.e. the
+  /// Cloudflare path is actually live, not just configured. Runtime-only;
+  /// not persisted.
+  bool cloudflarePathActive = false;
+
+  /// Short reason for [cloudflarePathActive]: 'active', 'offline',
+  /// 'not configured', 'wireguard', 'zerotier' (ZeroTier joined — the
+  /// Cloudflare path never overrides it), 'auto-off' (hub up, auto-use
+  /// off — connect by hand), or 'unavailable' (web: no probe).
+  /// Runtime-only.
+  String cloudflarePathReason = 'not configured';
+
+  /// Cloudflare auto-path evaluation: probe the stored ingest host and
+  /// select the transport per [selectZmetaTransport].
+  ///
+  /// Runs once at boot (from _loadZmetaSettings, after the persisted
+  /// settings land) and every [kCloudflareRecheckInterval] while ZMeta
+  /// export is on. Never throws and never blocks startup — callers
+  /// always use unawaited. Fail-open: a failed probe leaves the
+  /// transport exactly as it is (offline keeps working on UDP/local)
+  /// and the next re-check tries again; nothing here sits retrying.
+  /// [manual] is the one-shot manual connect: it evaluates as if
+  /// auto-use were on for this single run, so the operator can switch
+  /// to the Cloudflare path by hand while the toggle is off.
+  Future<void> evaluateCloudflarePath({bool manual = false}) async {
+    if (_disposed) return;
+    final url = settings.zmetaIngestUrl;
+    final fp = settings.zmetaIngestFp;
+    final current = settings.zmetaTransport;
+    final joined = settings.zmetaJoinedPlatformId;
+    // Probe only when there is a Cloudflare-mode URL and no joined
+    // tunnel is protecting the transport — a WireGuard OR ZeroTier
+    // join is never overridden, so there is nothing to reach. The
+    // probe touches no destination beyond the already-stored ingest host.
+    bool? reachable;
+    final tunnelJoined = (current == 'wireguard' || current == 'zerotier') &&
+        joined.trim().isNotEmpty;
+    if (isCloudflareIngestUrl(url, fp) && !tunnelJoined) {
+      reachable = await _cloudflareProbe(url);
+      if (_disposed) return;
+    }
+    // The probe is async (up to 3 s): a WireGuard/ZeroTier join, a
+    // re-join, or a new ingest URL may have landed while it was in
+    // flight. Decide from the LIVE settings, never from the pre-probe
+    // snapshot — a mid-probe tunnel join must never be flipped away
+    // (rule a). If the ingest URL changed under us, this run bails:
+    // the probe result belongs to the old host, and the new settings
+    // trigger their own evaluation, which probes the new host.
+    final liveUrl = settings.zmetaIngestUrl;
+    final liveFp = settings.zmetaIngestFp;
+    if (reachable != null && (liveUrl != url || liveFp != fp)) return;
+    final liveCurrent = settings.zmetaTransport;
+    final liveJoined = settings.zmetaJoinedPlatformId;
+    final decision = selectZmetaTransport(
+      currentTransport: liveCurrent,
+      joinedPlatformId: liveJoined,
+      ingestUrl: liveUrl,
+      ingestFp: liveFp,
+      internetReachable: reachable,
+      autoEnabled: manual ? true : settings.zmetaCloudflareAuto,
+    );
+    if (_disposed) return;
+    final flipped = decision.transport != settings.zmetaTransport;
+    if (flipped) {
+      // Record the transport the auto-path flipped FROM, so turning
+      // auto-use off can fall back to it. A manual flip records
+      // nothing — it is the operator's own choice, not the auto-path's.
+      if (!manual && decision.transport == 'https') {
+        settings.zmetaPreCloudflareTransport = settings.zmetaTransport;
+      }
+      settings.zmetaTransport = decision.transport;
+      unawaited(_saveSettings());
+    }
+    final wasActive = cloudflarePathActive;
+    final wasReason = cloudflarePathReason;
+    cloudflarePathActive =
+        decision.transport == 'https' && reachable == true;
+    cloudflarePathReason = decision.reason;
+    // Notify only on a real change: the re-check timer fires every
+    // few minutes, and a no-op evaluation must not rebuild listeners.
+    if (flipped ||
+        cloudflarePathActive != wasActive ||
+        cloudflarePathReason != wasReason) {
+      notifyListeners();
+    }
+  }
+
+  /// Manual connect: probe the stored Cloudflare hub now and switch to
+  /// it when it answers, even if auto-use is off. Returns true when
+  /// the switch happened (the path is active). Never throws; never
+  /// touches a WireGuard join.
+  Future<bool> connectCloudflarePathManually() async {
+    if (_disposed) return false;
+    await evaluateCloudflarePath(manual: true);
+    return cloudflarePathActive;
+  }
+
+  /// In-app Cloudflare auto-path toggle (Settings switch): takes
+  /// effect immediately, persists like any other setting. Turning it
+  /// off falls back to the transport the auto-path flipped from (if
+  /// it flipped one); turning it on re-evaluates right away.
+  Future<void> setCloudflareAuto(bool value) async {
+    if (_disposed) return;
+    final was = settings.zmetaCloudflareAuto;
+    settings.zmetaCloudflareAuto = value;
+    if (!value && was) {
+      final prev = settings.zmetaPreCloudflareTransport;
+      if (settings.zmetaTransport == 'https' && prev.isNotEmpty) {
+        settings.zmetaTransport = prev;
+        settings.zmetaPreCloudflareTransport = '';
+      }
+    }
+    unawaited(_saveSettings());
+    notifyListeners();
+    unawaited(evaluateCloudflarePath());
+  }
+
+  /// ZeroTier path status: true when the ZeroTier transport is selected
+  /// AND the tunnel is actually up — i.e. the ZeroTier path is live,
+  /// not just configured. Runtime-only; not persisted.
+  bool zerotierPathActive = false;
+
+  /// Last probe result: true when a local address in 10.99.1.0/24 was
+  /// seen (the ZeroTier One app has the tunnel up), false when none
+  /// was, false on web where there is no tunnel to see. Runtime-only.
+  /// The Settings screen uses this for the manual "CONNECT VIA
+  /// ZEROTIER" button: the tunnel can be up while the transport is
+  /// still on something else.
+  bool zerotierTunnelDetected = false;
+
+  /// Short reason for [zerotierPathActive]: 'active' (ZeroTier
+  /// selected and the tunnel is up), 'down' (a ZeroTier join is stored
+  /// but the tunnel is not up), 'wireguard' (a WireGuard join outranks
+  /// ZeroTier — the tunnel may be up, but WireGuard owns the link),
+  /// 'not configured' (no ZeroTier join stored, or no usable ZeroTier
+  /// target), or 'unavailable' (web: no probe). Runtime-only.
+  String zerotierPathReason = 'not configured';
+
+  /// ZeroTier auto-connect evaluation: recognize the tunnel and connect
+  /// over it — detection drives connection, not just a status line.
+  ///
+  /// Runs once at boot (from _loadZmetaSettings, after the persisted
+  /// settings land) and every [kZerotierRecheckInterval] while ZMeta
+  /// export is on and a ZeroTier join is stored. Never throws and
+  /// never blocks startup — callers always use unawaited. Fail-open:
+  /// a tunnel that is down leaves the transport exactly as it is
+  /// (offline keeps working on UDP/HTTPS) and the next re-check tries
+  /// again; nothing here sits retrying.
+  ///
+  /// Rules, mirroring the Cloudflare auto-path:
+  ///   a. A WireGuard join is NEVER overridden — WireGuard stays.
+  ///   b. When a ZeroTier join is stored and the tunnel is up, the
+  ///      transport selects 'zerotier' and host/port are set to the
+  ///      stored ZeroTier target (10.99.1.1:5555). The operator can
+  ///      also connect by hand (connectZerotierPathManually) — the
+  ///      same evaluation, on demand.
+  ///   c. When the tunnel is down, the transport is left exactly as
+  ///      it is — the auto-path only ever flips TO 'zerotier', never
+  ///      away. A tunnel that drops mid-operation does not silently
+  ///      re-route events; the operator switches by hand.
+  Future<void> evaluateZerotierPath() async {
+    if (_disposed) return;
+    final hasJoin = settings.zerotierNetworkId.trim().isNotEmpty ||
+        settings.zmetaTargetZt.trim().isNotEmpty;
+    if (!hasJoin) {
+      _setZerotierStatus(detected: false, reason: 'not configured');
+      return;
+    }
+    final detected = await _zerotierProbe();
+    if (_disposed) return;
+    // The probe is async: a re-join (or a platform-ID change clearing
+    // the join) may have landed while it was in flight. Decide from
+    // the LIVE settings — a join that vanished under us ends the run.
+    final liveHasJoin = settings.zerotierNetworkId.trim().isNotEmpty ||
+        settings.zmetaTargetZt.trim().isNotEmpty;
+    if (!liveHasJoin) {
+      _setZerotierStatus(detected: false, reason: 'not configured');
+      return;
+    }
+    final liveCurrent = settings.zmetaTransport;
+    final liveJoined = settings.zmetaJoinedPlatformId;
+    if (detected == null) {
+      _setZerotierStatus(detected: false, reason: 'unavailable');
+      return;
+    }
+    if (!detected) {
+      // Tunnel down: report it, leave the transport alone (rule c).
+      _setZerotierStatus(detected: false, reason: 'down');
+      return;
+    }
+    // Tunnel up. WireGuard is never overridden (rule a) — a stored
+    // WireGuard join outranks ZeroTier.
+    if (liveCurrent == 'wireguard' && liveJoined.trim().isNotEmpty) {
+      _setZerotierStatus(detected: true, reason: 'wireguard');
+      return;
+    }
+    if (liveCurrent == 'zerotier') {
+      _setZerotierStatus(detected: true, reason: 'active');
+      return;
+    }
+    // Flip TO 'zerotier' (rule b): host/port come from the stored
+    // ZeroTier target. No usable target means no flip — report it as
+    // not configured rather than claiming a live link.
+    final target = zmetaParseTarget(settings.zmetaTargetZt);
+    if (target == null) {
+      _setZerotierStatus(detected: true, reason: 'not configured');
+      return;
+    }
+    settings.zmetaTransport = 'zerotier';
+    settings.zmetaHost = target.host;
+    settings.zmetaPort = target.port;
+    unawaited(_saveSettings());
+    // The Cloudflare status is derived from the transport by the
+    // Cloudflare eval, which only runs every 5 minutes — until then
+    // it would still claim 'active' while the link is ZeroTier.
+    // Clear it here so Settings never shows two live paths at once.
+    // (The notify inside _setZerotierStatus below covers this change:
+    // zerotierPathActive flips false→true in the same call.)
+    cloudflarePathActive = false;
+    cloudflarePathReason = 'zerotier';
+    _setZerotierStatus(detected: true, reason: 'active');
+  }
+
+  /// Shared status write for [evaluateZerotierPath]: updates the
+  /// runtime-only ZeroTier fields and notifies only on a real change.
+  void _setZerotierStatus({required bool detected, required String reason}) {
+    final wasDetected = zerotierTunnelDetected;
+    final wasActive = zerotierPathActive;
+    final wasReason = zerotierPathReason;
+    zerotierTunnelDetected = detected;
+    zerotierPathActive =
+        settings.zmetaTransport == 'zerotier' && detected && reason == 'active';
+    zerotierPathReason = reason;
+    if (zerotierTunnelDetected != wasDetected ||
+        zerotierPathActive != wasActive ||
+        zerotierPathReason != wasReason) {
+      notifyListeners();
+    }
+  }
+
+  /// Manual connect: check the ZeroTier tunnel now and switch to it
+  /// when it is up, even if the re-check timer has not fired yet.
+  /// Returns true when the ZeroTier path is active afterwards. Never
+  /// throws; never touches a WireGuard join.
+  Future<bool> connectZerotierPathManually() async {
+    if (_disposed) return false;
+    await evaluateZerotierPath();
+    return zerotierPathActive;
   }
 
   /// Last known phone position (best-effort cache). Refreshed whenever
@@ -816,12 +1241,18 @@ class AppState extends ChangeNotifier {
   /// the opt-in heartbeat. Called from applySettings; stop() cancels.
   Timer? _zmetaFixTimer;
   Timer? _zmetaHeartbeatTimer;
+  Timer? _cloudflareRecheckTimer;
+  Timer? _zerotierRecheckTimer;
 
   void _configureZmetaTimers() {
     _zmetaFixTimer?.cancel();
     _zmetaHeartbeatTimer?.cancel();
     _zmetaFixTimer = null;
     _zmetaHeartbeatTimer = null;
+    _cloudflareRecheckTimer?.cancel();
+    _cloudflareRecheckTimer = null;
+    _zerotierRecheckTimer?.cancel();
+    _zerotierRecheckTimer = null;
     if (!settings.zmetaEnabled) return;
     // Keep the phone fix warm so per-observation geo moves with the
     // team. Best-effort; failures are silent by design.
@@ -838,6 +1269,64 @@ class AppState extends ChangeNotifier {
         (_) => unawaited(_emitZmetaHeartbeat()),
       );
     }
+    // Cloudflare auto-path: re-check the stored hub every few minutes
+    // so a hub that comes up later connects by itself (and a hub that
+    // goes down is reported). A failed probe changes nothing — the
+    // transport stays as it is until the next re-check.
+    _startCloudflareRecheckTimer();
+    // ZeroTier auto-connect: same idea, on the local tunnel — re-check
+    // every minute so a tunnel that comes up later connects by itself.
+    _startZerotierRecheckTimer();
+    // A settings save is also a re-evaluation point (a fresh join may
+    // have stored a Cloudflare-mode URL) — run once now, unawaited.
+    unawaited(evaluateCloudflarePath());
+    unawaited(evaluateZerotierPath());
+  }
+
+  /// (Re)start the Cloudflare re-check timer. Runs only while ZMeta
+  /// export is on AND a Cloudflare-mode ingest URL is stored — there
+  /// is nothing to re-check otherwise. Called from _configureZmetaTimers
+  /// (settings save) and from _loadZmetaSettings (boot): unlike the
+  /// fix/heartbeat timers, which only start after a save, the re-check
+  /// must run from boot so a hub that comes up later connects without
+  /// anyone opening Settings first.
+  void _startCloudflareRecheckTimer() {
+    _cloudflareRecheckTimer?.cancel();
+    _cloudflareRecheckTimer = null;
+    if (_disposed) return;
+    if (!settings.zmetaEnabled) return;
+    if (!isCloudflareIngestUrl(
+        settings.zmetaIngestUrl, settings.zmetaIngestFp)) {
+      return;
+    }
+    _cloudflareRecheckTimer = Timer.periodic(
+      kCloudflareRecheckInterval,
+      (_) => unawaited(evaluateCloudflarePath()),
+    );
+  }
+
+  /// (Re)start the ZeroTier re-check timer. Runs only while ZMeta
+  /// export is on AND a ZeroTier join is stored — there is nothing to
+  /// re-check otherwise. Called from _configureZmetaTimers (settings
+  /// save) and from _loadZmetaSettings (boot): like the Cloudflare
+  /// timer, it must run from boot so a tunnel that comes up later
+  /// connects without anyone opening Settings first. The check is
+  /// local-only (one interface list), so a one-minute interval is
+  /// cheap — an operator who just joined the network in the ZeroTier
+  /// app should not wait five minutes for Outride to notice.
+  void _startZerotierRecheckTimer() {
+    _zerotierRecheckTimer?.cancel();
+    _zerotierRecheckTimer = null;
+    if (_disposed) return;
+    if (!settings.zmetaEnabled) return;
+    if (settings.zerotierNetworkId.trim().isEmpty &&
+        settings.zmetaTargetZt.trim().isEmpty) {
+      return;
+    }
+    _zerotierRecheckTimer = Timer.periodic(
+      kZerotierRecheckInterval,
+      (_) => unawaited(evaluateZerotierPath()),
+    );
   }
 
   // ---- CoT output + emitter ingest wiring ----
@@ -2883,6 +3372,11 @@ class AppState extends ChangeNotifier {
     final wasPolling = polling;
     final wasWifi = wifiVisionEnabled;
     stop();
+    // v0.29.7: the web sim always runs simulated — a save from any UI
+    // path (including the Settings screen) must never unlock it. Force
+    // the incoming value before assignment so the persisted save
+    // agrees too.
+    if (_isWeb) s.simulatedMode = true;
     settings = s;
     // v0.29.3: a settings save can change the tile source — keep
     // the web loader on the selected USGS source.
@@ -3187,6 +3681,10 @@ class AppState extends ChangeNotifier {
     _zmetaFixTimer = null;
     _zmetaHeartbeatTimer?.cancel();
     _zmetaHeartbeatTimer = null;
+    _cloudflareRecheckTimer?.cancel();
+    _cloudflareRecheckTimer = null;
+    _zerotierRecheckTimer?.cancel();
+    _zerotierRecheckTimer = null;
     _simDriver = null;
     polling = false;
     notifyListeners();
@@ -4339,8 +4837,25 @@ class AppState extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_zmetaSettingsKey);
-      if (raw == null) return;
-      settings.applyJson(jsonDecode(raw) as Map<String, dynamic>);
+      if (raw == null) {
+        // Fresh install — no stored settings. Resolve the simulated
+        // default now (LIVE on real apps; the web sim always runs
+        // simulated) so the first frame already shows the right pill.
+        settings.simulatedMode =
+            resolveSimulatedMode(stored: null, isWeb: _isWeb);
+        return;
+      }
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      settings.applyJson(decoded);
+      // v0.29.7: a stored operator choice wins on non-web; the web
+      // sim always runs simulated, even with a stored false. Read the
+      // stored value out of the raw JSON rather than the field, so a
+      // missing key is distinguishable from a stored false.
+      final storedSim = decoded['simulatedMode'];
+      settings.simulatedMode = resolveSimulatedMode(
+        stored: storedSim is bool ? storedSim : null,
+        isWeb: _isWeb,
+      );
     } catch (_) {
       // Corrupt prefs: keep defaults.
     }
@@ -4357,6 +4872,20 @@ class AppState extends ChangeNotifier {
     // v0.29.3: the web tile loader follows the persisted tile
     // source from boot (USGS only, else USGS Topo).
     syncWebTileSource();
+    // Cloudflare auto-path: one boot evaluation now that the persisted
+    // settings are in — if a Cloudflare-mode ingest URL is stored and
+    // the hub answers, the transport selects HTTPS by itself.
+    // Unawaited with a short probe timeout: boot never waits on it.
+    unawaited(evaluateCloudflarePath());
+    // ZeroTier auto-connect: one boot evaluation too — if a ZeroTier
+    // join is stored and the tunnel is up, the transport selects
+    // 'zerotier' by itself.
+    unawaited(evaluateZerotierPath());
+    // Start the re-check timer from boot (see _startCloudflareRecheckTimer):
+    // a hub that comes up later must connect without anyone opening
+    // Settings first.
+    _startCloudflareRecheckTimer();
+    _startZerotierRecheckTimer();
     notifyListeners();
   }
 
@@ -4842,6 +5371,10 @@ class AppState extends ChangeNotifier {
     _zmetaFixTimer = null;
     _zmetaHeartbeatTimer?.cancel();
     _zmetaHeartbeatTimer = null;
+    _cloudflareRecheckTimer?.cancel();
+    _cloudflareRecheckTimer = null;
+    _zerotierRecheckTimer?.cancel();
+    _zerotierRecheckTimer = null;
     remoteId.dispose();
     unawaited(_voiceService?.dispose());
     _voiceService = null;

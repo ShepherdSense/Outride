@@ -173,7 +173,7 @@ const double kMaxMercatorLat = 85.05112878;
 /// Sent on every fetch/refresh; no contact address is baked in
 /// because none is configured for this app — the application name
 /// and version are the identification.
-const String kTileUserAgent = 'Outride/0.29.6 (offline tile cache)';
+const String kTileUserAgent = 'Outride/0.29.7 (offline tile cache)';
 
 /// WGS84 -> slippy tile at [zoom]. Pure Dart.
 ///

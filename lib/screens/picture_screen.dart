@@ -169,7 +169,19 @@ class PictureScreen extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text('PERIMETER STATUS', style: OutrideType.section()),
+              // The LIVE chip is one character wider than SIM; without
+              // the shrink-wrap the row overflows a 360 px phone in
+              // LIVE mode (11 px) — the default since v0.29.7. The
+              // label scales down only when it must; in SIM mode it
+              // renders exactly as before (Flexible is loose, so the
+              // Spacer still pins the chip right).
+              Flexible(
+                child: FittedBox(
+                  alignment: Alignment.centerLeft,
+                  fit: BoxFit.scaleDown,
+                  child: Text('PERIMETER STATUS', style: OutrideType.section()),
+                ),
+              ),
               const Spacer(),
               Container(
                 padding:

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,7 +15,13 @@ import 'package:outride/theme.dart';
 
 void main() {
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
+    // These tests exercise the sim-fed Picture/Sensors screens, so
+    // they store a simulated choice: the fresh-install default is
+    // now LIVE (see simulated_mode), and the async settings load
+    // would otherwise flip the screens to LIVE mid-test.
+    SharedPreferences.setMockInitialValues({
+      'rf_sentry_zmeta_v1': jsonEncode({'simulatedMode': true}),
+    });
   });
 
   tearDown(() async {
@@ -199,6 +207,61 @@ void main() {
       expect(find.text('NOT POLLING — PRESS START.'), findsOneWidget);
       expect(find.text('NO LINK DATA YET'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('status banner never overflows at 360 px in LIVE or SIM',
+        (tester) async {
+      // Regression test for the Flexible + FittedBox(scaleDown) fix
+      // around 'PERIMETER STATUS': the LIVE chip is one character
+      // wider than SIM, and without the shrink-wrap the row overflowed
+      // a 360 px phone in LIVE mode (11 px) — the default since
+      // v0.29.7. The SIM rendering must stay exactly as before: the
+      // label at full size, never scaled down.
+      addTearDown(tester.view.reset);
+      Future<AppState> pumpBanner({required bool simulated}) async {
+        SharedPreferences.setMockInitialValues({
+          'rf_sentry_zmeta_v1': jsonEncode({'simulatedMode': simulated}),
+        });
+        final state = AppState();
+        addTearDown(state.dispose);
+        tester.view.physicalSize = const Size(360, 800);
+        tester.view.devicePixelRatio = 1.0;
+        await tester.pumpWidget(
+          MaterialApp(
+              theme: buildDarkTheme(),
+              home: Scaffold(body: PictureScreen(state: state))),
+        );
+        // Let the async settings load land so the mode under test is
+        // the mode asserted, not the constructor default.
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 500)));
+        await tester.pump();
+        return state;
+      }
+
+      // LIVE first: the wider chip is the overflowing case.
+      final liveState = await pumpBanner(simulated: false);
+      expect(liveState.settings.simulatedMode, isFalse);
+      expect(find.text('PERIMETER STATUS'), findsOneWidget);
+      expect(find.text('LIVE'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+
+      // SIM: same width, no overflow, and the label at full size.
+      final simState = await pumpBanner(simulated: true);
+      expect(simState.settings.simulatedMode, isTrue);
+      expect(find.text('PERIMETER STATUS'), findsOneWidget);
+      expect(find.text('SIM'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      final labelBox =
+          tester.renderObject<RenderBox>(find.text('PERIMETER STATUS'));
+      final painter = TextPainter(
+        text: TextSpan(
+            text: 'PERIMETER STATUS', style: OutrideType.section()),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      expect(labelBox.size.width, closeTo(painter.width, 0.5),
+          reason: 'SIM label renders at full size, never scaled down');
     });
   });
 

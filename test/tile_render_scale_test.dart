@@ -25,6 +25,7 @@
 ///    source resolution the dropdown now uses.
 library;
 
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -306,7 +307,14 @@ void main() {
 
   group('1:1 by default + persistence (v0.29.5)', () {
     setUp(() {
-      SharedPreferences.setMockInitialValues({});
+      // These tests exercise the maps against the simulated demo
+      // anchor, so they store a simulated choice: the fresh-install
+      // default is now LIVE (see simulated_mode), and the async
+      // settings load would otherwise flip the maps to LIVE mid-test
+      // (no origin, no 1:1 default).
+      SharedPreferences.setMockInitialValues({
+        'rf_sentry_zmeta_v1': jsonEncode({'simulatedMode': true}),
+      });
     });
 
     test('AppState defaults to 1:1 on', () {

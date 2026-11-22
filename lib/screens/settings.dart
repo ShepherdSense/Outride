@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../services/discovery.dart';
 import '../services/adaptive_baseline.dart';
+import '../services/cloudflare_auto.dart';
+import '../services/zmeta_pairing.dart' show zmetaParseTarget;
 import '../services/experimental_sensors.dart';
 import '../services/radio_driver.dart';
 import '../services/recorder.dart';
@@ -70,6 +72,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late String _zmetaIngestUrl;
   late String _zmetaIngestFp;
   late String _zmetaJoinedPlatformId;
+  late bool _zmetaCloudflareAuto;
+  // The transport the Cloudflare auto-path flipped FROM ('' when it
+  // never flipped). A routine Settings save must carry it through, or
+  // turning auto-use off later has nothing to fall back to.
+  late String _zmetaPreCloudflareTransport;
+  bool _cloudflareConnecting = false;
+  String _seenCloudflareReason = 'not configured';
+  // ZeroTier join (set by the join flow). Carried through a routine
+  // save like the other join fields, or a reopened Settings screen
+  // would silently drop the join.
+  late String _zerotierNetworkId;
+  late String _zerotierNodeId;
+  late String _zerotierIp;
+  late String _zerotierIpStatus;
+  late bool _zerotierIpConfirmed;
+  late String _zmetaTargetZt;
+  bool _zerotierConnecting = false;
+  String _seenZerotierReason = 'not configured';
+  bool _seenZerotierDetected = false;
   late bool _cotEmitEnabled;
   late bool _cotEmitUseMulticast;
   late bool _cotListenEnabled;
@@ -111,6 +132,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // re-join prompt without waiting for the operator to tap anything.
     if (st.zmetaIngestTokenRejected != _seenTokenRejected) {
       _seenTokenRejected = st.zmetaIngestTokenRejected;
+      if (mounted) setState(() {});
+    }
+    // Cloudflare auto-path: the boot evaluation or a re-check can flip
+    // the transport and the status while this screen is open — re-copy
+    // them so the LINK line, the toggle, and a later save never show
+    // or write back a stale value.
+    if (st.settings.zmetaCloudflareAuto != _zmetaCloudflareAuto ||
+        st.settings.zmetaPreCloudflareTransport !=
+            _zmetaPreCloudflareTransport ||
+        st.settings.zmetaTransport != _zmetaTransport ||
+        st.cloudflarePathReason != _seenCloudflareReason) {
+      _zmetaCloudflareAuto = st.settings.zmetaCloudflareAuto;
+      _zmetaPreCloudflareTransport = st.settings.zmetaPreCloudflareTransport;
+      _zmetaTransport = st.settings.zmetaTransport;
+      _seenCloudflareReason = st.cloudflarePathReason;
+      if (mounted) setState(() {});
+    }
+    // ZeroTier auto-connect: the same live-copy rule — a boot
+    // evaluation or a re-check can flip the transport to 'zerotier'
+    // (or change the tunnel status) while this screen is open.
+    if (st.settings.zmetaTransport != _zmetaTransport ||
+        st.zerotierPathReason != _seenZerotierReason ||
+        st.zerotierTunnelDetected != _seenZerotierDetected) {
+      _zmetaTransport = st.settings.zmetaTransport;
+      _seenZerotierReason = st.zerotierPathReason;
+      _seenZerotierDetected = st.zerotierTunnelDetected;
       if (mounted) setState(() {});
     }
     // Voice flags can change from outside this screen (the Fetch
@@ -275,6 +322,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _zmetaIngestUrl = s.zmetaIngestUrl;
     _zmetaIngestFp = s.zmetaIngestFp;
     _zmetaJoinedPlatformId = s.zmetaJoinedPlatformId;
+    _zmetaCloudflareAuto = s.zmetaCloudflareAuto;
+    _zmetaPreCloudflareTransport = s.zmetaPreCloudflareTransport;
+    _zerotierNetworkId = s.zerotierNetworkId;
+    _zerotierNodeId = s.zerotierNodeId;
+    _zerotierIp = s.zerotierIp;
+    _zerotierIpStatus = s.zerotierIpStatus;
+    _zerotierIpConfirmed = s.zerotierIpConfirmed;
+    _zmetaTargetZt = s.zmetaTargetZt;
     _zmetaHeartbeatInterval = TextEditingController(
         text: s.zmetaHeartbeatIntervalSec.toString());
     _simulated = s.simulatedMode;
@@ -507,6 +562,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       zmetaIngestUrl: _zmetaIngestUrl,
       zmetaIngestFp: _zmetaIngestFp,
       zmetaJoinedPlatformId: _zmetaJoinedPlatformId,
+      zmetaCloudflareAuto: _zmetaCloudflareAuto,
+      // Carry the recorded pre-flip transport through: a fresh
+      // AppSettings defaults it to '', which would wipe the fallback
+      // a boot auto-flip recorded (review fix 1).
+      zmetaPreCloudflareTransport: _zmetaPreCloudflareTransport,
+      zerotierNetworkId: _zerotierNetworkId,
+      zerotierNodeId: _zerotierNodeId,
+      zerotierIp: _zerotierIp,
+      zerotierIpStatus: _zerotierIpStatus,
+      zerotierIpConfirmed: _zerotierIpConfirmed,
+      zmetaTargetZt: _zmetaTargetZt,
       zmetaSecured: _zmetaSecured,
       zmetaHeartbeatEnabled: _zmetaHeartbeatEnabled,
       zmetaHeartbeatIntervalSec:
@@ -610,11 +676,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _zmetaPlatform.text = result.platformId;
       _zmetaJoinedPlatformId = result.platformId;
       _zmetaTransport = result.linkMode;
-      if (result.linkMode == 'https') {
+      if (result.linkMode == 'zerotier') {
+        // ZeroTier: host/port come from the hub's ZT target
+        // (10.99.1.1:5555). The ingest URL/fp the redeem returned are
+        // KEPT (not cleared) — the Cloudflare auto-path can use them
+        // as a fallback if the tunnel is down.
+        final ztTarget = zmetaParseTarget(result.zmetaTargetZt);
+        if (ztTarget != null) {
+          _zmetaHost.text = ztTarget.host;
+          _zmetaPort.text = ztTarget.port.toString();
+        }
+        _zerotierNetworkId = result.zerotierNetworkId;
+        _zerotierNodeId = result.zerotierNodeId;
+        _zerotierIp = result.zerotierIp;
+        _zerotierIpStatus = result.zerotierIpStatus;
+        _zerotierIpConfirmed = result.zerotierIpConfirmed;
+        _zmetaTargetZt = result.zmetaTargetZt;
+        _zmetaIngestUrl = result.ingestUrl;
+        _zmetaIngestFp = result.ingestFp;
+      } else if (result.linkMode == 'https') {
         // HTTPS ingest: the URL + secure-storage token are the link.
         // Leave the manual UDP host/port fields untouched.
         _zmetaIngestUrl = result.ingestUrl;
         _zmetaIngestFp = result.ingestFp;
+        // A fresh HTTPS join replaces any earlier ZeroTier join — a
+        // stale ZT record must never linger and auto-connect later.
+        _zerotierNetworkId = '';
+        _zerotierNodeId = '';
+        _zerotierIp = '';
+        _zerotierIpStatus = '';
+        _zerotierIpConfirmed = false;
+        _zmetaTargetZt = '';
       } else {
         if (result.zmetaHost.isNotEmpty && result.zmetaPort > 0) {
           _zmetaHost.text = result.zmetaHost;
@@ -622,20 +714,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
         _zmetaIngestUrl = '';
         _zmetaIngestFp = '';
+        _zerotierNetworkId = '';
+        _zerotierNodeId = '';
+        _zerotierIp = '';
+        _zerotierIpStatus = '';
+        _zerotierIpConfirmed = false;
+        _zmetaTargetZt = '';
       }
     });
     _save();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result.linkMode == 'https'
-              ? 'JOINED OVER HTTPS — NO OTHER APP NEEDED. EXPORT STAYS OFF '
-                  'UNTIL YOU ENABLE IT.'
-              : (result.zmetaHost.isNotEmpty
-                  ? 'JOINED — GATEWAY TARGET SET. EXPORT STAYS OFF '
+          content: Text(result.linkMode == 'zerotier'
+              ? 'JOINED OVER ZEROTIER — ACTIVATE THE TUNNEL IN THE '
+                  'ZEROTIER APP. EXPORT STAYS OFF UNTIL YOU ENABLE IT.'
+              : result.linkMode == 'https'
+                  ? 'JOINED OVER HTTPS — NO OTHER APP NEEDED. EXPORT STAYS OFF '
                       'UNTIL YOU ENABLE IT.'
-                  : 'JOINED — NO GATEWAY TARGET RECEIVED; SET HOST/PORT '
-                      'MANUALLY. EXPORT STAYS OFF UNTIL YOU ENABLE IT.')),
+                  : (result.zmetaHost.isNotEmpty
+                      ? 'JOINED — GATEWAY TARGET SET. EXPORT STAYS OFF '
+                          'UNTIL YOU ENABLE IT.'
+                      : 'JOINED — NO GATEWAY TARGET RECEIVED; SET HOST/PORT '
+                          'MANUALLY. EXPORT STAYS OFF UNTIL YOU ENABLE IT.')),
         ),
       );
     }
@@ -804,11 +905,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SwitchListTile(
             title: Text('SIMULATED MODE', style: OutrideType.rowValue(OutrideColors.onDark)),
             subtitle: Text(
-              'GENERATE SYNTHETIC LINK DATA — NO HARDWARE NEEDED.',
+              // v0.29.7: the web sim always runs simulated — the switch
+              // is disabled there with the reason shown, rather than
+              // hidden, so a web visitor is never left wondering
+              // where it went. The state layer (applySettings) forces
+              // it too, so no UI path can unlock it.
+              widget.state.isWeb
+                  ? 'THE WEB SIM ALWAYS RUNS SIMULATED.'
+                  : 'GENERATE SYNTHETIC LINK DATA — NO HARDWARE NEEDED.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _simulated,
-            onChanged: (v) => setState(() => _simulated = v),
+            onChanged: widget.state.isWeb
+                ? null
+                : (v) => setState(() => _simulated = v),
           ),
           SwitchListTile(
             title: Text('WI-FI VISION', style: OutrideType.rowValue(OutrideColors.onDark)),
@@ -1223,15 +1333,140 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'HAVE AN INVITE CODE? JOINING REGISTERS THIS MESH. EXPORT STAYS OFF UNTIL YOU ENABLE IT.',
             style: OutrideType.section(10).copyWith(height: 1.6),
           ),
-          if (_zmetaTransport == 'https' || _zmetaTransport == 'wireguard')
+          // Cloudflare auto-path status: live from AppState, so a boot
+          // evaluation or re-check updates it without reopening this
+          // screen. The toggle and manual button only appear once a
+          // Cloudflare-mode ingest URL is stored (invite-code join).
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'CLOUDFLARE PATH: ${widget.state.cloudflarePathReason.toUpperCase()}',
+              style: OutrideType.section(10).copyWith(
+                  height: 1.6,
+                  color: widget.state.cloudflarePathActive
+                      ? OutrideColors.green
+                      : widget.state.cloudflarePathReason == 'offline'
+                          ? OutrideColors.amber
+                          : OutrideColors.muted),
+            ),
+          ),
+          if (isCloudflareIngestUrl(_zmetaIngestUrl, _zmetaIngestFp))
+            SwitchListTile(
+              title: Text('CLOUDFLARE AUTO-PATH',
+                  style: OutrideType.rowValue(OutrideColors.onDark)),
+              subtitle: Text(
+                'WHEN THE HUB IS UP, SWITCH TO IT AUTOMATICALLY. TURN OFF TO STAY ON THE CURRENT LINK — YOU CAN STILL CONNECT BY HAND BELOW.',
+                style: OutrideType.section(10).copyWith(height: 1.6),
+              ),
+              value: _zmetaCloudflareAuto,
+              onChanged: (v) {
+                setState(() => _zmetaCloudflareAuto = v);
+                unawaited(widget.state.setCloudflareAuto(v));
+              },
+            ),
+          if (isCloudflareIngestUrl(_zmetaIngestUrl, _zmetaIngestFp) &&
+              _zmetaTransport != 'https' &&
+              _zmetaTransport != 'wireguard')
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.cloud_upload,
+                    color: OutrideColors.purple),
+                label: Text(
+                    _cloudflareConnecting
+                        ? 'CONNECTING…'
+                        : 'CONNECT VIA CLOUDFLARE',
+                    style: OutrideType.rowValue(OutrideColors.onDark)),
+                onPressed: _cloudflareConnecting
+                    ? null
+                    : () {
+                        setState(() => _cloudflareConnecting = true);
+                        widget.state
+                            .connectCloudflarePathManually()
+                            .whenComplete(() {
+                          if (mounted) {
+                            setState(() => _cloudflareConnecting = false);
+                          }
+                        });
+                      },
+              ),
+            ),
+          // ZeroTier status: live from AppState, like the Cloudflare
+          // line above. Only shown once a ZeroTier join is stored —
+          // operators who never use it see no extra noise. The manual
+          // button appears when the tunnel is up but the transport is
+          // still on something else (the auto-eval already flipped it
+          // when the tunnel came up; this is the by-hand path).
+          if (_zerotierNetworkId.isNotEmpty || _zmetaTargetZt.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'ZEROTIER: ${widget.state.zerotierPathReason.toUpperCase()}',
+                style: OutrideType.section(10).copyWith(
+                    height: 1.6,
+                    color: widget.state.zerotierPathActive
+                        ? OutrideColors.green
+                        : widget.state.zerotierPathReason == 'down'
+                            ? OutrideColors.amber
+                            : OutrideColors.muted),
+              ),
+            ),
+          if ((_zerotierNetworkId.isNotEmpty || _zmetaTargetZt.isNotEmpty) &&
+              widget.state.zerotierTunnelDetected &&
+              _zmetaTransport != 'zerotier')
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.hub, color: OutrideColors.purple),
+                label: Text(
+                    _zerotierConnecting
+                        ? 'CONNECTING…'
+                        : 'CONNECT VIA ZEROTIER',
+                    style: OutrideType.rowValue(OutrideColors.onDark)),
+                onPressed: _zerotierConnecting
+                    ? null
+                    : () {
+                        setState(() => _zerotierConnecting = true);
+                        widget.state
+                            .connectZerotierPathManually()
+                            .whenComplete(() {
+                          if (mounted) {
+                            setState(() => _zerotierConnecting = false);
+                          }
+                        });
+                      },
+              ),
+            ),
+          if (_zmetaTransport == 'https' ||
+              _zmetaTransport == 'wireguard' ||
+              _zmetaTransport == 'zerotier')
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
                 _zmetaTransport == 'https'
                     ? 'LINK: HTTPS — EVENTS POST ENCRYPTED STRAIGHT TO THE HUB.'
-                    : 'LINK: WIREGUARD — ACTIVATE THE TUNNEL IN THE WIREGUARD APP.',
+                    : _zmetaTransport == 'zerotier'
+                        ? 'LINK: ZEROTIER — ACTIVATE THE TUNNEL IN THE ZEROTIER APP.'
+                        : 'LINK: WIREGUARD — ACTIVATE THE TUNNEL IN THE WIREGUARD APP.',
                 style: OutrideType.section(10)
                     .copyWith(height: 1.6, color: OutrideColors.green),
+              ),
+            ),
+          // ZeroTier join details (spec §3): network ID, the IP with
+          // its status, and the node ID used. A RESERVED IP is shown
+          // as reserved — never as the mesh's ZeroTier IP. The IP line
+          // is omitted when the hub returned no IP, so an empty value
+          // never renders as a bare label.
+          if (_zmetaTransport == 'zerotier' &&
+              _zerotierNetworkId.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'NETWORK ID: $_zerotierNetworkId\n'
+                '${_zerotierIp.isEmpty ? '' : '${_zerotierIpConfirmed && _zerotierIpStatus == 'confirmed' ? 'ZEROTIER IP (CONFIRMED): $_zerotierIp' : 'RESERVED ZEROTIER IP (NOT CONFIRMED): $_zerotierIp'}\n'}'
+                'NODE ID: $_zerotierNodeId',
+                style: OutrideType.section(10)
+                    .copyWith(height: 1.6, color: OutrideColors.muted),
               ),
             ),
           // S3: the hub has rejected the ingest token repeatedly — the
@@ -1267,7 +1502,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ? 'SEND EACH DETECTION TO THE HUB OVER HTTPS (EMIT-ONLY).'
                   : _zmetaTransport == 'wireguard'
                       ? 'SEND EACH DETECTION TO A ZMETA GATEWAY OVER WIREGUARD (EMIT-ONLY).'
-                      : 'SEND EACH DETECTION TO A ZMETA GATEWAY OVER UDP (EMIT-ONLY).',
+                      : _zmetaTransport == 'zerotier'
+                          ? 'SEND EACH DETECTION TO A ZMETA GATEWAY OVER ZEROTIER (EMIT-ONLY).'
+                          : 'SEND EACH DETECTION TO A ZMETA GATEWAY OVER UDP (EMIT-ONLY).',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _zmetaEnabled,
@@ -1285,24 +1522,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 'e.g. outride-mesh-1', onChanged: (_) {
               // S4: changing the platform ID after a join voids the join
               // (the hub's token/peer is bound to the OLD id). Clear the
-              // transport back to unset until they re-join.
+              // transport back to unset until they re-join — including
+              // the ZeroTier record, or a stale ZT join would
+              // auto-connect later under the wrong platform ID.
               if (_zmetaJoinedPlatformId.isNotEmpty &&
                   _zmetaPlatform.text.trim() != _zmetaJoinedPlatformId &&
                   (_zmetaTransport == 'https' ||
-                      _zmetaTransport == 'wireguard')) {
+                      _zmetaTransport == 'wireguard' ||
+                      _zmetaTransport == 'zerotier')) {
                 _zmetaTransport = 'udp';
                 _zmetaIngestUrl = '';
                 _zmetaIngestFp = '';
+                _zerotierNetworkId = '';
+                _zerotierNodeId = '';
+                _zerotierIp = '';
+                _zerotierIpStatus = '';
+                _zerotierIpConfirmed = false;
+                _zmetaTargetZt = '';
                 _save();
               }
               setState(() {});
             }),
             const SizedBox(height: 10),
             SwitchListTile(
-              title: Text('LINK SECURED (WIREGUARD)',
+              title: Text('LINK SECURED (${_zmetaTransport == 'zerotier' ? 'ZEROTIER' : 'WIREGUARD'})',
                   style: OutrideType.rowValue(OutrideColors.onDark)),
               subtitle: Text(
-                'CONFIRM THE WIREGUARD TUNNEL TO THE GATEWAY IS ACTIVE.',
+                _zmetaTransport == 'zerotier'
+                    ? 'CONFIRM THE ZEROTIER TUNNEL TO THE GATEWAY IS ACTIVE.'
+                    : 'CONFIRM THE WIREGUARD TUNNEL TO THE GATEWAY IS ACTIVE.',
                 style: OutrideType.section(10).copyWith(height: 1.6),
               ),
               value: _zmetaSecured,
@@ -1331,9 +1579,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: Text(
-                  'WARNING: EXPORTING DETECTIONS TO A NON-LOCAL HOST WITHOUT '
-                  'A SECURED LINK. ACTIVATE THE WIREGUARD TUNNEL '
-                  '(SEE zmeta_secure/) OR EXPECT INTERCEPTION AND SPOOFING.',
+                  _zmetaTransport == 'zerotier'
+                      ? 'WARNING: EXPORTING DETECTIONS TO A NON-LOCAL HOST WITHOUT '
+                          'A SECURED LINK. ACTIVATE THE ZEROTIER TUNNEL '
+                          '(SEE zmeta_secure/) OR EXPECT INTERCEPTION AND SPOOFING.'
+                      : 'WARNING: EXPORTING DETECTIONS TO A NON-LOCAL HOST WITHOUT '
+                          'A SECURED LINK. ACTIVATE THE WIREGUARD TUNNEL '
+                          '(SEE zmeta_secure/) OR EXPECT INTERCEPTION AND SPOOFING.',
                   style: OutrideType.section(10).copyWith(
                       height: 1.6, color: OutrideColors.red),
                 ),

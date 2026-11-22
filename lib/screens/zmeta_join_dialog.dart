@@ -21,13 +21,19 @@ class ZmetaJoinResult {
     required this.linkMode,
     this.ingestUrl = '',
     this.ingestFp = '',
+    this.zerotierNetworkId = '',
+    this.zerotierNodeId = '',
+    this.zerotierIp = '',
+    this.zerotierIpStatus = '',
+    this.zerotierIpConfirmed = false,
+    this.zmetaTargetZt = '',
   });
 
   final String zmetaHost;
   final int zmetaPort;
   final String platformId;
 
-  /// 'https' (no-WireGuard ingest path) or 'wireguard'.
+  /// 'https' (no-WireGuard ingest path), 'wireguard', or 'zerotier'.
   final String linkMode;
 
   /// Hub ingest endpoint for 'https' mode. Empty otherwise.
@@ -36,7 +42,25 @@ class ZmetaJoinResult {
   /// TLS mode for 'https' mode, from the invite code's certfp: '-'
   /// (Cloudflare / public-CA) or 64-hex (pinned self-signed).
   final String ingestFp;
+
+  /// ZeroTier join details, set only when [linkMode] == 'zerotier'.
+  /// The ingest URL/fp above are still carried through on a ZeroTier
+  /// join when the hub returned them, so the Cloudflare auto-path can
+  /// use them as a fallback if the tunnel is down.
+  final String zerotierNetworkId;
+  final String zerotierNodeId;
+  final String zerotierIp;
+  final String zerotierIpStatus;
+  final bool zerotierIpConfirmed;
+  final String zmetaTargetZt;
 }
+
+/// Transport the operator picks BEFORE pasting the invite code. HTTPS
+/// is the default; WireGuard and ZeroTier sit under ADVANCED so a
+/// tired operator never picks a tunnel by accident. The picker only
+/// changes what the app sends at redeem and what it stores/displays
+/// afterwards — the invite-code format never changes.
+enum _Transport { https, wireguard, zerotier }
 
 enum _Step { input, working, success, error }
 
@@ -59,6 +83,8 @@ class ZmetaJoinDialog extends StatefulWidget {
 class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
   late final TextEditingController _codeCtl;
   late final TextEditingController _platformCtl;
+  late final TextEditingController _nodeCtl;
+  _Transport _transport = _Transport.https;
   _Step _step = _Step.input;
   String _error = '';
   String _conf = '';
@@ -78,11 +104,25 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
   /// to Settings so the emitter builds the right HttpClient (S1).
   String _ingestFp = '';
 
+  /// True when the hub returned ZeroTier fields for the node ID sent
+  /// at redeem. ZeroTier takes display priority over HTTPS ingest:
+  /// the operator picked the tunnel, so the success screen is the
+  /// ZeroTier one (the ingest URL is still carried through for the
+  /// Cloudflare fallback).
+  bool _ztMode = false;
+  String _ztNetworkId = '';
+  String _ztNodeId = '';
+  String _ztIp = '';
+  String _ztIpStatus = '';
+  bool _ztIpConfirmed = false;
+  String _ztTarget = '';
+
   @override
   void initState() {
     super.initState();
     _codeCtl = TextEditingController();
     _platformCtl = TextEditingController(text: widget.initialPlatformId);
+    _nodeCtl = TextEditingController();
   }
 
   Timer? _clipTimer;
@@ -92,6 +132,7 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
     _clipTimer?.cancel();
     _codeCtl.dispose();
     _platformCtl.dispose();
+    _nodeCtl.dispose();
     super.dispose();
   }
 
@@ -104,6 +145,22 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
             'Set it first, then join.';
       });
       return;
+    }
+    // ZeroTier joins need a node ID from the ZeroTier One app, typed
+    // by the operator. Validate client-side BEFORE the redeem: a
+    // malformed ID must never go on the wire, and the single-use
+    // invite must not be burned on it.
+    String? ztNodeId;
+    if (_transport == _Transport.zerotier) {
+      try {
+        ztNodeId = zmetaValidateZerotierNodeId(_nodeCtl.text);
+      } on ZmetaPairingException catch (e) {
+        setState(() {
+          _step = _Step.error;
+          _error = e.message;
+        });
+        return;
+      }
     }
     late final ZmetaInvite invite;
     try {
@@ -123,7 +180,12 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
         invite: invite,
         publicKeyB64: kp.publicB64,
         platformId: platformId,
+        zerotierNodeId: ztNodeId,
       );
+      // ZeroTier fields take priority: the operator picked the tunnel.
+      // A hub that predates ZeroTier returns none of them, and the
+      // join falls through to the HTTPS/WireGuard paths below.
+      final ztMode = res.zerotierNetworkId.isNotEmpty;
       // HTTPS ingest path (no WireGuard): the hub issued an ingest URL
       // + bearer token. Ingest mode only when BOTH are present (&&):
       // a half-present offer falls back to WireGuard, never fails.
@@ -166,6 +228,13 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
         _ingestMode = ingestMode;
         _ingestUrl = ingestUrl;
         _ingestFp = ingestFp;
+        _ztMode = ztMode;
+        _ztNetworkId = res.zerotierNetworkId;
+        _ztNodeId = ztNodeId ?? '';
+        _ztIp = res.zerotierIp;
+        _ztIpStatus = res.zerotierIpStatus;
+        _ztIpConfirmed = res.zerotierIpConfirmed;
+        _ztTarget = res.zmetaTargetZt;
         _step = _Step.success;
       });
     } on ZmetaPairingException catch (e) {
@@ -204,9 +273,47 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
             Text('INVITE CODE SCANNED — CHECK PLATFORM ID, THEN JOIN')));
   }
 
+  /// A ZeroTier join is usable only when the hub returned a network
+  /// ID AND a parseable ZT target — see [zmetaJoinLinkMode]. A
+  /// network ID with no usable target is NOT a ZeroTier join: the
+  /// success screen, the DONE pop, and the copy-conf button all fall
+  /// through to the HTTPS/WireGuard path exactly like a hub that
+  /// predates ZeroTier.
+  bool get _ztUsable => zmetaJoinLinkMode(
+        zerotierReturned: _ztMode,
+        zerotierTarget: _ztTarget,
+        ingestMode: _ingestMode,
+      ) == 'zerotier';
+
   void _done() {
+    // Effective link mode, by priority: a ZeroTier join (the operator
+    // picked the tunnel and the hub returned ZT fields with a usable
+    // target), else HTTPS ingest, else the classic WireGuard flow.
+    final linkMode =
+        _ztUsable ? 'zerotier' : (_ingestMode ? 'https' : 'wireguard');
+    if (linkMode == 'zerotier') {
+      // ZeroTier mode needs the ZT gateway target — the ingest URL
+      // (already in secure-storage-backed settings via the join) is
+      // kept as the Cloudflare fallback, not the link. Non-null here:
+      // _ztUsable already validated the target parses.
+      final target = zmetaParseTarget(_ztTarget)!;
+      Navigator.of(context).pop(ZmetaJoinResult(
+        zmetaHost: target.host,
+        zmetaPort: target.port,
+        platformId: _usedPlatformId,
+        linkMode: linkMode,
+        ingestUrl: _ingestUrl,
+        ingestFp: _ingestFp,
+        zerotierNetworkId: _ztNetworkId,
+        zerotierNodeId: _ztNodeId,
+        zerotierIp: _ztIp,
+        zerotierIpStatus: _ztIpStatus,
+        zerotierIpConfirmed: _ztIpConfirmed,
+        zmetaTargetZt: _ztTarget,
+      ));
+      return;
+    }
     final target = zmetaParseTarget(_targetNote);
-    final linkMode = _ingestMode ? 'https' : 'wireguard';
     if (linkMode == 'https') {
       // HTTPS mode needs no UDP target — the ingest URL (already in
       // secure-storage-backed settings via the join) is the target.
@@ -258,11 +365,65 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'PASTE THE INVITE CODE FROM THE HUB OPERATOR, OR SCAN ITS '
-              'QR CODE. A LOCAL WIREGUARD KEYPAIR IS GENERATED ON THIS '
-              'DEVICE — THE PRIVATE KEY NEVER LEAVES IT.',
+              'PICK HOW THIS MESH REACHES THE HUB, THEN PASTE THE '
+              'INVITE CODE FROM THE HUB OPERATOR, OR SCAN ITS QR CODE. '
+              'A LOCAL WIREGUARD KEYPAIR IS GENERATED ON THIS DEVICE — '
+              'THE PRIVATE KEY NEVER LEAVES IT.',
               style: OutrideType.section(10),
             ),
+            const SizedBox(height: 10),
+            Text('TRANSPORT',
+                style: OutrideType.section(10)),
+            RadioGroup<_Transport>(
+              groupValue: _transport,
+              onChanged: (v) {
+                if (v != null) setState(() => _transport = v);
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RadioListTile<_Transport>(
+                    value: _Transport.https,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('HTTPS (DEFAULT)',
+                        style: OutrideType.rowValue(OutrideColors.onDark)),
+                  ),
+                  RadioListTile<_Transport>(
+                    value: _Transport.wireguard,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('WIREGUARD (ADVANCED)',
+                        style: OutrideType.rowValue(OutrideColors.onDark)),
+                    subtitle: Text(
+                        'NEEDS THE WIREGUARD APP TO ACTIVATE THE TUNNEL.',
+                        style: OutrideType.section(9)),
+                  ),
+                  RadioListTile<_Transport>(
+                    value: _Transport.zerotier,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('ZEROTIER (ADVANCED FALLBACK)',
+                        style: OutrideType.rowValue(OutrideColors.onDark)),
+                    subtitle: Text(
+                        'NEEDS THE ZEROTIER APP TO ACTIVATE THE TUNNEL.',
+                        style: OutrideType.section(9)),
+                  ),
+                ],
+              ),
+            ),
+            if (_transport == _Transport.zerotier) ...[
+              const SizedBox(height: 6),
+              TextField(
+                controller: _nodeCtl,
+                style: OutrideType.rowValue(OutrideColors.onDark)
+                    .copyWith(fontFamily: OutrideType.mono, fontSize: 12),
+                decoration: const InputDecoration(
+                  labelText: 'ZEROTIER NODE ID',
+                  hintText: '10 hex characters, from the ZeroTier app',
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             TextField(
               controller: _codeCtl,
@@ -319,9 +480,57 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
           ],
         );
       case _Step.success:
+        if (_ztUsable) return _ztSuccessBody();
         if (_ingestMode) return _httpsSuccessBody();
         return _wgSuccessBody();
     }
+  }
+
+  /// Success when the hub returned ZeroTier fields for the node ID
+  /// sent at redeem. Wording is the spec's (ZEROTIER_JOIN_SPEC.md
+  /// §3): a RESERVED IP is never labeled "Your ZeroTier IP" — it is
+  /// a hub reservation, not usable until the operator assigns exactly
+  /// that IP to the node in the controller. Only a CONFIRMED IP
+  /// (controller read-back verified the member's real managed IP) is
+  /// the mesh's ZeroTier IP.
+  Widget _ztSuccessBody() {
+    final confirmed = _ztIpConfirmed && _ztIpStatus == 'confirmed';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.check_circle_outline,
+            color: OutrideColors.green, size: 44),
+        const SizedBox(height: 10),
+        Text(
+          'JOINED OVER ZEROTIER.',
+          style: OutrideType.section(10).copyWith(height: 1.6),
+        ),
+        const SizedBox(height: 6),
+        SelectableText(
+          'NETWORK ID: $_ztNetworkId\n'
+          '${confirmed ? 'ZEROTIER IP (CONFIRMED BY THE CONTROLLER): $_ztIp' : 'RESERVED ZEROTIER IP (NOT CONFIRMED): $_ztIp'}\n'
+          'ZMETA TARGET: $_ztTarget',
+          style: OutrideType.rowValue(OutrideColors.onDark)
+              .copyWith(fontFamily: OutrideType.mono, fontSize: 11, height: 1.6),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          confirmed
+              ? 'NEXT STEP: JOIN THIS NETWORK IN THE ZEROTIER APP. THE '
+                  'HUB OPERATOR HAS ALREADY APPROVED YOU AND THE '
+                  'CONTROLLER CONFIRMED THIS IP — ONCE THE TUNNEL IS UP, '
+                  'TURN ON "EMIT ZMETA EVENTS" IN SETTINGS.'
+              : 'NEXT STEP: JOIN THIS NETWORK IN THE ZEROTIER APP, AND '
+                  'ASK THE HUB OPERATOR TO APPROVE YOU AND ASSIGN EXACTLY '
+                  'THIS IP TO YOUR NODE IN THE CONTROLLER. YOU ARE NOT '
+                  'CONNECTED UNTIL THE OPERATOR DOES BOTH — UNTIL THEN YOU '
+                  'WILL SEE ACCESS_DENIED / REQUESTING_CONFIGURATION IN '
+                  'ZEROTIER, AND NO EVENTS WILL FLOW.',
+          style: OutrideType.section(10).copyWith(height: 1.6),
+        ),
+      ],
+    );
   }
 
   /// Success when the hub issued HTTPS ingest: no second app, no QR.
@@ -371,6 +580,26 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        // ZeroTier was picked but the hub returned no usable ZeroTier
+        // join — either it predates ZeroTier (no fields at all) or it
+        // returned a network ID with no usable target (ZT on, target
+        // unset in pairing.conf). Either way the join fell back to
+        // WireGuard: say so plainly instead of silently joining the
+        // wrong way.
+        if (_transport == _Transport.zerotier && !_ztUsable)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              _ztMode
+                  ? 'THE HUB RETURNED ZEROTIER DETAILS WITHOUT A USABLE TARGET — JOINED OVER WIREGUARD INSTEAD. ASK THE HUB OPERATOR TO CHECK THE ZERO TIER TARGET.'
+                  : 'THE HUB DID NOT RETURN ZEROTIER DETAILS — JOINED OVER '
+                      'WIREGUARD INSTEAD. ASK THE HUB OPERATOR WHETHER THE HUB '
+                      'HAS ZEROTIER TURNED ON.',
+              style: OutrideType.section(10)
+                  .copyWith(color: OutrideColors.amber, height: 1.6),
+              textAlign: TextAlign.center,
+            ),
+          ),
         _wgBody(),
       ],
     );
@@ -485,9 +714,12 @@ class _ZmetaJoinDialogState extends State<ZmetaJoinDialog> {
         ];
       case _Step.success:
         return [
-          // HTTPS mode: the copy button lives inside the collapsed
-          // "ADVANCED: USE WIREGUARD INSTEAD" section.
-          if (!_ingestMode) _copyConfButton(),
+          // The copy button belongs to the WireGuard body only: the
+          // HTTPS success keeps it inside the collapsed advanced
+          // section, and the ZeroTier success shows no .conf at all.
+          // A ZeroTier pick that fell back to WireGuard (no usable
+          // target) shows the WireGuard body, so it gets the button.
+          if (!_ztUsable && !_ingestMode) _copyConfButton(),
           ElevatedButton(
             onPressed: _done,
             child: const Text('DONE'),

@@ -9,6 +9,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -124,12 +125,18 @@ void main() {
     test(
         'live fix -> live marker; stop/deny -> simulated marker; map still works',
         () async {
-      SharedPreferences.setMockInitialValues({});
+      // This test exercises the simulated marker fallback, so it
+      // stores a simulated choice: the fresh-install default is now
+      // LIVE (see simulated_mode), and the async settings load would
+      // otherwise flip an in-memory write back to LIVE mid-test.
+      SharedPreferences.setMockInitialValues({
+        'rf_sentry_zmeta_v1': jsonEncode({'simulatedMode': true}),
+      });
       final state = AppState();
       addTearDown(state.dispose);
-
-      // Simulated mode is the default: the marker is the demo
-      // anchor, at field (0, 0), with no accuracy ring.
+      // Let the async settings load land before asserting on the
+      // marker: the stored simulated choice is what it reads.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
       expect(state.settings.simulatedMode, isTrue);
       final simPos = state.mapOperatorPosition;
       expect(simPos, isNotNull);

@@ -15,6 +15,8 @@ Built by **ShepherdSense**.
 
 ## Download
 
+**Latest release: [v0.29.7](https://github.com/ShepherdSense/Outride/releases/tag/v0.29.7)** — native Cloudflare hub support and ZeroTier support built in; fresh installs open LIVE.
+
 **Just want the app?** Grab the latest release — no building needed:
 
 - **Android:** [outride-android.apk](https://github.com/ShepherdSense/Outride/releases/latest/download/outride-android.apk) — install on your phone / EUD (debug build; grant location permission for GPS node capture)

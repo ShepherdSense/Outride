@@ -80,6 +80,37 @@ class ZmetaPairingException implements Exception {
 bool zmetaIsValidPlatformId(String s) =>
     RegExp(r'^[a-z0-9-]{1,32}$').hasMatch(s);
 
+/// ZeroTier node ID: exactly 10 hex chars, from the ZeroTier One app
+/// (`zerotier-cli info` / the app's device screen). Case-insensitive
+/// on entry, stored lower-cased. A node ID is a PUBLIC identifier, not
+/// a credential and never proof of identity — the hub's controller
+/// read-back is what stops an unapproved or already-paired node, not
+/// this check. Throws [ZmetaPairingException] with the plain message
+/// the join dialog shows verbatim.
+String zmetaValidateZerotierNodeId(String raw) {
+  final t = raw.trim().toLowerCase();
+  if (!RegExp(r'^[0-9a-f]{10}$').hasMatch(t)) {
+    throw ZmetaPairingException(
+        'That doesn\'t look like a ZeroTier node ID — it\'s 10 hex '
+        'characters, find it in the ZeroTier app');
+  }
+  return t;
+}
+
+/// A plain IPv4 dotted quad (no leading zeros, no whitespace). Used
+/// for hub-supplied ZeroTier addresses; a compromised or buggy hub
+/// must not smuggle config text into a stored address. The raw string
+/// is validated as-is — callers that already trimmed their value pass
+/// the trimmed copy.
+bool zmetaIsValidIpv4(String s) {
+  final octets = s.split('.');
+  if (octets.length != 4) return false;
+  return octets.every((o) {
+    final n = int.tryParse(o);
+    return n != null && n >= 0 && n <= 255 && o == '$n';
+  });
+}
+
 /// Extracts a valid invite code from scanned QR text. Hub operators
 /// may QR the bare code or a line of text containing it (e.g. a label
 /// or URL), so this scans for the `Z1.` token and takes the run of
@@ -279,6 +310,27 @@ bool zmetaIngestHostAllowed(
   return (host: host, port: port);
 }
 
+/// Effective link mode for a completed join.
+///
+/// ZeroTier only when the hub returned a network ID AND a usable ZT
+/// target: a hub with ZeroTier on but no target set (pairing.conf)
+/// returns the network ID alone, and popping that as a ZeroTier join
+/// would point the emitter at whatever host was stored before the
+/// join while the UI claims the mesh joined. That case falls through
+/// to HTTPS/WireGuard exactly like a hub that predates ZeroTier.
+/// Pure, so the malformed-target path is regression-testable without
+/// driving the dialog.
+String zmetaJoinLinkMode({
+  required bool zerotierReturned,
+  required String zerotierTarget,
+  required bool ingestMode,
+}) {
+  if (zerotierReturned && zmetaParseTarget(zerotierTarget) != null) {
+    return 'zerotier';
+  }
+  return ingestMode ? 'https' : 'wireguard';
+}
+
 /// Validates a hub-supplied ingest URL. Returns the normalized URL.
 ///
 /// Rules: must be a valid absolute URI with a non-empty host; scheme
@@ -345,6 +397,11 @@ class ZmetaRedeemResult {
     required this.reloadNeeded,
     this.ingestUrl = '',
     this.ingestToken = '',
+    this.zerotierNetworkId = '',
+    this.zerotierIp = '',
+    this.zerotierIpStatus = '',
+    this.zerotierIpConfirmed = false,
+    this.zmetaTargetZt = '',
   });
 
   final String tunnelIp;
@@ -363,6 +420,26 @@ class ZmetaRedeemResult {
   /// Bearer token for [ingestUrl]. Stored in secure storage by the UI
   /// layer, never in SharedPreferences. Empty when absent.
   final String ingestToken;
+
+  /// ZeroTier fields (present only when the redeem carried a
+  /// zerotier_node_id and the hub has ZeroTier on). Empty otherwise —
+  /// a hub that predates ZeroTier simply returns none of them.
+  ///
+  /// [zerotierIpStatus] is 'reserved' or 'confirmed'. A RESERVED IP
+  /// is a hub reservation, NOT confirmed by the controller, and is
+  /// not usable until the operator assigns exactly that IP to the
+  /// node in the controller — the UI must never label it "Your
+  /// ZeroTier IP". Only a 'confirmed' IP (controller read-back
+  /// verified the member's real managed IP) is the mesh's ZeroTier IP.
+  final String zerotierNetworkId;
+  final String zerotierIp;
+  final String zerotierIpStatus;
+  final bool zerotierIpConfirmed;
+
+  /// ZMeta target over ZeroTier (e.g. '10.99.1.1:5555'). Outride's
+  /// ZMeta export host/port are set to this target when the ZeroTier
+  /// transport is active.
+  final String zmetaTargetZt;
 }
 
 String zmetaFingerprintHex(X509Certificate cert) => sha256
@@ -372,7 +449,15 @@ String zmetaFingerprintHex(X509Certificate cert) => sha256
     .join();
 
 /// Maps a hub {ok:false, error} string to a human-readable message.
-String zmetaHumanizeHubError(String error) {
+///
+/// [zerotier] is true when the refused redeem carried a ZeroTier node
+/// ID: the shared 'pool_exhausted' string then means the ZeroTier
+/// pool, not the WireGuard tunnel pool, so it gets the ZeroTier
+/// wording. All other mappings are identical on either transport.
+/// Every ZeroTier refusal leaves the invite usable (the redeem failed
+/// before any provisioning), so the operator can fix the cause and
+/// retry — the messages say so where it matters.
+String zmetaHumanizeHubError(String error, {bool zerotier = false}) {
   final e = error.toLowerCase();
   if (e.contains('expired')) {
     return 'This invite code has expired. Ask the hub operator for a fresh one.';
@@ -383,15 +468,43 @@ String zmetaHumanizeHubError(String error) {
   if (e.contains('rate') || e.contains('too many')) {
     return 'Too many attempts — the hub is rate-limiting. Wait a minute and try again.';
   }
+  // ZeroTier refusals (ZEROTIER_JOIN_SPEC.md §2). Checked before the
+  // generic branches below so none of them swallows a specific one.
+  if (e.contains('bad_zerotier_node_id')) {
+    return 'Node ID format is wrong — 10 hex characters.';
+  }
+  if (e.contains('zerotier_not_configured')) {
+    return 'This hub has ZeroTier turned off. Ask the hub operator to set a ZeroTier network ID, or join over HTTPS / WireGuard instead.';
+  }
+  if (e.contains('zt_node_taken')) {
+    return 'That ZeroTier node ID is already paired to another mesh. Check you typed your own node ID.';
+  }
+  if (e.contains('zerotier_not_authorized')) {
+    return 'Your node is not approved in the ZeroTier controller yet. Ask the hub operator to approve you.';
+  }
+  if (e.contains('zerotier_no_managed_ip')) {
+    return 'Your node is approved but has no managed IP in the controller. Ask the hub operator to check the network\'s IP auto-assign pool.';
+  }
+  if (e.contains('zerotier_controller_error')) {
+    return 'The hub could not reach the ZeroTier controller. Your invite is still usable — try again, or tell the hub operator.';
+  }
+  if (e.contains('zerotier_ip_taken')) {
+    return 'The controller\'s IP for your node is already allocated to another mesh. Tell the hub operator.';
+  }
+  if (e.contains('zerotier_gateway_ip_mismatch')) {
+    return 'The hub does not hold its ZeroTier gateway IP. Tell the hub operator.';
+  }
+  if (e.contains('pool_exhausted')) {
+    return zerotier
+        ? 'The hub is out of ZeroTier addresses. Tell the hub operator.'
+        : 'The hub is out of tunnel addresses. Ask the hub operator to expand the pool.';
+  }
   // N1: explicit mappings for the hub's specific validation errors.
   if (e.contains('bad_platform_id')) {
     return 'That platform ID is invalid — use 1–32 chars: lowercase a–z, 0–9, dashes.';
   }
   if (e.contains('bad_pubkey')) {
     return 'The hub rejected this device\u2019s key. Start the join over to generate a fresh keypair.';
-  }
-  if (e.contains('pool_exhausted')) {
-    return 'The hub is out of tunnel addresses. Ask the hub operator to expand the pool.';
   }
   if (e.contains('provision_failed')) {
     return 'The hub hit a disk/config error while provisioning — your invite code is still valid. Ask the hub operator to check the hub, then try again.';
@@ -422,14 +535,30 @@ String zmetaHumanizeHubError(String error) {
 /// - "-": Cloudflare mode — plain HttpClient() with system roots;
 ///   normal public-CA verification of the hub's domain.
 /// 10 s timeouts throughout.
+/// Redeems an invite code against the hub.
+///
+/// [zerotierNodeId] (ZeroTier joins only): the device's ZeroTier node
+/// ID, exactly 10 hex chars from the ZeroTier One app. Validated and
+/// lower-cased here (defense in depth — the dialog validates first);
+/// sent as the single extra field `zerotier_node_id` in the redeem
+/// body. Omitted entirely on HTTPS/WireGuard joins, so a hub that
+/// predates ZeroTier sees a byte-identical redeem.
 Future<ZmetaRedeemResult> zmetaRedeemInvite({
   required ZmetaInvite invite,
   required String publicKeyB64,
   required String platformId,
+  String? zerotierNodeId,
 }) async {
   if (!zmetaIsValidPlatformId(platformId)) {
     throw ZmetaPairingException(
         'Platform ID must be 1–32 chars: lowercase a-z, 0-9, dashes.');
+  }
+  // ZeroTier node ID, when this is a ZeroTier join: validate before
+  // anything goes on the wire — a malformed ID must never reach the
+  // hub, and the single-use invite must not be burned on it.
+  String? ztNodeId;
+  if (zerotierNodeId != null && zerotierNodeId.trim().isNotEmpty) {
+    ztNodeId = zmetaValidateZerotierNodeId(zerotierNodeId);
   }
   final bool pinMode = invite.certFpHex != '-';
   // Pin mode: SecurityContext() has an EMPTY trust store
@@ -488,6 +617,7 @@ Future<ZmetaRedeemResult> zmetaRedeemInvite({
       'token': invite.token,
       'pubkey': publicKeyB64,
       'platform_id': platformId,
+      if (ztNodeId != null) 'zerotier_node_id': ztNodeId,
     }));
     late HttpClientResponse resp;
     try {
@@ -526,8 +656,9 @@ Future<ZmetaRedeemResult> zmetaRedeemInvite({
           'be misconfigured — ask the hub operator.');
     }
     if (doc['ok'] != true) {
-      throw ZmetaPairingException(
-          zmetaHumanizeHubError('${doc['error'] ?? 'unknown error'}'));
+      throw ZmetaPairingException(zmetaHumanizeHubError(
+          '${doc['error'] ?? 'unknown error'}',
+          zerotier: ztNodeId != null));
     }
     if (resp.statusCode != 200) {
       throw ZmetaPairingException(
@@ -582,6 +713,32 @@ Future<ZmetaRedeemResult> zmetaRedeemInvite({
           'Hub reply was incomplete (missing tunnel details). Ask the hub '
           'operator to check the pairing service.');
     }
+    // ZeroTier fields: present only when the redeem carried a node ID
+    // and the hub has ZeroTier on. Validate everything hub-supplied
+    // before storing it — a malformed value drops to empty (the join
+    // still succeeds over the tunnel fields), never into settings.
+    // A 16-hex network ID, a plain IPv4 in the mesh subnet, a status
+    // of 'reserved'/'confirmed', and a ZMeta target that parses.
+    var ztNetworkId = '';
+    var ztIp = '';
+    var ztIpStatus = '';
+    var ztIpConfirmed = false;
+    var ztTarget = '';
+    if (ztNodeId != null) {
+      final rawNet = '${doc['zerotier_network_id'] ?? ''}'.trim().toLowerCase();
+      if (RegExp(r'^[0-9a-f]{16}$').hasMatch(rawNet)) ztNetworkId = rawNet;
+      final rawIp = '${doc['zerotier_ip'] ?? ''}'.trim();
+      if (zmetaIsValidIpv4(rawIp) && rawIp.startsWith('10.99.1.')) {
+        ztIp = rawIp;
+      }
+      final rawStatus = '${doc['zerotier_ip_status'] ?? ''}'.trim().toLowerCase();
+      if (rawStatus == 'reserved' || rawStatus == 'confirmed') {
+        ztIpStatus = rawStatus;
+      }
+      ztIpConfirmed = doc['zerotier_ip_confirmed'] == true;
+      final rawTarget = '${doc['zmeta_target_zt'] ?? ''}'.trim();
+      if (zmetaParseTarget(rawTarget) != null) ztTarget = rawTarget;
+    }
     return ZmetaRedeemResult(
       tunnelIp: tunnelIp,
       hubPubkey: hubPubkey,
@@ -590,6 +747,11 @@ Future<ZmetaRedeemResult> zmetaRedeemInvite({
       reloadNeeded: doc['reload_needed'] == true,
       ingestUrl: ingestUrl,
       ingestToken: ingestToken,
+      zerotierNetworkId: ztNetworkId,
+      zerotierIp: ztIp,
+      zerotierIpStatus: ztIpStatus,
+      zerotierIpConfirmed: ztIpConfirmed,
+      zmetaTargetZt: ztTarget,
     );
   } finally {
     client.close(force: true);
