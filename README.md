@@ -189,6 +189,7 @@ Every version keeps its own built apps — download whichever version you want, 
 
 | Version | Android | Windows | What's new |
 |---|---|---|---|
+| [v0.29.7](https://github.com/ShepherdSense/Outride/releases/tag/v0.29.7) | [outride-android.apk](https://github.com/ShepherdSense/Outride/releases/download/v0.29.7/outride-android.apk) | [outride-windows.zip](https://github.com/ShepherdSense/Outride/releases/download/v0.29.7/outride-windows.zip) | Native Cloudflare hub support + ZeroTier support built in; fresh installs open LIVE, web sim stays simulated |
 | [v0.29.6](https://github.com/ShepherdSense/Outride/releases/tag/v0.29.6) | [outride-android.apk](https://github.com/ShepherdSense/Outride/releases/download/v0.29.6/outride-android.apk) | [outride-windows.zip](https://github.com/ShepherdSense/Outride/releases/download/v0.29.6/outride-windows.zip) | B1 fusion bench + node power-sizing calculator (benches built, measurement pending recorded data) |
 | [v0.29.5](https://github.com/ShepherdSense/Outride/releases/tag/v0.29.5) | [outride-android.apk](https://github.com/ShepherdSense/Outride/releases/download/v0.29.5/outride-android.apk) | [outride-windows.zip](https://github.com/ShepherdSense/Outride/releases/download/v0.29.5/outride-windows.zip) | 1:1 tiles by default, three-tab UI, encrypted fleet chat (experimental), live GPS map |
 
