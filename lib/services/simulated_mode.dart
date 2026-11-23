@@ -31,9 +31,17 @@ const bool kSimulatedModeFreshDefault = false;
 ///
 /// - [isWeb] true (the public web sim) → always true: the sim has no
 ///   radios and must never open LIVE, whatever is stored or defaulted.
+/// - [isExperimentalBuild] true → the web force does NOT apply: the
+///   experimental web build is a live-feed client (default LIVE, feed
+///   from a mesh node), and simulated mode is an explicit labeled
+///   toggle only. The public sim stays locked to simulated.
 /// - Otherwise a stored operator choice ([stored]) wins when present.
 /// - Otherwise the fresh-install default: LIVE ([kSimulatedModeFreshDefault]).
-bool resolveSimulatedMode({bool? stored, required bool isWeb}) {
-  if (isWeb) return true;
+bool resolveSimulatedMode({
+  bool? stored,
+  required bool isWeb,
+  bool isExperimentalBuild = false,
+}) {
+  if (isWeb && !isExperimentalBuild) return true;
   return stored ?? kSimulatedModeFreshDefault;
 }

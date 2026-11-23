@@ -35,6 +35,7 @@
 /// documented future refinement, not silently substituted.
 library;
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -74,12 +75,29 @@ class BenchSessionRow {
 }
 
 /// One recorded session: rows grouped by poll time.
+///
+/// [sections] holds the OPTIONAL trailing sections of the extended
+/// session format (experimental build): lines after the first `#`
+/// line in the file, grouped under `# SECTION <name>` headers, each
+/// section a list of row maps keyed by that section's own header.
+/// Sections carry bench inputs the B1 CSV cannot: `csi_summary`
+/// (aggregated CSI devHz observations), `trip_events`, `camera_events`,
+/// `sweep_frames`, `backhaul` (per-node uplink-gap summary). A session
+/// file without any `#` line parses exactly as before — sections is
+/// empty and the B1 replay is byte-identical to the old format.
 class BenchSession {
-  BenchSession({required this.name, required List<BenchSessionRow> rows})
-      : _rows = rows;
+  BenchSession({
+    required this.name,
+    required List<BenchSessionRow> rows,
+    Map<String, List<Map<String, String>>> sections = const {},
+  })  : _rows = rows,
+        sections = Map.unmodifiable(sections);
 
   final String name;
   final List<BenchSessionRow> _rows;
+
+  /// Optional trailing sections, by section name. Empty for old files.
+  final Map<String, List<Map<String, String>>> sections;
 
   List<BenchSessionRow> get rows => List.unmodifiable(_rows);
 
@@ -119,12 +137,27 @@ class BenchSession {
 /// Parse one session CSV. Throws [FormatException] with the reason
 /// when the file is not a bench session (missing dip_db or truth
 /// columns, unparseable rows).
+///
+/// Extended format (experimental build): after the B1 data rows, the
+/// file MAY carry optional `# SECTION <name>` blocks (see [BenchSession]).
+/// Everything from the first `#` line onward is section text, never
+/// data — the B1 data parse below sees exactly the rows it saw
+/// before, so an old session file replays exactly as before.
 BenchSession parseSessionCsv(String name, String content) {
-  final lines = content
+  final allLines = content
       .split('\n')
       .map((l) => l.trim())
       .where((l) => l.isNotEmpty)
       .toList();
+  if (allLines.isEmpty) {
+    throw const FormatException('empty file');
+  }
+  // Split data rows from trailing section text at the first `#` line.
+  final hashAt = allLines.indexWhere((l) => l.startsWith('#'));
+  final lines = hashAt < 0 ? allLines : allLines.sublist(0, hashAt);
+  final sections = hashAt < 0
+      ? const <String, List<Map<String, String>>>{}
+      : _parseSections(allLines.sublist(hashAt));
   if (lines.isEmpty) {
     throw const FormatException('empty file');
   }
@@ -184,7 +217,40 @@ BenchSession parseSessionCsv(String name, String content) {
     ));
   }
   if (rows.isEmpty) throw const FormatException('no data rows');
-  return BenchSession(name: name, rows: rows);
+  return BenchSession(name: name, rows: rows, sections: sections);
+}
+
+/// Parse the trailing `# SECTION <name>` blocks of an extended
+/// session file. Malformed section text never fails the session
+/// load — a bad section is skipped, never a reason to reject the
+/// B1 data above it. Each section's first line is its header; the
+/// rows below it are maps keyed by that header.
+Map<String, List<Map<String, String>>> _parseSections(
+    List<String> lines) {
+  final out = <String, List<Map<String, String>>>{};
+  String? current;
+  List<String>? header;
+  for (final line in lines) {
+    if (line.startsWith('# SECTION ')) {
+      current = line.substring('# SECTION '.length).trim();
+      header = null;
+      out[current] = [];
+      continue;
+    }
+    if (line.startsWith('#')) continue; // comment / blank marker
+    if (current == null) continue; // stray text before any section
+    final fields = _splitCsv(line);
+    if (header == null) {
+      header = [for (final h in fields) h.trim()];
+      continue;
+    }
+    if (fields.length < header.length) continue;
+    out[current]!.add({
+      for (var i = 0; i < header.length; i++)
+        header[i]: fields[i].trim(),
+    });
+  }
+  return out;
 }
 
 List<String> _splitCsv(String line) {
@@ -238,12 +304,40 @@ SessionLoad loadSessions(Directory dir) {
     try {
       sessions.add(parseSessionCsv(name, f.readAsStringSync()));
     } on FormatException catch (e) {
-      rejected[name] = e.message;
+      rejected[name] = _withRecorderSummary(dir, name, e.message);
     } on FileSystemException catch (e) {
       rejected[name] = e.message;
     }
   }
   return SessionLoad(sessions: sessions, rejected: rejected);
+}
+
+/// An empty / no-data-rows rejection says how much the recorder
+/// actually wrote: the sibling `<session>.meta.json` (written by
+/// the bench recorder at stop) carries `duration_s` and `rows`.
+/// Appended when present, so "0 rows, 6.0 s" is visible instead of
+/// a bare "no data rows". Returns [reason] unchanged when no
+/// sidecar exists or it carries neither number.
+String _withRecorderSummary(Directory dir, String name, String reason) {
+  if (reason != 'empty file' && reason != 'no data rows') return reason;
+  try {
+    final metaFile = File(
+        '${dir.path}/${name.replaceAll('.csv', '.meta.json')}');
+    if (!metaFile.existsSync()) return reason;
+    final meta =
+        jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
+    final duration = meta['duration_s'];
+    final rows = meta['rows'];
+    if (duration is! num && rows is! num) return reason;
+    final parts = <String>[];
+    if (rows is num) parts.add('${rows.toInt()} rows');
+    if (duration is num) {
+      parts.add('${duration.toDouble().toStringAsFixed(1)} s');
+    }
+    return '$reason (recorder summary: ${parts.join(', ')})';
+  } catch (_) {
+    return reason;
+  }
 }
 
 /// Bench configuration (all tunables in one place, defaults
@@ -308,6 +402,7 @@ class ReplayPoll {
     required this.fused,
     required this.rfState,
     required this.corrTracks,
+    this.locals = const {},
   });
 
   final DateTime t;
@@ -324,6 +419,12 @@ class ReplayPoll {
   /// "naive/metropolis", "naive/centrality"). Null when the arm
   /// produced no estimate at this poll.
   final Map<String, Gaussian2?> fused;
+
+  /// Per-node local (pre-fusion) estimates at this poll, by node id.
+  /// Added for the B5 CI-arms bench (Split CI / sequential CI /
+  /// fading SCI / per-link variance all fuse the locals, not the
+  /// already-fused arms). Empty on polls with < 2 active nodes.
+  final Map<String, Gaussian2> locals;
 
   /// RF track state for the association arm (from the ICI/metropolis
   /// fused estimate when present).
@@ -604,6 +705,7 @@ List<ReplayPoll> replaySession(BenchSession session, BenchConfig config) {
       fused: fused,
       rfState: rfState,
       corrTracks: corr,
+      locals: Map.of(local),
     ));
     prevActive = active;
   }

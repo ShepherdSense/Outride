@@ -266,7 +266,7 @@ void main() {
   });
 
   group('SensorsScreen experimental filter', () {
-    testWidgets('OFF by default: 4 of 6 rows, no EXPERIMENTAL tags',
+    testWidgets('OFF by default: 4 of 7 rows, no EXPERIMENTAL tags',
         (tester) async {
       tester.view.physicalSize = const Size(360, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -287,13 +287,14 @@ void main() {
       expect(find.text('Drone'), findsOneWidget);
       expect(find.text('Fetch'), findsNothing);
       expect(find.text('Spectrum'), findsNothing);
-      expect(find.textContaining('4 of 6 shown'), findsOneWidget);
+      expect(find.text('Bench'), findsNothing);
+      expect(find.textContaining('4 of 7 shown'), findsOneWidget);
       expect(find.text('EXPERIMENTAL'), findsNothing);
     });
 
-    testWidgets('ON: all 6 rows with EXPERIMENTAL tags on Fetch/Spectrum',
+    testWidgets('ON: all 7 rows with EXPERIMENTAL tags on Fetch/Spectrum/Bench',
         (tester) async {
-      // Taller than the 800 px default: all six rows must be built,
+      // Taller than the 800 px default: all seven rows must be built,
       // and ListView builds lazily — the last row sits below the
       // fold at phone height.
       tester.view.physicalSize = const Size(360, 1200);
@@ -313,8 +314,9 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('Fetch'), findsOneWidget);
       expect(find.text('Spectrum'), findsOneWidget);
-      expect(find.text('EXPERIMENTAL'), findsNWidgets(2));
-      expect(find.textContaining('6 of 6 shown'), findsOneWidget);
+      expect(find.text('Bench'), findsOneWidget);
+      expect(find.text('EXPERIMENTAL'), findsNWidgets(3));
+      expect(find.textContaining('7 of 7 shown'), findsOneWidget);
     });
   });
 

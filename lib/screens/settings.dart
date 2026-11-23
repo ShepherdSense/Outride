@@ -8,6 +8,8 @@ import '../services/discovery.dart';
 import '../services/adaptive_baseline.dart';
 import '../services/cloudflare_auto.dart';
 import '../services/zmeta_pairing.dart' show zmetaParseTarget;
+import '../services/build_age.dart';
+import '../services/experimental_build.dart';
 import '../services/experimental_sensors.dart';
 import '../services/radio_driver.dart';
 import '../services/recorder.dart';
@@ -810,6 +812,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
+        // EXPERIMENTAL BUILD — UNTESTED (branch-only, non-dismissible,
+        // always at the top, never gated by the Experimental sensors
+        // toggle below). The live release is v0.29.7.
+        if (kIsExperimentalBuild) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: OutrideColors.amber.withAlpha(30),
+              border: Border.all(
+                  color: OutrideColors.amber.withAlpha(128)),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'EXPERIMENTAL BUILD — UNTESTED',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: OutrideColors.amber,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Outride $kExperimentalVersion. This build contains '
+                  'measurement benches that have not been validated on '
+                  'real data. It is not the live release. Bench results '
+                  'here are measurements, not capabilities. Do not use '
+                  'this build for live operations. The live release is '
+                  'v$kExperimentalBaseVersion.',
+                  style: OutrideType.section(12)
+                      .copyWith(height: 1.5),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Based on Outride v$kExperimentalBaseVersion, cut '
+                  '${buildDate.year}-${buildDate.month.toString().padLeft(2, '0')}-${buildDate.day.toString().padLeft(2, '0')}. '
+                  'Feed server: ${widget.state.feedServerStatus}.',
+                  style: OutrideType.section(11).copyWith(
+                      color: OutrideColors.muted, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         _section('Radios', [
           for (int i = 0;
               i < widget.state.radioConfigs.length;
@@ -909,14 +959,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               // is disabled there with the reason shown, rather than
               // hidden, so a web visitor is never left wondering
               // where it went. The state layer (applySettings) forces
-              // it too, so no UI path can unlock it.
-              widget.state.isWeb
+              // it too, so no UI path can unlock it. EXPERIMENTAL
+              // EXCEPTION: the experimental web build is a live-feed
+              // client, default LIVE — its toggle stays enabled.
+              (widget.state.isWeb && !kIsExperimentalBuild)
                   ? 'THE WEB SIM ALWAYS RUNS SIMULATED.'
                   : 'GENERATE SYNTHETIC LINK DATA — NO HARDWARE NEEDED.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _simulated,
-            onChanged: widget.state.isWeb
+            onChanged: (widget.state.isWeb && !kIsExperimentalBuild)
                 ? null
                 : (v) => setState(() => _simulated = v),
           ),

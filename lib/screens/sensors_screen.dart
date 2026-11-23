@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import '../services/bench_registry.dart';
+import '../services/bench_status.dart';
 import '../services/experimental_sensors.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import 'beam.dart';
+import 'bench_screen.dart';
 import 'drone_tab.dart';
 import 'fetch_screen.dart';
 import 'spectrum_screen.dart';
@@ -15,20 +18,33 @@ import 'wifi_vision.dart';
 /// row opens that instrument's current screen unchanged, wrapped in a
 /// Scaffold so it has a title and a back button.
 ///
-/// Six rows: Field map, Beam, WiFi, Drone, Fetch, Spectrum. Fetch and
-/// Spectrum are EXPERIMENTAL: hidden while the Experimental sensors
-/// toggle in Settings is OFF ("4 of 6 shown"), shown with
-/// EXPERIMENTAL tags when it is ON ("6 of 6 shown"). Nothing inside
-/// the instrument screens changes here.
-class SensorsScreen extends StatelessWidget {
+/// Seven rows: Field map, Beam, WiFi, Drone, Fetch, Spectrum, Bench.
+/// Fetch, Spectrum and Bench are EXPERIMENTAL: hidden while the
+/// Experimental sensors toggle in Settings is OFF ("4 of 7 shown"),
+/// shown with EXPERIMENTAL tags when it is ON ("7 of 7 shown").
+/// Nothing inside the instrument screens changes here.
+class SensorsScreen extends StatefulWidget {
   const SensorsScreen({super.key, required this.state});
 
   final AppState state;
 
   @override
+  State<SensorsScreen> createState() => _SensorsScreenState();
+}
+
+class _SensorsScreenState extends State<SensorsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Refresh the Bench pill from the last input scan (0 before any
+    // scan — the honest default: no input seen yet, nothing READY).
+    refreshBenchReadiness();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: experimentalSensors,
+      listenable: Listenable.merge([experimentalSensors, benchReadyCount]),
       builder: (context, _) {
         final showExp = experimentalSensors.shown;
         final rows = _rows();
@@ -71,25 +87,25 @@ class SensorsScreen extends StatelessWidget {
           icon: Icons.map,
           desc: 'Field map, tracks, GPS positioning, offline tiles.',
           experimental: false,
-          status: state.polling ? 'MAP LIVE' : 'PAUSED',
+          status: widget.state.polling ? 'MAP LIVE' : 'PAUSED',
           statusColor:
-              state.polling ? OutrideColors.green : OutrideColors.muted,
+              widget.state.polling ? OutrideColors.green : OutrideColors.muted,
           open: (context) => _pushInstrument(
-              context, 'Field map', TrackingScreen(state: state)),
+              context, 'Field map', TrackingScreen(state: widget.state)),
         ),
         _SensorRow(
           name: 'Beam',
           icon: Icons.view_in_ar,
           desc: '3D beam view — mesh geometry, drag to orbit.',
           experimental: false,
-          status: state.nodeHealthMap.isEmpty
+          status: widget.state.nodeHealthMap.isEmpty
               ? 'NO NODES'
-              : '${state.nodeHealthMap.length} NODES',
-          statusColor: state.nodeHealthMap.isEmpty
+              : '${widget.state.nodeHealthMap.length} NODES',
+          statusColor: widget.state.nodeHealthMap.isEmpty
               ? OutrideColors.muted
               : OutrideColors.green,
           open: (context) =>
-              _pushInstrument(context, 'Beam', BeamScreen(state: state)),
+              _pushInstrument(context, 'Beam', BeamScreen(state: widget.state)),
         ),
         _SensorRow(
           name: 'WiFi',
@@ -98,10 +114,10 @@ class SensorsScreen extends StatelessWidget {
           experimental: false,
           status: kIsWeb
               ? 'NOT ON WEB'
-              : (state.wifi.running ? 'LISTENING' : 'OFF'),
+              : (widget.state.wifi.running ? 'LISTENING' : 'OFF'),
           statusColor: kIsWeb
               ? OutrideColors.amber
-              : (state.wifi.running
+              : (widget.state.wifi.running
                   ? OutrideColors.green
                   : OutrideColors.muted),
           open: (context) {
@@ -117,7 +133,7 @@ class SensorsScreen extends StatelessWidget {
               );
             } else {
               _pushInstrument(
-                  context, 'WiFi', WifiVisionScreen(state: state));
+                  context, 'WiFi', WifiVisionScreen(state: widget.state));
             }
           },
         ),
@@ -129,31 +145,51 @@ class SensorsScreen extends StatelessWidget {
           status: 'READY',
           statusColor: OutrideColors.muted,
           open: (context) =>
-              _pushInstrument(context, 'Drone', DroneTab(state: state)),
+              _pushInstrument(context, 'Drone', DroneTab(state: widget.state)),
         ),
         _SensorRow(
           name: 'Fetch',
           icon: Icons.pets,
           desc: 'The Fetch — throwable sensor ball, tripwires, voice alerts.',
           experimental: true,
-          status: state.hasFetchDriver ? 'CONNECTED' : 'NO DRIVER',
-          statusColor: state.hasFetchDriver
+          status: widget.state.hasFetchDriver ? 'CONNECTED' : 'NO DRIVER',
+          statusColor: widget.state.hasFetchDriver
               ? OutrideColors.green
               : OutrideColors.muted,
           open: (context) =>
-              _pushInstrument(context, 'Fetch', FetchScreen(state: state)),
+              _pushInstrument(context, 'Fetch', FetchScreen(state: widget.state)),
         ),
         _SensorRow(
           name: 'Spectrum',
           icon: Icons.graphic_eq,
           desc: 'Wideband SDR sweep — detected peaks by frequency.',
           experimental: true,
-          status: state.hasSdrDriver ? 'SWEEPING' : 'NO DRIVER',
-          statusColor: state.hasSdrDriver
+          status: widget.state.hasSdrDriver ? 'SWEEPING' : 'NO DRIVER',
+          statusColor: widget.state.hasSdrDriver
               ? OutrideColors.green
               : OutrideColors.muted,
           open: (context) => _pushInstrument(
-              context, 'Spectrum', SpectrumScreen(state: state)),
+              context, 'Spectrum', SpectrumScreen(state: widget.state)),
+        ),
+        // Bench (experimental instrumentation, same family as Fetch):
+        // queued measurement benches — papers, pass bars, run status.
+        // Nothing runs on synthetic data. The pill counts harnesses
+        // whose required input is present (0 of 12 READY on first
+        // install); the B5 arms ride B1's input (see
+        // benchRunnableEntryCount).
+        _SensorRow(
+          name: 'Bench',
+          icon: Icons.science,
+          desc: 'Queued measurement benches — papers, pass bars, run '
+              'status. Nothing runs on synthetic data.',
+          experimental: true,
+          status:
+              '${benchReadyCount.value} of $benchRunnableEntryCount READY',
+          statusColor: benchReadyCount.value > 0
+              ? OutrideColors.green
+              : OutrideColors.amber,
+          open: (context) => _pushInstrument(
+              context, 'Bench', BenchScreen(state: widget.state)),
         ),
       ];
 

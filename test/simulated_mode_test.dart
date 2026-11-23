@@ -1,6 +1,15 @@
 /// Default-LIVE tests (v0.29.7): fresh installs on real apps open LIVE,
-/// the web sim always runs simulated, a stored operator choice wins on
-/// non-web, and the Settings toggle still flips and persists.
+/// a stored operator choice wins on non-web, and the Settings toggle
+/// still flips and persists.
+///
+/// EXPERIMENTAL-BRANCH NOTE: the "web sim always runs simulated" lock
+/// is a MAIN-branch invariant (the public sim is built from main, where
+/// kIsExperimentalBuild is false). In THIS branch the web artifact is
+/// the live-feed experimental build (default LIVE, simulated mode an
+/// explicit labeled toggle only), so the AppState/Settings web tests
+/// below assert the experimental rule, not the sim lock. The pure
+/// resolveSimulatedMode unit tests keep the main behavior (default
+/// isExperimentalBuild: false) and are unchanged.
 library;
 
 import 'dart:convert';
@@ -105,13 +114,14 @@ void main() {
       state.dispose();
     });
 
-    testWidgets('fresh install on web opens simulated', (tester) async {
+    testWidgets('fresh install on web opens LIVE in the experimental build',
+        (tester) async {
       final state = await bootWith(tester, null, isWeb: true);
-      expect(state.settings.simulatedMode, isTrue);
+      expect(state.settings.simulatedMode, isFalse);
       state.dispose();
     });
 
-    testWidgets('web forces simulated from the first frame, before the load',
+    testWidgets('web does NOT force simulated in the experimental build',
         (tester) async {
       SharedPreferences.setMockInitialValues(
           {'rf_sentry_zmeta_v1': jsonEncode({'simulatedMode': false})});
@@ -120,14 +130,15 @@ void main() {
         zerotierProbe: noTunnel,
         isWebOverride: true,
       );
-      // Synchronous: the constructor-body force, not the async load.
-      expect(state.settings.simulatedMode, isTrue);
+      // Synchronous: the constructor-body web force is skipped for the
+      // experimental build, so a web AppState starts LIVE.
+      expect(state.settings.simulatedMode, isFalse);
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
       await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 500)));
       await tester.pump();
-      expect(state.settings.simulatedMode, isTrue,
-          reason: 'the load must not let a stored false win on web');
+      expect(state.settings.simulatedMode, isFalse,
+          reason: 'the load must not force simulated on web in this build');
       state.dispose();
     });
 
@@ -145,10 +156,11 @@ void main() {
       state.dispose();
     });
 
-    testWidgets('stored false never wins on web', (tester) async {
+    testWidgets('stored false is respected on web in the experimental build',
+        (tester) async {
       final state = await bootWith(tester, {'simulatedMode': false},
           isWeb: true);
-      expect(state.settings.simulatedMode, isTrue);
+      expect(state.settings.simulatedMode, isFalse);
       state.dispose();
     });
 
@@ -185,17 +197,19 @@ void main() {
       state2.dispose();
     });
 
-    testWidgets('applySettings cannot unlock simulated mode on web',
+    testWidgets('applySettings can set simulated mode on web in the experimental build',
         (tester) async {
-      // Review fix: the web force ran only at startup, so a Settings
-      // save with simulatedMode false would unlock the sim until the
-      // next reload. applySettings now forces it at the state layer.
+      // Experimental-branch rule (the web sim lock lives on main): the
+      // experimental web build is a live-feed client, so the toggle
+      // works on web and applySettings must not force simulated.
       final state = await bootWith(tester, null, isWeb: true);
+      expect(state.settings.simulatedMode, isFalse);
+      state.applySettings(AppSettings(simulatedMode: true));
       expect(state.settings.simulatedMode, isTrue);
       state.applySettings(AppSettings(simulatedMode: false));
-      expect(state.settings.simulatedMode, isTrue,
-          reason: 'the web force in applySettings must hold');
-      // The forced value persists, so a reload stays simulated too.
+      expect(state.settings.simulatedMode, isFalse,
+          reason: 'applySettings must not force simulated on web here');
+      // The choice persists, so a reload keeps it too.
       await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 300)));
       await tester.pump();
@@ -204,7 +218,7 @@ void main() {
       expect(raw, isNotNull);
       expect(
           (jsonDecode(raw!) as Map<String, dynamic>)['simulatedMode'],
-          isTrue);
+          isFalse);
       state.dispose();
     });
   });
@@ -280,21 +294,20 @@ void main() {
       state.dispose();
     });
 
-    testWidgets('on web the switch is disabled and saving cannot unlock it',
+    testWidgets('on web the switch is ENABLED in the experimental build',
         (tester) async {
-      // Review fix: the Settings save had no web check, so a web
-      // visitor could turn SIMULATED MODE off, tap Save, and the sim
-      // feed would stop with the pill reading LIVE until the next
-      // reload. The switch is disabled on web (with the reason shown)
-      // and applySettings forces it at the state layer.
+      // Experimental-branch rule (the web sim lock lives on main): the
+      // experimental web build is a live-feed client, default LIVE, so
+      // the SIMULATED MODE switch works on web. It starts LIVE; tapping
+      // the row and saving flips it to simulated and persists.
       SharedPreferences.setMockInitialValues({});
       final state = AppState(
         cloudflareProbe: (_) async => false,
         zerotierProbe: () async => false,
         isWebOverride: true,
       );
-      expect(state.settings.simulatedMode, isTrue,
-          reason: 'a web AppState starts simulated');
+      expect(state.settings.simulatedMode, isFalse,
+          reason: 'a web AppState starts LIVE in this build');
 
       void drainLayoutWarnings() {
         while (tester.takeException() != null) {}
@@ -317,14 +330,15 @@ void main() {
               .first);
       await tester.pump();
       drainLayoutWarnings();
-      // Disabled on web: no working flip, and the note says why.
+      // Enabled on web in this build: the toggle works, and the web
+      // sim lock note is absent.
       final tile = tester.widget<SwitchListTile>(find.ancestor(
           of: find.text('SIMULATED MODE'),
           matching: find.byType(SwitchListTile)));
-      expect(tile.onChanged, isNull);
+      expect(tile.onChanged, isNotNull);
       expect(find.text('THE WEB SIM ALWAYS RUNS SIMULATED.'),
-          findsOneWidget);
-      // Tapping the row and saving anyway cannot unlock it.
+          findsNothing);
+      // Tapping the row and saving flips it to simulated and persists.
       await tester.tap(find.text('SIMULATED MODE'));
       await tester.pump();
       drainLayoutWarnings();

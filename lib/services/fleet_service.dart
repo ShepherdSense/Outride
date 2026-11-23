@@ -764,7 +764,7 @@ class FleetService {
           : _record!.saltB64,
       nodeId: _nodeId ?? '0000000000000000',
       callsign: callsign,
-      appVersion: '0.29.7',
+      appVersion: '0.29.7-experimental',
       hasSilvus: _hasSilvus(),
       memberCount: peers.length + 1,
       t: at.toUtc().millisecondsSinceEpoch ~/ 1000,

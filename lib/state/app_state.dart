@@ -40,6 +40,10 @@ import '../services/operator_pose.dart';
 import '../services/voice_alert_service.dart';
 import '../models/sensor_observation.dart';
 import '../services/recorder.dart';
+import '../services/bench_record.dart';
+import '../services/experimental_build.dart';
+import '../services/feed_client.dart';
+import '../services/feed_server.dart';
 import '../services/replay_driver.dart';
 import '../services/ai_classifier.dart';
 import '../services/track_stitcher.dart';
@@ -735,10 +739,12 @@ class AppState extends ChangeNotifier {
   })  : _cloudflareProbe = cloudflareProbe ?? probeCloudflareIngest,
         _zerotierProbe = zerotierProbe ?? zerotierTunnelUp,
         _isWeb = isWebOverride ?? kIsWeb {
-    // v0.29.7: the web sim always runs simulated. Force it now so the
-    // first frame is right even before the async settings load; the
-    // load re-applies the same force after reading stored settings.
-    if (_isWeb) settings.simulatedMode = true;
+    // v0.29.7: the PUBLIC web sim always runs simulated. Force it now
+    // so the first frame is right even before the async settings load;
+    // the load re-applies the same force after reading stored settings.
+    // The EXPERIMENTAL web build is exempt: it is a live-feed client
+    // (default LIVE, simulated only as an explicit toggle).
+    if (_isWeb && !kIsExperimentalBuild) settings.simulatedMode = true;
     _tripwire.attachAdaptiveBaseline(_adaptive);
     _loadLayout();
     _loadGpsOrigin();
@@ -3264,6 +3270,16 @@ class AppState extends ChangeNotifier {
     if (fresh.isEmpty) return;
     _lastSensorPull = DateTime.now();
     sensorObservations.addAll(fresh);
+    // Experimental: camera motion events are B18 confirm-tier
+    // context for the bench recording (events only — no boxes
+    // exist in the app).
+    if (benchRecorder.isRecording) {
+      for (final o in fresh) {
+        if (o.type == SensorObsType.motion) {
+          benchRecorder.recordCamera(o);
+        }
+      }
+    }
     if (sensorObservations.length > 500) {
       sensorObservations.removeRange(0, sensorObservations.length - 500);
     }
@@ -3372,11 +3388,12 @@ class AppState extends ChangeNotifier {
     final wasPolling = polling;
     final wasWifi = wifiVisionEnabled;
     stop();
-    // v0.29.7: the web sim always runs simulated — a save from any UI
-    // path (including the Settings screen) must never unlock it. Force
-    // the incoming value before assignment so the persisted save
-    // agrees too.
-    if (_isWeb) s.simulatedMode = true;
+    // v0.29.7: the PUBLIC web sim always runs simulated — a save from
+    // any UI path (including the Settings screen) must never unlock it.
+    // Force the incoming value before assignment so the persisted save
+    // agrees too. The experimental web build is exempt (live-feed
+    // client; simulated is an explicit toggle there).
+    if (_isWeb && !kIsExperimentalBuild) s.simulatedMode = true;
     settings = s;
     // v0.29.3: a settings save can change the tile source — keep
     // the web loader on the selected USGS source.
@@ -3446,6 +3463,7 @@ class AppState extends ChangeNotifier {
     _lastAlertAt.clear();
     polling = true;
     error = null;
+    unawaited(_maybeStartFeedServer());
     if (settings.simulatedMode) {
       _simDriver = SimulatedDriver(pollInterval: settings.pollInterval);
       _addPoller(
@@ -3597,6 +3615,156 @@ class AppState extends ChangeNotifier {
     return summary;
   }
 
+  /// EXPERIMENTAL — bench recording (bench_record.dart). Records
+  /// real field sessions the benches can run on: dip_db from a
+  /// vacant-baseline window + operator-declared scripted truth, in
+  /// the BenchSession format the B1 harness reads. Never touches
+  /// live detection, alerting, tripwire, or fleet paths — it only
+  /// observes the sample stream the live pipeline already sees.
+  final BenchRecorder benchRecorder = BenchRecorder();
+
+  /// EXPERIMENTAL — the feed server this node serves the live web
+  /// build from (feed_server.dart), and the feed client this build
+  /// uses when it is itself a web client (feed_client.dart). The
+  /// mesh is untouched: the server lives ON one mesh node; the web
+  /// app connects to it as a client and never joins the mesh.
+  final FeedServer feedServer = FeedServer();
+  final FeedClient feedClient = FeedClient();
+
+  /// Last feed-server start result (address label or `ERROR: ...`).
+  String feedServerStatus = 'off';
+
+  /// CSI/sweep rows already fed to the bench recorder this session
+  /// (dedupe keys — the live-CSI and sweep accessors return the
+  /// current window, not just fresh rows).
+  final Set<String> _seenCsi = {};
+  final Set<String> _seenSweep = {};
+
+  /// Start a bench recording. Returns the session file path, or an
+  /// `ERROR: ...` string on failure (never throws).
+  Future<String> startBenchRecording(BenchRecordConfig config) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final path =
+        await benchRecorder.start(config, effectiveNodes, dir);
+    if (path.isEmpty) {
+      return 'ERROR: ${benchRecorder.lastError ?? 'start failed'}';
+    }
+    feedServer.recording = true;
+    notifyListeners();
+    return path;
+  }
+
+  /// Stop the bench recording and write the session file + sidecars.
+  Future<String> stopBenchRecording() async {
+    final summary = await benchRecorder.stop();
+    feedServer.recording = false;
+    notifyListeners();
+    return summary;
+  }
+
+  /// Feed record_start handler (web client → this node): build the
+  /// record config from the command JSON and start recording.
+  /// Returns the session path or an `ERROR: ...` string.
+  Future<String> _feedRecordStart(Map<String, dynamic> j) async {
+    final templateName = '${j['template'] ?? 'movingCrossings'}';
+    final template = BenchSessionTemplate.values.firstWhere(
+      (t) => t.name == templateName,
+      orElse: () => BenchSessionTemplate.movingCrossings,
+    );
+    (double, double)? point(Object? v) {
+      if (v is! List || v.length < 2) return null;
+      final x = (v[0] as num?)?.toDouble();
+      final y = (v[1] as num?)?.toDouble();
+      if (x == null || y == null) return null;
+      return (x, y);
+    }
+
+    final config = BenchRecordConfig(
+      template: template,
+      label: '${j['label'] ?? ''}',
+      notes: '${j['notes'] ?? ''}',
+      waypointA: point(j['waypoint_a']),
+      waypointB: point(j['waypoint_b']),
+      baselineSeconds: (j['baseline_s'] as num?)?.toInt() ?? 10,
+      illuminatorBand: '${j['illuminator_band'] ?? ''}',
+    );
+    return startBenchRecording(config);
+  }
+
+  /// Feed record_stop handler (web client → this node).
+  Future<String> _feedRecordStop() => stopBenchRecording();
+
+  /// Start the feed server when polling starts (experimental native
+  /// builds only; the web build is a client, never a server).
+  Future<void> _maybeStartFeedServer() async {
+    if (!kIsExperimentalBuild || kIsWeb) return;
+    feedServer.recording = benchRecorder.isRecording;
+    feedServerStatus = await feedServer.start(
+      onRecordStart: _feedRecordStart,
+      onRecordStop: _feedRecordStop,
+    );
+  }
+
+  /// One live snapshot for the feed clients (what this node already
+  /// observes — link states, recent trip context, node count).
+  Map<String, dynamic> feedSnapshot() {
+    final links = <Map<String, dynamic>>[];
+    for (final samples in _latestByPoller.values) {
+      for (final s in samples) {
+        links.add({
+          'link_key': s.linkKey,
+          'from': s.fromNode,
+          'to': s.toNode,
+          'snr_db': s.snr,
+          'dip_db': s.dip,
+        });
+      }
+    }
+    return {
+      'type': 'snapshot',
+      't': DateTime.now().toIso8601String(),
+      'app_version': kExperimentalVersion,
+      'mode': settings.simulatedMode ? 'simulated' : 'live',
+      'links': links,
+      'events': [
+        for (final e in events.take(5))
+          {
+            't': e.timestamp.toIso8601String(),
+            'link_key': e.linkKey,
+            'size_estimate': e.sizeEstimate,
+          },
+      ],
+      'nodes': effectiveNodes.length,
+      'polling': polling,
+      'recording': benchRecorder.isRecording,
+    };
+  }
+
+  /// Feed the bench recorder + feed clients from one poll cycle's
+  /// extras (CSI aggregates, camera motion, SDR sweep peaks). Only
+  /// runs while a bench recording is active; never throws.
+  void _feedBenchExtras(_DriverPoller p) {
+    if (!benchRecorder.isRecording) return;
+    try {
+      final d = p.driver;
+      if (d is GenericSensorDriver) {
+        final now = DateTime.now();
+        for (final o in d.liveCsiObservations(now)) {
+          final key = '${o.sensorId}@${o.timestamp.toIso8601String()}';
+          if (_seenCsi.add(key)) benchRecorder.recordCsi(o);
+        }
+        if (_seenCsi.length > 5000) _seenCsi.clear();
+      }
+      if (d is SdrDriver) {
+        for (final s in d.latestSweepSteps) {
+          final key = '${s.sweepId}:${s.stepIndex}';
+          if (_seenSweep.add(key)) benchRecorder.recordSweep(s);
+        }
+        if (_seenSweep.length > 5000) _seenSweep.clear();
+      }
+    } catch (_) {}
+  }
+
   /// Replay a recording through the live detector pipeline: stops live
   /// pollers, runs the CSV on its own clock with a fresh tripwire.
   Future<void> startReplay(String path, {double speed = 1.0}) async {
@@ -3652,6 +3820,10 @@ class AppState extends ChangeNotifier {
   }
 
   void stop() {
+    // Experimental: stop serving the feed, and finish any bench
+    // recording so the session file is written, not lost.
+    if (benchRecorder.isRecording) unawaited(stopBenchRecording());
+    unawaited(feedServer.stop());
     _startPending = false;
     _autoConnect?.stop();
     _autoConnect = null;
@@ -3709,6 +3881,15 @@ class AppState extends ChangeNotifier {
           recorder.record(r);
         }
       }
+      // Experimental bench recording: the same raw samples, with
+      // dip_db + truth added by the bench recorder (recorder.dart
+      // alone cannot feed the benches). Never during replay.
+      if (benchRecorder.isRecording && !replaying) {
+        for (final r in raw) {
+          benchRecorder.recordLink(r);
+        }
+      }
+      _feedBenchExtras(p);
       p.status.lastPoll = DateTime.now();
       p.status.linkCount = raw.length;
       // Only drivers whose empty poll means "broken" get an error
@@ -3756,6 +3937,13 @@ class AppState extends ChangeNotifier {
       // rehearsing, not watching a live mesh.
       if (classified.isNotEmpty && !replaying) unawaited(_alert(AlertKind.detection));
       events.insertAll(0, classified);
+      // Experimental: trip events are B17 trip data for the bench
+      // recording (timestamps + link context).
+      if (benchRecorder.isRecording) {
+        for (final e in classified) {
+          benchRecorder.recordTrip(e);
+        }
+      }
       // Episodes that ended this poll: the confirm-time event only saw
       // the first couple of polls, so write back the true duration and
       // peak and classify again on the real episode (the model was
@@ -3788,6 +3976,12 @@ class AppState extends ChangeNotifier {
       // unmuted, not replaying). Never throws, never blocks the tick.
       if (drv is FetchDriver) _maybeAnnounceFetchTrips(drv);
       _refreshConnectionLabel();
+      // Experimental: broadcast the live snapshot to web clients.
+      // The mesh is untouched — this only publishes what the node
+      // already observes.
+      if (feedServer.isServing) {
+        feedServer.broadcastSnapshot(feedSnapshot());
+      }
       error = null;
     } catch (e) {
       if (!_pollers.contains(p)) return;
@@ -4840,9 +5034,14 @@ class AppState extends ChangeNotifier {
       if (raw == null) {
         // Fresh install — no stored settings. Resolve the simulated
         // default now (LIVE on real apps; the web sim always runs
-        // simulated) so the first frame already shows the right pill.
-        settings.simulatedMode =
-            resolveSimulatedMode(stored: null, isWeb: _isWeb);
+        // simulated — except the experimental web build, which is a
+        // live-feed client, default LIVE) so the first frame already
+        // shows the right pill.
+        settings.simulatedMode = resolveSimulatedMode(
+          stored: null,
+          isWeb: _isWeb,
+          isExperimentalBuild: kIsExperimentalBuild,
+        );
         return;
       }
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
@@ -4855,6 +5054,7 @@ class AppState extends ChangeNotifier {
       settings.simulatedMode = resolveSimulatedMode(
         stored: storedSim is bool ? storedSim : null,
         isWeb: _isWeb,
+        isExperimentalBuild: kIsExperimentalBuild,
       );
     } catch (_) {
       // Corrupt prefs: keep defaults.

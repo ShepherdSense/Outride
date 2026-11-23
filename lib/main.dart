@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'screens/picture_screen.dart';
 import 'screens/sensors_screen.dart';
 import 'screens/settings.dart';
+import 'services/experimental_build.dart';
 import 'services/experimental_sensors.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
@@ -77,21 +78,66 @@ class _OutrideAppState extends State<OutrideApp> {
                     ),
                   ),
                   const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: OutrideColors.purpleDeep,
-                      border: Border.all(color: OutrideColors.purpleStrong),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      simulated ? 'SIMULATED' : 'LIVE',
-                      style: const TextStyle(
-                        color: Color(0xFFE9D5FF),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2,
+                  // EXPERIMENTAL build pill (branch-only, build-time
+                  // constant — never toggleable off). It answers "is
+                  // this the experimental build?"; the SIMULATED/LIVE
+                  // pill beside it answers "is sensing simulated?".
+                  // The two must never be merged into one. The pill
+                  // cluster scales down as a unit on narrow phones
+                  // (the two pills plus the wordmark overflowed a
+                  // 360 px bar by 81 px) instead of overflowing.
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (kIsExperimentalBuild) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 7),
+                              decoration: BoxDecoration(
+                                color:
+                                    OutrideColors.amber.withAlpha(38),
+                                border: Border.all(
+                                    color: OutrideColors.amber
+                                        .withAlpha(128)),
+                                borderRadius:
+                                    BorderRadius.circular(999),
+                              ),
+                              child: const Text(
+                                'EXPERIMENTAL',
+                                style: TextStyle(
+                                  color: OutrideColors.amber,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: OutrideColors.purpleDeep,
+                              border: Border.all(
+                                  color: OutrideColors.purpleStrong),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              simulated ? 'SIMULATED' : 'LIVE',
+                              style: const TextStyle(
+                                color: Color(0xFFE9D5FF),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 2,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
