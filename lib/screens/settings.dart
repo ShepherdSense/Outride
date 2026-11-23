@@ -875,6 +875,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   initialValue: _newDriverId,
+                  // The driver list has very long labels (e.g. 'SDR
+                  // (Pluto / USRP / RTL-SDR / HackRF…)'). Without
+                  // isExpanded the button sizes itself to the widest
+                  // menu item and overflows this Row on phone widths
+                  // (465 px at 360 px in test; 254 px on the
+                  // reporter's phone). isExpanded makes the button
+                  // take its flexed share instead — same pattern as
+                  // the session-template dropdown in bench_screen.
+                  isExpanded: true,
                   dropdownColor: OutrideColors.surface2,
                   style: OutrideType.rowValue(OutrideColors.onDark),
                   decoration: const InputDecoration(
@@ -1108,6 +1117,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // map cannot render. Options come from the shared
             // helper so the dropdown and the loader can never
             // drift apart again.
+            // isExpanded: the longest tile-source label is wider
+            // than the panel, and without it the button sizes
+            // itself to the widest menu item and overflows this
+            // full-width field by 12 px at 360 px (same root cause
+            // as the Radios driver dropdown, fixed 2026-11-23).
+            isExpanded: true,
             initialValue: tileSourceOptionsFor(isWeb: kIsWeb)
                     .any((s) => s.id == _tileSourceId)
                 ? _tileSourceId
@@ -1359,17 +1374,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Text('STREAM SOURCE',
                 style: OutrideType.section(10).copyWith(height: 1.6)),
             const SizedBox(width: 12),
-            DropdownButton<String>(
-              value: _droneStreamSource,
-              dropdownColor: OutrideColors.surface2,
-              style: OutrideType.rowValue(OutrideColors.onDark),
-              items: const [
-                DropdownMenuItem(
-                    value: 'local', child: Text('LOCAL LINK')),
-                DropdownMenuItem(value: 'cloud', child: Text('CLOUD')),
-              ],
-              onChanged: (v) =>
-                  setState(() => _droneStreamSource = v ?? 'local'),
+            // Expanded + isExpanded: without them the button sizes
+            // itself to its widest item ('LOCAL LINK') and the Row
+            // overflows by 25 px at 360 px (same root cause as the
+            // Radios driver dropdown, fixed 2026-11-23).
+            Expanded(
+              child: DropdownButton<String>(
+                value: _droneStreamSource,
+                isExpanded: true,
+                dropdownColor: OutrideColors.surface2,
+                style: OutrideType.rowValue(OutrideColors.onDark),
+                items: const [
+                  DropdownMenuItem(
+                      value: 'local', child: Text('LOCAL LINK')),
+                  DropdownMenuItem(value: 'cloud', child: Text('CLOUD')),
+                ],
+                onChanged: (v) =>
+                    setState(() => _droneStreamSource = v ?? 'local'),
+              ),
             ),
           ]),
         ]),
