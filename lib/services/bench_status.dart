@@ -12,8 +12,11 @@
 /// replayed). CSI entries are ready when ≥2 valid labeled CSI
 /// sessions exist — B7/B12 need ≥2 labeled sessions (leave-one-
 /// session-out cannot run on one) and B-W1/B-W4 need both classes,
-/// so a single CSI session marks nothing READY. The B5 group rides
-/// B1's input (see [benchRunnableEntryCount]).
+/// so a single CSI session marks nothing READY. The B20 entry is
+/// ready when ≥1 energy session exists that can score the
+/// crossover (≥1 measured compute segment AND ≥1 measured
+/// communicate segment). The B5 group rides B1's input (see
+/// [benchRunnableEntryCount]).
 library;
 
 import 'dart:io';
@@ -22,6 +25,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'bench_csi.dart';
+import 'bench_energy.dart';
 import 'bench_record.dart';
 import 'fusion_bench_harness.dart';
 
@@ -54,6 +58,11 @@ Future<void> refreshBenchReadiness() async {
     // positive and a negative class; a single session can score
     // nothing leave-one-out).
     final csiReady = labeledCsi.length >= 2;
+    final energyDir =
+        Directory('${docs.path}/$defaultEnergySessionsDirName');
+    final energy = loadEnergySessions(energyDir);
+    final energyReady =
+        energy.sessions.any(energySessionIsScorable);
     var ready = 0;
     if (rfReady) {
       // RF-track entries: B1, B4, B9, B10, B11, B14 (+ B5 riding B1).
@@ -63,6 +72,10 @@ Future<void> refreshBenchReadiness() async {
       // CSI entries: B7, B12, B-W1–B-W4.
       ready += 6;
     }
+    if (energyReady) {
+      // Energy entry: B20.
+      ready += 1;
+    }
     benchReadyCount.value = ready;
   } catch (_) {
     benchReadyCount.value = 0;
@@ -71,23 +84,30 @@ Future<void> refreshBenchReadiness() async {
 
 /// Input summary counts for the Bench screen header (never
 /// hard-coded): RF sessions, rejected RF files, CSI sessions,
-/// rejected CSI files.
+/// rejected CSI files, energy sessions, rejected energy files.
 Future<({
   int rfSessions,
   int rfRejected,
   int csiSessions,
   int csiRejected,
+  int energySessions,
+  int energyRejected,
 })> scanBenchInputs() async {
   final docs = await getApplicationDocumentsDirectory();
   final rfDir = Directory('${docs.path}/$defaultSessionsDirName');
   final csiDir = Directory('${docs.path}/$defaultCsiSessionsDirName');
+  final energyDir =
+      Directory('${docs.path}/$defaultEnergySessionsDirName');
   final rf = loadSessions(rfDir);
   final csi = loadCsiSessions(csiDir);
+  final energy = loadEnergySessions(energyDir);
   return (
     rfSessions: rf.sessions.length,
     rfRejected: rf.rejected.length,
     csiSessions: csi.sessions.length,
     csiRejected: csi.rejected.length,
+    energySessions: energy.sessions.length,
+    energyRejected: energy.rejected.length,
   );
 }
 
@@ -102,4 +122,10 @@ Future<Directory> benchSessionsDir() async {
 Future<Directory> csiSessionsDir() async {
   final docs = await getApplicationDocumentsDirectory();
   return Directory('${docs.path}/$defaultCsiSessionsDirName');
+}
+
+/// The documents-dir energy sessions directory.
+Future<Directory> energySessionsDir() async {
+  final docs = await getApplicationDocumentsDirectory();
+  return Directory('${docs.path}/$defaultEnergySessionsDirName');
 }

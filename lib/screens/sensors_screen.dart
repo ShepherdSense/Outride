@@ -174,7 +174,7 @@ class _SensorsScreenState extends State<SensorsScreen> {
         // Bench (experimental instrumentation, same family as Fetch):
         // queued measurement benches — papers, pass bars, run status.
         // Nothing runs on synthetic data. The pill counts harnesses
-        // whose required input is present (0 of 12 READY on first
+        // whose required input is present (0 of 13 READY on first
         // install); the B5 arms ride B1's input (see
         // benchRunnableEntryCount).
         _SensorRow(

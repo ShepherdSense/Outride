@@ -1,5 +1,5 @@
 /// Bench registry tests (bench_registry.dart): 31 verdict units,
-/// 15 IMPLEMENT / 16 QUEUED-BLOCKED, every entry sourced with a
+/// 16 IMPLEMENT / 15 QUEUED-BLOCKED, every entry sourced with a
 /// pass bar, every blocked entry with a blocker + unblock line.
 library;
 
@@ -13,12 +13,12 @@ bool _isQueued(BenchEntry e) =>
 
 void main() {
   group('benchRegistry', () {
-    test('31 verdict units: 15 IMPLEMENT, 16 QUEUED-BLOCKED', () {
+    test('31 verdict units: 16 IMPLEMENT, 15 QUEUED-BLOCKED', () {
       expect(benchRegistry.length, 31);
       final impl = benchRegistry.where(_isImplement).toList();
       final queued = benchRegistry.where(_isQueued).toList();
-      expect(impl.length, 15);
-      expect(queued.length, 16);
+      expect(impl.length, 16);
+      expect(queued.length, 15);
       expect(impl.length + queued.length, benchRegistry.length);
     });
 
@@ -69,8 +69,8 @@ void main() {
       expect(b52.unblock, isNotEmpty);
     });
 
-    test('row pill counts 12 runnable non-group entries', () {
-      expect(benchRunnableEntryCount, 12);
+    test('row pill counts 13 runnable non-group entries', () {
+      expect(benchRunnableEntryCount, 13);
     });
 
     test('B10 cost arm stays queued inside an implement row', () {
@@ -83,6 +83,28 @@ void main() {
       final b7 = benchRegistry.firstWhere((e) => e.id == 'B7');
       expect(b7.caveat, isNotEmpty);
       expect(b7.caveat, contains('SISO'));
+    });
+
+    test('B20 is IMPLEMENT with the energy harness', () {
+      final b20 = benchRegistry.firstWhere((e) => e.id == 'B20');
+      expect(_isImplement(b20), isTrue);
+      expect(b20.harness, BenchHarness.b20);
+      expect(b20.input, BenchInputKind.energy);
+      expect(b20.passBar, contains('crossover measured'));
+      expect(b20.caveat, contains('NOT imported'));
+    });
+
+    test('rejected ultra-lightweight HAR bench is gone (REJECTED '
+        '2026-11-25)', () {
+      // The rejected bench's paper ID must not appear anywhere in
+      // the registry — no entry, no source citation, no title.
+      expect(
+        benchRegistry.any((e) =>
+            e.id.toLowerCase().contains('tinier') ||
+            e.source.contains('arXiv:2507.07949') ||
+            e.title.contains('Ultra-lightweight HAR')),
+        isFalse,
+      );
     });
 
     test('B4 carries the wall-clock note (R4)', () {

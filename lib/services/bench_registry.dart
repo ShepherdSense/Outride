@@ -1,19 +1,26 @@
 /// Bench registry — the single source of truth for the Bench screen.
 ///
-/// One entry per verdict unit (31: 27 items; B5 judged as 5 separate
-/// arms). The Bench screen renders FROM this registry; no bench
-/// metadata is hard-coded in the screen widget.
+/// One entry per verdict unit (31: 27 items + B20; B5 judged as 5
+/// separate arms). The Bench screen renders FROM this registry; no
+/// bench metadata is hard-coded in the screen widget.
 ///
-/// Counts: 15 IMPLEMENT / 16 QUEUED-BLOCKED. IMPLEMENT = B1, B4, B7,
-/// B9, B10, B11, B12, B14, B-W1, B-W2, B-W3/RuView, B-W4 (12 items) +
-/// B5 arms sequential-pairwise CI, fading SCI, per-link variance
-/// (3 arms). QUEUED-BLOCKED = B2, B3, B6, B8, B13, B15, B16, B17, B18,
-/// B19, TinierHAR, B-W5, B-W6, B-W7 (14 items) + B5 arms SDP
+/// Counts: 16 IMPLEMENT / 15 QUEUED-BLOCKED. IMPLEMENT = B1, B4, B7,
+/// B9, B10, B11, B12, B14, B20, B-W1, B-W2, B-W3/RuView, B-W4
+/// (13 items) + B5 arms sequential-pairwise CI, fading SCI,
+/// per-link variance (3 arms). QUEUED-BLOCKED = B2, B3, B6, B8, B13,
+/// B15, B16, B17, B18, B19, B-W5, B-W6, B-W7 (13 items) + B5 arms SDP
 /// family-optimal CI and Split CI (2 arms). B5.2 Split CI was demoted
 /// 2026-11-23 (review fix): its Jaccard shared-dip fraction is a
 /// heuristic proxy, not an honest derivation of the P_I/P_D split —
 /// the estimator's covariance is isotropic and never built from dip
-/// weights.
+/// weights. The ultra-lightweight HAR bench (item #9 family) was
+/// REMOVED 2026-11-25 (sweep verdict REJECT: training-only repo, no
+/// deployment artifacts; an independent baseline appendix measured
+/// it as TFLite Micro on classic ESP32 at 204.5 ms avg latency,
+/// 315–340 KB model, ~608–645 KB firmware — fails the <100 KB flash
+/// / <50 KB RAM / <50 ms node bar on all three axes; do not spend a
+/// bench slot re-measuring). B20 added 2026-11-25 (energy-crossover
+/// protocol).
 ///
 /// Sources are the short citations from the bench queue
 /// (bench-queue-2026-11-06.md) and the dual-WiFi note — the paper is
@@ -33,6 +40,9 @@ enum BenchInputKind {
 
   /// CSI sessions in csi_sessions/ (bench_csi.dart schema).
   csi,
+
+  /// Energy sessions in energy_sessions/ (bench_energy.dart schema).
+  energy,
 
   /// Both RF-track and CSI sessions.
   rfAndCsi,
@@ -99,6 +109,7 @@ abstract class BenchHarness {
   static const String b11 = 'b11';
   static const String b12 = 'b12';
   static const String b14 = 'b14';
+  static const String b20 = 'b20';
   static const String bw1 = 'bw1';
   static const String bw2 = 'bw2';
   static const String bw3 = 'bw3';
@@ -406,19 +417,18 @@ const List<BenchEntry> benchRegistry = [
         'resonance + the cancellation-depth milestone.',
   ),
   BenchEntry(
-    id: 'TinierHAR',
-    title: 'Ultra-lightweight HAR (attaches to item #9)',
-    source: 'Bian et al., UbiComp/ISWC\'25 Adjunct, arXiv:2507.07949',
-    passBar: 'TFLM int8 port on ESP32-S3, <100 KB flash / <50 KB RAM, '
-        '<50 ms/window, detection-tier F1 within 3 pts of FP32 on '
-        'Shepherd RF features',
-    kind: BenchVerdictKind.queuedBlocked,
-    blocker: 'Firmware/TFLM port, not Dart; IMU-only paper, no MCU numbers '
-        'in it; fail trigger is a GRU custom-op requirement. (Headline '
-        '87.39% does NOT reproduce from its own Table II — honest figure '
-        '~85.79%.)',
-    unblock: 'A TFLM port without the GRU custom-op + RF-feature '
-        'validation data.',
+    id: 'B20',
+    title: 'Energy-crossover protocol (compute vs communicate)',
+    source: 'Siam & Azzedin, Research Square rs-11579488/v1',
+    passBar: 'Shepherd\'s own crossover measured (head-only SGD '
+        'energy/epoch vs Wi-Fi/HTTP exchange energy/turn)',
+    kind: BenchVerdictKind.implement,
+    harness: BenchHarness.b20,
+    input: BenchInputKind.energy,
+    caveat: 'Protocol only: INA238 @ 1 kHz on the 5 V rail + GPIO '
+        'phase markers + 60 ms settling pause. The paper\'s claimed '
+        'energy figures are NOT imported — the bench measures '
+        'Shepherd\'s own numbers or reports pending.',
   ),
   BenchEntry(
     id: 'B-W1',
@@ -505,13 +515,13 @@ const List<BenchEntry> benchRegistry = [
   ),
 ];
 
-/// Number of runnable bench entries (the pill's M = 12).
+/// Number of runnable bench entries (the pill's M = 13).
 ///
 /// The pill counts harnesses with a runnable input present. The B5
 /// arms ride B1's replay (they fuse the same ReplayPoll locals), so
 /// they share B1's input readiness and add no separate pill unit:
-/// M = the 12 non-B5 IMPLEMENT items (B1, B4, B7, B9, B10, B11, B12,
-/// B14, B-W1–B-W4). The B5 group still has its own Run control and
+/// M = the 13 non-B5 IMPLEMENT items (B1, B4, B7, B9, B10, B11, B12,
+/// B14, B20, B-W1–B-W4). The B5 group still has its own Run control and
 /// its own per-arm result blocks — only the pill folds it into B1.
 int get benchRunnableEntryCount {
   return benchRegistry

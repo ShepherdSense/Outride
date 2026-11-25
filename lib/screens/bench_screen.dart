@@ -42,6 +42,7 @@ import '../services/bench_csi.dart';
 import '../services/bench_csi_presence.dart';
 import '../services/bench_csi_typing.dart';
 import '../services/bench_detector_rt.dart';
+import '../services/bench_energy.dart';
 import '../services/bench_kld.dart';
 import '../services/bench_record.dart';
 import '../services/bench_registry.dart';
@@ -79,6 +80,8 @@ class _BenchScreenState extends State<BenchScreen> {
     int rfRejected,
     int csiSessions,
     int csiRejected,
+    int energySessions,
+    int energyRejected,
   })? _inputs;
 
   /// Recorded session files (bench_sessions/*.csv), newest first.
@@ -224,6 +227,8 @@ class _BenchScreenState extends State<BenchScreen> {
       case BenchHarness.b14:
         final config = await _rfConfig();
         return _noGeometry(config) ?? runKldBench(config);
+      case BenchHarness.b20:
+        return runEnergyBench(await energySessionsDir());
       case BenchHarness.bw1:
         return runSplitNodePresenceBench(await csiSessionsDir());
       case BenchHarness.bw2:
@@ -394,8 +399,10 @@ class _BenchScreenState extends State<BenchScreen> {
               : 'Sessions: ${inputs.rfSessions} RF-track CSVs in '
                   'bench_sessions/ (${inputs.rfRejected} rejected) · '
                   '${inputs.csiSessions} CSI CSVs in csi_sessions/ '
-                  '(${inputs.csiRejected} rejected) · 0 camera sessions: '
-                  'none',
+                  '(${inputs.csiRejected} rejected) · '
+                  '${inputs.energySessions} energy CSVs in '
+                  'energy_sessions/ (${inputs.energyRejected} rejected) '
+                  '· 0 camera sessions: none',
           style: const TextStyle(
               fontSize: 13, color: OutrideColors.faint, height: 1.45),
         ),

@@ -69,7 +69,7 @@ void main() {
 
       // Every QUEUED entry shows its WHAT WOULD UNBLOCK THIS line.
       expect(find.textContaining('WHAT WOULD UNBLOCK THIS'),
-          findsNWidgets(16));
+          findsNWidgets(15));
     });
   });
 }
