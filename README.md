@@ -1,5 +1,5 @@
 # Outride
-**First out. First to know.**
+**Protect the herd.**
 
 > **Renamed — Shepherd is now Outride.** Same product, same mission, new name: another company already ships a product called Shepherd, so we changed ours to avoid the confusion. Everything else is unchanged.
 

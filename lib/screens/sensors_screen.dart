@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../services/experimental_sensors.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/animated_value_text.dart';
+import '../widgets/outride_motion.dart';
 import 'beam.dart';
 import 'drone_tab.dart';
 import 'fetch_screen.dart';
@@ -271,21 +273,27 @@ class SensorsScreen extends StatelessWidget {
     );
   }
 
-  /// Mock status pill: bold, tinted bg, colored text. 11 px so the
+  /// Status pill: bold, tinted bg, colored text. 11 px so the
   /// widest label ('NOT ON WEB') still fits a 320 px row.
+  /// The tint crossfades and the label fades on change (motion
+  /// layer) instead of jumping when a sensor's status flips.
   Widget _statusPill(String label, Color color) {
-    return Container(
+    return AnimatedContainer(
+      duration: OutrideMotion.standard,
+      curve: OutrideMotion.curve,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: color.withAlpha(38),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(label,
-          style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-              color: color)),
+      child: AnimatedValueText(
+        value: label,
+        style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.8,
+            color: color),
+      ),
     );
   }
 }

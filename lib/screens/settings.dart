@@ -108,6 +108,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _fetchVoiceEnabled;
   late bool _fetchVoiceMuted;
   late double _fetchVoiceRate;
+  late bool _fetchNotificationsEnabled;
   late String _tileSourceId;
   late String _droneStreamSource;
   late bool _autoConnectSilvusUsb;
@@ -167,10 +168,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // them so the switches never show a stale value.
     if (st.fetchVoiceEnabled != _fetchVoiceEnabled ||
         st.fetchVoiceMuted != _fetchVoiceMuted ||
-        st.fetchVoiceRate != _fetchVoiceRate) {
+        st.fetchVoiceRate != _fetchVoiceRate ||
+        st.fetchNotificationsEnabled != _fetchNotificationsEnabled) {
       _fetchVoiceEnabled = st.fetchVoiceEnabled;
       _fetchVoiceMuted = st.fetchVoiceMuted;
       _fetchVoiceRate = st.fetchVoiceRate;
+      _fetchNotificationsEnabled = st.fetchNotificationsEnabled;
       if (mounted) setState(() {});
     }
   }
@@ -362,6 +365,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _fetchVoiceEnabled = widget.state.fetchVoiceEnabled;
     _fetchVoiceMuted = widget.state.fetchVoiceMuted;
     _fetchVoiceRate = widget.state.fetchVoiceRate;
+    _fetchNotificationsEnabled = widget.state.fetchNotificationsEnabled;
     // On web the stored id is normalized to the EFFECTIVE source
     // (v0.29.4): a stored OSM selection renders as USGS Topo on
     // web, so the dropdown must open on Topo — showing OSM while
@@ -1086,6 +1090,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Test voice'),
           ),
         ]),
+        _section('Fetch trip notifications — EXPERIMENTAL', [
+          SwitchListTile(
+            title: Text('FETCH TRIP NOTIFICATIONS',
+                style: OutrideType.rowValue(OutrideColors.onDark)),
+            subtitle: Text(
+              defaultTargetPlatform == TargetPlatform.android
+                  ? 'POST A LOCAL NOTIFICATION WHEN A FETCH TRIP CONFIRMS, BESIDE THE VOICE ALERT. TURNING ON ASKS FOR THE NOTIFICATION PERMISSION. DEFAULT OFF.'
+                  : 'ANDROID ONLY IN THIS BUILD — NOTIFICATIONS DO NOT POST ON THIS PLATFORM.',
+              style: OutrideType.section(10).copyWith(height: 1.6),
+            ),
+            value: _fetchNotificationsEnabled,
+            // Off-Android the switch is disabled: the notifier is an
+            // explicit no-op there (see tripwire_notifications.dart),
+            // so there is nothing to turn on.
+            onChanged: defaultTargetPlatform == TargetPlatform.android
+                ? (v) async {
+                    await widget.state.setFetchNotificationsEnabled(v);
+                    if (mounted) {
+                      setState(() => _fetchNotificationsEnabled =
+                          widget.state.fetchNotificationsEnabled);
+                    }
+                  }
+                : null,
+          ),
+        ]),
         _section('Phone tier, signatures & offline maps', [
           SwitchListTile(
             title: Text('PHONE-ONLY TIER',
@@ -1798,7 +1827,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 16),
         Center(
           child: Text(
-            'OUTRIDE — FIRST OUT. FIRST TO KNOW.\n'
+            'OUTRIDE — PROTECT THE HERD.\n'
             'Formerly Shepherd — same product, new name.',
             textAlign: TextAlign.center,
             style: OutrideType.section(10).copyWith(height: 1.6),

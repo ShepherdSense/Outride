@@ -34,6 +34,7 @@ import '../models/link_sample.dart';
 import '../models/sensor_observation.dart';
 import 'node_udp_hub.dart';
 import 'radio_driver.dart';
+import 'sensor_event.dart';
 import 'sensor_protocol.dart';
 
 class GenericSensorDriver extends RadioDriver {
@@ -179,35 +180,26 @@ class GenericSensorDriver extends RadioDriver {
     } catch (_) {
       return; // not JSON / not ours; other drivers' traffic passes by
     }
-    if ('${j['type']}' != 'sensor_obs') return;
-    final obs = '${j['obs'] ?? ''}';
-    // CSI / WIND verbs: typed ingest (additive). Unknown verbs are
-    // skipped per the §1c parser contract — never counted malformed.
-    if (obs.toUpperCase() == 'CSI') {
-      final r = SensorProtocol.parseCsiUdpJson(j);
-      if (r.observation == null) {
-        _malformed++;
-        return;
-      }
-      _ingestCsi(r.observation!, DateTime.now());
-      return;
-    }
-    if (obs.toUpperCase() == 'WIND') {
-      final r = SensorProtocol.parseWindUdpJson(j);
-      if (r.observation == null) {
-        _malformed++;
-        return;
-      }
-      _ingestWind(r.observation!, DateTime.now());
-      return;
-    }
-    if (!SensorProtocol.isKnownVerb(obs)) return; // future sensor: skip
-    final r = SensorProtocol.parseUdpJson(j);
-    if (r.observation == null) {
-      _malformed++;
-      return;
-    }
-    _ingest(r.observation!, DateTime.now());
+    // Typed dispatch: the `obs` string is resolved ONCE inside
+    // SensorEvent.parseEvent; the when() below is exhaustive over the
+    // eight event variants, so a new verb cannot silently fall
+    // through. Unknown verbs are skipped per the §1c parser contract
+    // — never counted malformed; malformed known verbs still count.
+    final now = DateTime.now();
+    SensorEvent.parseEvent(j).when(
+      ok: (event) => event.when(
+        range: (o) => _ingest(o, now),
+        bearing: (o) => _ingest(o, now),
+        spectrum: (o) => _ingest(o, now),
+        binary: (o) => _ingest(o, now),
+        energy: (o) => _ingest(o, now),
+        motion: (o) => _ingest(o, now),
+        csi: (o) => _ingestCsi(o, now),
+        wind: (o) => _ingestWind(o, now),
+      ),
+      malformed: (_) => _malformed++,
+      ignored: () {},
+    );
   }
 
   /// Test hook: feed one CSI observation directly (gates are
@@ -387,7 +379,8 @@ class GenericSensorDriver extends RadioDriver {
     _csi.removeWhere((_, o) => o.isStaleAt(now));
     _wind.removeWhere(
         (_, w) => now.difference(w.timestamp) > WindObservation.stalenessHorizon);
-    _csiGateState.removeWhere((k, _) => !_csi.containsKey(k));    if (_latest.length > maxSensors) {
+    _csiGateState.removeWhere((k, _) => !_csi.containsKey(k));
+    if (_latest.length > maxSensors) {
       final sorted = _latest.entries.toList()
         ..sort((a, b) => a.value.timestamp.compareTo(b.value.timestamp));
       for (final e in sorted.take(_latest.length - maxSensors)) {

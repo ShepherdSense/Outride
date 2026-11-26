@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../models/link_sample.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/animated_value_text.dart';
+import '../widgets/outride_motion.dart';
+import '../widgets/slide_in_row.dart';
 import 'evidence_sheet.dart';
 
 /// Full crossing-events list with triage, moved intact from the old
@@ -61,9 +64,10 @@ class EventsListCard extends StatelessWidget {
             children: [
               Text('CROSSING EVENTS', style: OutrideType.section()),
               const SizedBox(height: 2),
-              Text(
-                'ACK ${stats['acked']} · FA ${stats['falseAlarm']} · '
-                'NEW ${stats['unreviewed']}',
+              // Counts crossfade on triage taps (motion layer).
+              AnimatedValueText(
+                value: 'ACK ${stats['acked']} · FA ${stats['falseAlarm']} · '
+                    'NEW ${stats['unreviewed']}',
                 style: OutrideType.section(10),
               ),
             ],
@@ -127,11 +131,21 @@ class EventsListCard extends StatelessWidget {
                   const SizedBox(height: 5),
                   Row(
                     children: [
-                      _triageBtn(e, AppState.triageAcked, 'ACK',
-                          OutrideColors.green),
+                      _TriageButton(
+                        label: 'ACK',
+                        color: OutrideColors.green,
+                        active: acked,
+                        onTap: () =>
+                            state.triageEvent(e, AppState.triageAcked),
+                      ),
                       const SizedBox(width: 8),
-                      _triageBtn(e, AppState.triageFalseAlarm,
-                          'FALSE ALARM', OutrideColors.red),
+                      _TriageButton(
+                        label: 'FALSE ALARM',
+                        color: OutrideColors.red,
+                        active: falseAlarm,
+                        onTap: () => state.triageEvent(
+                            e, AppState.triageFalseAlarm),
+                      ),
                     ],
                   ),
                 ],
@@ -143,33 +157,94 @@ class EventsListCard extends StatelessWidget {
         ),
       ),
     );
-    return Opacity(opacity: acked ? 0.55 : 1.0, child: row);
+    // New rows slide in from above when they first mount (motion
+    // layer); the key means only genuinely new events animate —
+    // a rebuilt row keeps its state and does not re-slide.
+    return SlideInRow(
+      key: ValueKey(AppState.triageKeyFor(e)),
+      child: Opacity(opacity: acked ? 0.55 : 1.0, child: row),
+    );
+  }
+}
+
+/// Triage toggle button with animated confirmation (motion layer):
+/// a quick scale pulse on tap (press feedback) and an
+/// [AnimatedContainer] tint/border transition when the verdict
+/// becomes active. Tapping the active verdict again clears it.
+class _TriageButton extends StatefulWidget {
+  const _TriageButton({
+    required this.label,
+    required this.color,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  State<_TriageButton> createState() => _TriageButtonState();
+}
+
+class _TriageButtonState extends State<_TriageButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _press;
+
+  @override
+  void initState() {
+    super.initState();
+    _press = AnimationController(
+      vsync: this,
+      duration: OutrideMotion.fast,
+    );
   }
 
-  /// Small triage toggle button. Active state is highlighted; tapping
-  /// the active verdict again clears it.
-  Widget _triageBtn(
-      CrossingEvent e, String verdict, String label, Color color) {
-    final active =
-        state.triage[AppState.triageKeyFor(e)] == verdict;
-    return InkWell(
-      borderRadius: BorderRadius.circular(6),
-      onTap: () => state.triageEvent(e, verdict),
-      child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-        decoration: BoxDecoration(
-          border: Border.all(
-              color: active ? color : OutrideColors.border),
-          borderRadius: BorderRadius.circular(6),
-          color:
-              active ? color.withAlpha(28) : Colors.transparent,
-        ),
-        child: Text(
-          label,
-          style: OutrideType.chip(
-                  active ? color : OutrideColors.muted)
-              .copyWith(fontSize: 10),
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    // Verdict applies immediately; the pulse plays alongside it.
+    widget.onTap();
+    _press.forward().then((_) {
+      if (mounted) _press.reverse();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScaleTransition(
+      scale: Tween<double>(begin: 1, end: 0.94).animate(
+        CurvedAnimation(parent: _press, curve: OutrideMotion.curve),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: _handleTap,
+        child: AnimatedContainer(
+          duration: OutrideMotion.standard,
+          curve: OutrideMotion.curve,
+          padding:
+              const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            border: Border.all(
+                color: widget.active
+                    ? widget.color
+                    : OutrideColors.border),
+            borderRadius: BorderRadius.circular(6),
+            color: widget.active
+                ? widget.color.withAlpha(28)
+                : Colors.transparent,
+          ),
+          child: Text(
+            widget.label,
+            style: OutrideType.chip(
+                    widget.active ? widget.color : OutrideColors.muted)
+                .copyWith(fontSize: 10),
+          ),
         ),
       ),
     );

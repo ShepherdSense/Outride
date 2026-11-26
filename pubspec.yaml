@@ -1,7 +1,7 @@
 name: outride
 description: Outride — device-free RF sensing tripwire for Silvus StreamCaster mesh radios.
 publish_to: "none"
-version: 0.29.7
+version: 0.30.0
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -32,6 +32,18 @@ dependencies:
   flutter_tts: ^4.2.3
   sqflite: ^2.4.6
   sqflite_common_ffi: ^2.4.7
+  # Freezed-generated lib code imports freezed_annotation at runtime,
+  # so it lives in dependencies (not dev_dependencies).
+  freezed_annotation: ^3.1.0
+  # Per-link dip time series on the Radios & Links screen (v0.30.0).
+  # Pure Dart — supports Android + Windows.
+  fl_chart: ^1.3.1
+  # Background tripwire alerts (v0.30.0): local notification beside
+  # the voice alert. Android only in this build (see
+  # lib/services/tripwire_notifications.dart); POST_NOTIFICATIONS is
+  # already declared in android/app/src/main/AndroidManifest.xml.
+  flutter_local_notifications: ^23.0.4
+  permission_handler: ^13.0.2
 
 dev_dependencies:
   flutter_test:
@@ -41,12 +53,18 @@ dev_dependencies:
   # speak-timeout test drives fake time); pinned to the version
   # flutter_test already resolves transitively.
   fake_async: ^1.3.3
+  freezed: ^4.0.3
+  build_runner: ^2.17.1
+  patrol: ^4.12.0
 
 flutter:
   uses-material-design: true
   assets:
     - assets/models/disturbance_clf.json
     - assets/models/track_stitcher.json
+    # Header brand mark (amber Aussie head, derived from the 1024 px
+    # launcher source); the launcher source itself is not bundled.
+    - assets/icon/outride_mark_header.png
   fonts:
     - family: JetBrainsMono
       fonts:

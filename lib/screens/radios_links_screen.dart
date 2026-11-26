@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../models/link_sample.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/animated_value_text.dart';
+import '../widgets/link_dip_series_chart.dart';
+import '../widgets/trip_state_indicator.dart';
 
 /// Radios + mesh-links status, moved intact from the old Alerts tab
 /// ([DashboardScreen]) when Picture replaced it. Reached from Picture
@@ -22,6 +26,8 @@ class RadiosLinksScreen extends StatelessWidget {
           RadiosCard(state: state),
           const SizedBox(height: 12),
           LinksCard(state: state, disturbed: disturbed),
+          const SizedBox(height: 12),
+          LinkDipSeriesCard(state: state, disturbed: disturbed),
         ],
       ),
     );
@@ -91,9 +97,10 @@ class RadiosCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Text(
-                      s.error ??
-                          '${s.linkCount} LINKS',
+                    // Link count crossfades on change (motion
+                    // layer) instead of jumping each poll.
+                    AnimatedValueText(
+                      value: s.error ?? '${s.linkCount} LINKS',
                       style: OutrideType.section(10).copyWith(
                           color: s.error != null
                               ? OutrideColors.red
@@ -152,6 +159,112 @@ class RadiosCard extends StatelessWidget {
   }
 }
 
+/// Per-link dip time series (FL Chart, v0.30.0): one link's dip
+/// against time, with its trip threshold. Sits below the health rows
+/// as an additive section — the existing UI above is untouched, and
+/// the link×time heatmap stays a custom canvas.
+///
+/// The picker defaults to the first disturbed link (the one the
+/// operator most likely wants to inspect), else the first link with
+/// history. Shows the link's recent samples (history is capped at
+/// [AppState.maxHistory] = 120 per link).
+class LinkDipSeriesCard extends StatefulWidget {
+  const LinkDipSeriesCard(
+      {super.key, required this.state, required this.disturbed});
+
+  final AppState state;
+  final List<String> disturbed;
+
+  @override
+  State<LinkDipSeriesCard> createState() => _LinkDipSeriesCardState();
+}
+
+class _LinkDipSeriesCardState extends State<LinkDipSeriesCard> {
+  String? _selected;
+
+  List<String> get _keys {
+    final keys = widget.state.history.keys.toList()..sort();
+    return keys;
+  }
+
+  String? get _effectiveSelection {
+    final keys = _keys;
+    if (keys.isEmpty) return null;
+    if (_selected != null && keys.contains(_selected)) return _selected;
+    for (final d in widget.disturbed) {
+      if (keys.contains(d)) return d;
+    }
+    return keys.first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keys = _keys;
+    final selected = _effectiveSelection;
+    final List<LinkSample> samples = selected == null
+        ? const <LinkSample>[]
+        : widget.state.history[selected]!;
+    return OutridePanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('LINK DIP HISTORY', style: OutrideType.section()),
+              const Spacer(),
+              // Tripwire lifecycle for the selected link, animated
+              // (v0.30.0 motion layer): armed → tripped → confirmed →
+              // cleared visibly transitions instead of flipping.
+              if (selected != null)
+                TripStateIndicator(
+                  phase: widget.state.tripwireStateFor(selected),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (keys.isEmpty)
+            // Distinct from LinksCard's 'NO LINK DATA YET' (link
+            // health rows): this card is the dip history, so its
+            // empty state says so — two identical lines on one
+            // screen would read as a duplicated widget.
+            Text('NO DIP HISTORY YET', style: OutrideType.rowLabel())
+          else ...[
+            DropdownButton<String>(
+              value: selected,
+              isExpanded: true,
+              dropdownColor: OutrideColors.surface2,
+              style: OutrideType.rowValue(OutrideColors.onDark),
+              items: [
+                for (final k in keys)
+                  DropdownMenuItem(
+                    value: k,
+                    child: Text(
+                      shortLinkKey(k),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _selected = v);
+              },
+            ),
+            const SizedBox(height: 8),
+            LinkDipSeriesChart(
+              samples: samples,
+              threshold: dipSeriesThreshold(samples),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'DIP VS BASELINE, RADIO UNITS (EST.) — LAST ${samples.length} SAMPLES',
+              style: OutrideType.section(10).copyWith(height: 1.6),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// One compact row per link direction — health only, no charts.
 class LinksCard extends StatelessWidget {
   const LinksCard(
@@ -191,9 +304,13 @@ class LinksCard extends StatelessWidget {
                     child: Text(shortLinkKey(k),
                         style: OutrideType.rowValue(OutrideColors.onDark)),
                   ),
-                  Text(
-                    'SNR ${state.history[k]!.last.snrLabel}  ·  DIP ${state.history[k]!.last.dipLabel}',
-                    style: OutrideType.rowLabel().copyWith(fontSize: 11),
+                  // SNR / DIP crossfade on change (motion layer)
+                  // instead of jumping each poll.
+                  AnimatedValueText(
+                    value:
+                        'SNR ${state.history[k]!.last.snrLabel}  ·  DIP ${state.history[k]!.last.dipLabel}',
+                    style:
+                        OutrideType.rowLabel().copyWith(fontSize: 11),
                   ),
                 ],
               ),
