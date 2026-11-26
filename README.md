@@ -15,7 +15,7 @@ Built by **ShepherdSense**.
 
 ## Download
 
-**Latest release: [v0.29.7](https://github.com/ShepherdSense/Outride/releases/tag/v0.29.7)** — native Cloudflare hub support and ZeroTier support built in; fresh installs open LIVE.
+**Latest release: [v0.30.1](https://github.com/ShepherdSense/Outride/releases/tag/v0.30.1)** — GL.iNet router support + Sensors grid + Tunnels & Feeds + tripwire layers + smoother heat map.
 
 **Just want the app?** Grab the latest release — no building needed:
 
