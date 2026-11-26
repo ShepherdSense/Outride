@@ -50,6 +50,7 @@ import '../services/zmeta_pairing.dart'
     show zmetaIsUsableIngestUrl, zmetaIsValidIpv4, zmetaParseTarget;
 import '../services/cloudflare_auto.dart';
 import '../services/zerotier_detect.dart';
+import '../services/wireguard_detect.dart';
 import '../utils/node_ids.dart';
 import '../services/wifi_aware.dart';
 import '../services/wifi_rtt.dart';
@@ -723,6 +724,10 @@ class AppState extends ChangeNotifier {
   /// Production passes nothing and gets the real probe.
   /// [zerotierProbe] is the same seam for the ZeroTier tunnel check:
   /// production lists the real interfaces, tests inject true/false.
+  /// [wireguardProbe] / [wireguardAddressProbe] are the same seams
+  /// for the WireGuard tunnel check (detection only — the probe never
+  /// flips the transport): production lists the real interfaces,
+  /// tests inject true/false and an address.
   /// [isWebOverride] is the same seam for the web sim force (tests
   /// only): production passes nothing and gets the real kIsWeb. The
   /// public web sim always runs simulated — it has no radios — so
@@ -731,9 +736,14 @@ class AppState extends ChangeNotifier {
   AppState({
     Future<bool?> Function(String url)? cloudflareProbe,
     Future<bool?> Function()? zerotierProbe,
+    Future<bool?> Function()? wireguardProbe,
+    Future<String?> Function()? wireguardAddressProbe,
     bool? isWebOverride,
   })  : _cloudflareProbe = cloudflareProbe ?? probeCloudflareIngest,
         _zerotierProbe = zerotierProbe ?? zerotierTunnelUp,
+        _wireguardProbe = wireguardProbe ?? wireguardTunnelUp,
+        _wireguardAddressProbe =
+            wireguardAddressProbe ?? wireguardLocalAddress,
         _isWeb = isWebOverride ?? kIsWeb {
     // v0.29.7: the web sim always runs simulated. Force it now so the
     // first frame is right even before the async settings load; the
@@ -767,6 +777,15 @@ class AppState extends ChangeNotifier {
   /// ZeroTier tunnel probe (see the constructor doc): the real
   /// [zerotierTunnelUp] in production, an injected fake in tests.
   final Future<bool?> Function() _zerotierProbe;
+
+  /// WireGuard tunnel probe (see the constructor doc): the real
+  /// [wireguardTunnelUp] in production, an injected fake in tests.
+  final Future<bool?> Function() _wireguardProbe;
+
+  /// WireGuard tunnel-address probe (see the constructor doc): the
+  /// real [wireguardLocalAddress] in production, an injected fake in
+  /// tests.
+  final Future<String?> Function() _wireguardAddressProbe;
 
   /// Whether this is the web build (see the constructor doc): the real
   /// [kIsWeb] in production, an injected value in tests.
@@ -1144,6 +1163,43 @@ class AppState extends ChangeNotifier {
     return zerotierPathActive;
   }
 
+  /// WireGuard tunnel status (v0.30.1, Tunnels & Feeds): null until
+  /// the first probe runs (and on web, where there is no tunnel to
+  /// see — null means "not probed", never "down"), true when a local
+  /// address in 10.99.0.0/24 was seen, false when none was.
+  /// Runtime-only; not persisted.
+  bool? wireguardTunnelDetected;
+
+  /// The device's own WireGuard tunnel address when the tunnel is up,
+  /// else null. Runtime-only; not persisted.
+  String? wireguardDetectedAddress;
+
+  /// WireGuard tunnel re-evaluation: recognize the tunnel and report
+  /// it — detection ONLY, never a transport flip. A stored WireGuard
+  /// join already owns the transport; this evaluation only answers
+  /// "is the WireGuard app's tunnel up right now" for the Tunnels &
+  /// Feeds screens. Runs once at boot (from _loadZmetaSettings) and
+  /// on demand from the WireGuard detail screen's Re-check button.
+  /// Never throws and never blocks startup — callers always use
+  /// unawaited. Fail-open: a failed probe leaves the previous status
+  /// alone and the next re-check tries again.
+  Future<void> evaluateWireguardPath() async {
+    if (_disposed) return;
+    final detected = await _wireguardProbe();
+    if (_disposed) return;
+    final address =
+        detected == true ? await _wireguardAddressProbe() : null;
+    if (_disposed) return;
+    final wasDetected = wireguardTunnelDetected;
+    final wasAddress = wireguardDetectedAddress;
+    wireguardTunnelDetected = detected;
+    wireguardDetectedAddress = address;
+    if (wireguardTunnelDetected != wasDetected ||
+        wireguardDetectedAddress != wasAddress) {
+      notifyListeners();
+    }
+  }
+
   /// Last known phone position (best-effort cache). Refreshed whenever
   /// the operator captures a node position and periodically while ZMeta
   /// export is on, so per-observation geo and the heartbeat move with a
@@ -1483,6 +1539,108 @@ class AppState extends ChangeNotifier {
     settings.cotListenEnabled = v;
     await _saveSettings();
     await _configureCot();
+    notifyListeners();
+  }
+
+  // ---- ZMeta core setup (v0.30.1, Tunnels & Feeds) ----------------
+  // Small setters for the ZMeta detail screen, mirroring the CoT
+  // setters above. Settings still owns the full ZMeta section; this
+  // screen only surfaces the core fields (host, port, enable toggle)
+  // and the join flow.
+
+  /// ZMeta export toggle. Re-runs the timer setup so the heartbeat
+  /// and path re-checks start/stop with export, and re-evaluates the
+  /// tunnel paths when export turns on.
+  Future<void> setZmetaEnabled(bool v) async {
+    settings.zmetaEnabled = v;
+    await _saveSettings();
+    _configureZmetaTimers();
+    notifyListeners();
+  }
+
+  /// ZMeta gateway host (manual UDP path). Blank keeps the current
+  /// value; the join flow sets this from the hub target instead.
+  Future<void> setZmetaHost(String v) async {
+    final t = v.trim();
+    if (t.isNotEmpty) settings.zmetaHost = t;
+    await _saveSettings();
+    notifyListeners();
+  }
+
+  /// ZMeta gateway UDP port, clamped to 1–65535.
+  Future<void> setZmetaPort(int v) async {
+    settings.zmetaPort = v.clamp(1, 65535);
+    await _saveSettings();
+    notifyListeners();
+  }
+
+  /// Apply a completed invite-code join (same branch logic as
+  /// Settings._joinNetwork, shared so the ZMeta detail screen's
+  /// "Join via invite code" button lands exactly the same state).
+  /// Export stays OFF — the operator still toggles it on explicitly.
+  /// Persists, re-runs the timer setup, and re-evaluates the paths.
+  Future<void> applyZmetaJoin({
+    required String platformId,
+    required String linkMode,
+    required String host,
+    required int port,
+    String ingestUrl = '',
+    String ingestFp = '',
+    String zerotierNetworkId = '',
+    String zerotierNodeId = '',
+    String zerotierIp = '',
+    String zerotierIpStatus = '',
+    bool zerotierIpConfirmed = false,
+    String zerotierTarget = '',
+  }) async {
+    settings.zmetaPlatformId = platformId;
+    settings.zmetaJoinedPlatformId = platformId;
+    settings.zmetaTransport = linkMode;
+    if (linkMode == 'zerotier') {
+      // ZeroTier: host/port come from the hub's ZT target. The ingest
+      // URL/fp the redeem returned are KEPT — the Cloudflare
+      // auto-path can use them as a fallback if the tunnel is down.
+      final ztTarget = zmetaParseTarget(zerotierTarget);
+      if (ztTarget != null) {
+        settings.zmetaHost = ztTarget.host;
+        settings.zmetaPort = ztTarget.port;
+      }
+      settings.zerotierNetworkId = zerotierNetworkId;
+      settings.zerotierNodeId = zerotierNodeId;
+      settings.zerotierIp = zerotierIp;
+      settings.zerotierIpStatus = zerotierIpStatus;
+      settings.zerotierIpConfirmed = zerotierIpConfirmed;
+      settings.zmetaTargetZt = zerotierTarget;
+      settings.zmetaIngestUrl = ingestUrl;
+      settings.zmetaIngestFp = ingestFp;
+    } else if (linkMode == 'https') {
+      // HTTPS ingest: the URL + secure-storage token are the link.
+      settings.zmetaIngestUrl = ingestUrl;
+      settings.zmetaIngestFp = ingestFp;
+      // A fresh HTTPS join replaces any earlier ZeroTier join.
+      settings.zerotierNetworkId = '';
+      settings.zerotierNodeId = '';
+      settings.zerotierIp = '';
+      settings.zerotierIpStatus = '';
+      settings.zerotierIpConfirmed = false;
+      settings.zmetaTargetZt = '';
+    } else {
+      if (host.isNotEmpty && port > 0) {
+        settings.zmetaHost = host;
+        settings.zmetaPort = port;
+      }
+      settings.zmetaIngestUrl = '';
+      settings.zmetaIngestFp = '';
+      settings.zerotierNetworkId = '';
+      settings.zerotierNodeId = '';
+      settings.zerotierIp = '';
+      settings.zerotierIpStatus = '';
+      settings.zerotierIpConfirmed = false;
+      settings.zmetaTargetZt = '';
+    }
+    await _saveSettings();
+    _configureZmetaTimers();
+    unawaited(evaluateWireguardPath());
     notifyListeners();
   }
 
@@ -4881,6 +5039,9 @@ class AppState extends ChangeNotifier {
     // join is stored and the tunnel is up, the transport selects
     // 'zerotier' by itself.
     unawaited(evaluateZerotierPath());
+    // WireGuard tunnel: one boot evaluation too — detection only, so
+    // the Tunnels & Feeds row reads UP/DOWN from the first frame.
+    unawaited(evaluateWireguardPath());
     // Start the re-check timer from boot (see _startCloudflareRecheckTimer):
     // a hub that comes up later must connect without anyone opening
     // Settings first.
@@ -4991,6 +5152,19 @@ class AppState extends ChangeNotifier {
   }
   Future<List<DiscoveredRadio>> scan() =>
       RadioDiscovery.scanSubnet(settings.subnet);
+
+  /// Persist a new discovery subnet without restarting polling (the
+  /// Radios & Networks screen owns this field now that the Radios
+  /// section moved out of Settings). Callers persist only after a
+  /// scan proves the CIDR parses — a bad subnet never lands here.
+  /// Defense in depth: an unparseable CIDR is ignored here too, so
+  /// the stored subnet can never become unscannable.
+  Future<void> setDiscoverySubnet(String cidr) async {
+    if (!RadioDiscovery.isValidCidr(cidr)) return;
+    settings.subnet = cidr;
+    await _saveSettings();
+    notifyListeners();
+  }
 
   // ---- Node layout & defended point (persisted) ----
 

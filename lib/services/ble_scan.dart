@@ -340,7 +340,10 @@ class BleScanService {
     } on BleScanException catch (e) {
       error = e.message;
     } catch (e) {
-      error = 'SCAN FAILED: $e';
+      // Short user-facing string only: raw exception text reads as
+      // a crash dump on the panel. The curated BleScanException
+      // message above carries the diagnosable cases.
+      error = 'SCAN FAILED (${e.runtimeType})';
     } finally {
       scanning = false;
       onUpdate?.call();
@@ -449,7 +452,7 @@ class BleScanService {
       // monitoring off.
       await _monitorSub?.cancel();
       _monitorSub = null;
-      error = e is BleScanException ? e.message : 'MONITOR FAILED: $e';
+      error = e is BleScanException ? e.message : 'MONITOR FAILED (${e.runtimeType})';
     }
     onUpdate?.call();
   }

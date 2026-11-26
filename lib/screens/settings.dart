@@ -4,23 +4,23 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../services/discovery.dart';
 import '../services/adaptive_baseline.dart';
 import '../services/cloudflare_auto.dart';
 import '../services/zmeta_pairing.dart' show zmetaParseTarget;
 import '../services/experimental_sensors.dart';
-import '../services/radio_driver.dart';
 import '../services/recorder.dart';
 import '../services/tile_pack.dart';
 import '../services/web_tile_loader.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import 'fleet_screen.dart';
+import 'radios_networks_screen.dart';
 import 'offline_maps_screen.dart';
 import 'zmeta_join_dialog.dart';
 
-/// Settings: radio manager (multi-driver), detector tuning, Wi-Fi
-/// sensing, mode toggles, and LAN radio discovery. Dark mode only.
+/// Settings: detector tuning, Wi-Fi sensing, mode toggles. Radios
+/// and network connections live in Sensors now (Radios & Networks).
+/// Dark mode only.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.state});
 
@@ -31,14 +31,11 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late final TextEditingController _subnet;
   late final TextEditingController _interval;
   late final TextEditingController _threshold;
   late final TextEditingController _wifiThreshold;
   late final TextEditingController _confirm;
   late final TextEditingController _window;
-  late final TextEditingController _newAddress;
-  late final TextEditingController _newLabel;
   late final TextEditingController _zmetaHost;
   late final TextEditingController _zmetaPort;
   late final TextEditingController _zmetaPlatform;
@@ -111,7 +108,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _autoConnectSilvusUsb;
   late bool _sdrAutoStation;
   late bool _calibDegraded;
-  String _newDriverId = 'silvus';
 
   /// Last-seen calibration state: AppState notifies on every poll, so
   /// the listener only rebuilds when the calibration state actually
@@ -173,10 +169,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  bool _scanning = false;
-  double _scanProgress = 0;
-  List<DiscoveredRadio> _found = [];
-  String? _scanError;
 
   /// Settings help tile (v0.29.2): collapsed by default. Every
   /// explanatory paragraph that used to sit inline on this screen
@@ -306,15 +298,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     final s = widget.state.settings;
-    _subnet = TextEditingController(text: s.subnet);
     _interval = TextEditingController(text: s.pollInterval.toString());
     _threshold = TextEditingController(text: s.dipThreshold.toString());
     _wifiThreshold =
         TextEditingController(text: s.wifiDipThresholdDb.toString());
     _confirm = TextEditingController(text: s.confirmPolls.toString());
     _window = TextEditingController(text: s.baselineWindow.toString());
-    _newAddress = TextEditingController();
-    _newLabel = TextEditingController();
     _zmetaHost = TextEditingController(text: s.zmetaHost);
     _zmetaPort = TextEditingController(text: s.zmetaPort.toString());
     _zmetaPlatform = TextEditingController(text: s.zmetaPlatformId);
@@ -408,14 +397,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    _subnet.dispose();
     _interval.dispose();
     _threshold.dispose();
     _wifiThreshold.dispose();
     _confirm.dispose();
     _window.dispose();
-    _newAddress.dispose();
-    _newLabel.dispose();
     _zmetaHost.dispose();
     _zmetaPort.dispose();
     _zmetaPlatform.dispose();
@@ -533,7 +519,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
     final s = AppSettings(
-      subnet: _subnet.text.trim(),
+      subnet: widget.state.settings.subnet,
       pollInterval:
           (double.tryParse(_interval.text.trim()) ?? 0.25).clamp(0.1, 60.0),
       dipThreshold:
@@ -742,141 +728,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _addRadio() async {
-    final type = driverTypes.firstWhere((t) => t.id == _newDriverId);
-    if (!type.implemented) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${type.label} telemetry not yet implemented')),
-      );
-      return;
-    }
-    final address = _newAddress.text.trim();
-    if (address.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter the radio address (IP)')),
-      );
-      return;
-    }
-    await widget.state.addRadio(RadioConfig(
-      driverId: _newDriverId,
-      address: address,
-      label: _newLabel.text.trim(),
-      pollInterval:
-          (double.tryParse(_interval.text.trim()) ?? 0.25).clamp(0.1, 60.0),
-    ));
-    _newAddress.clear();
-    _newLabel.clear();
-    if (mounted) setState(() {});
-  }
 
-  Future<void> _scan() async {
-    setState(() {
-      _scanning = true;
-      _scanProgress = 0;
-      _found = [];
-      _scanError = null;
-    });
-    try {
-      final silvus = await RadioDiscovery.scanSubnet(
-        _subnet.text.trim(),
-        onProgress: (done, total) {
-          if (mounted) {
-            // First half of the bar: Silvus HTTP scan.
-            setState(() => _scanProgress =
-                total == 0 ? 0 : (done / total) * 0.5);
-          }
-        },
-      );
-      final mesh = await RadioDiscovery.scanMeshtastic(
-        _subnet.text.trim(),
-        onProgress: (done, total) {
-          if (mounted) {
-            // Second half: Meshtastic TCP-4403 scan.
-            setState(() => _scanProgress =
-                0.5 + (total == 0 ? 0 : (done / total) * 0.5));
-          }
-        },
-      );
-      if (mounted) setState(() => _found = [...silvus, ...mesh]);
-    } catch (e) {
-      if (mounted) setState(() => _scanError = 'Scan failed: $e');
-    } finally {
-      if (mounted) setState(() => _scanning = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        _section('Radios', [
-          for (int i = 0;
-              i < widget.state.radioConfigs.length;
-              i++)
-            _radioRow(i),
-          if (widget.state.radioConfigs.isEmpty)
-            Text('NO RADIOS CONFIGURED.',
-                style: OutrideType.section(10)
-                    .copyWith(color: OutrideColors.muted)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _newDriverId,
-                  dropdownColor: OutrideColors.surface2,
-                  style: OutrideType.rowValue(OutrideColors.onDark),
-                  decoration: const InputDecoration(
-                      labelText: 'DRIVER'),
-                  items: [
-                    for (final t in driverTypes)
-                      DropdownMenuItem(
-                        value: t.id,
-                        child: Text(
-                            '${t.label}${t.implemented ? '' : ' (SOON)'}'),
-                      ),
-                  ],
-                  onChanged: (v) => setState(() {
-                    _newDriverId = v ?? 'silvus';
-                    // The SDR bridge talks to this app on UDP; prefill
-                    // the listen endpoint so it is one tap, not a guess.
-                    if (_newDriverId == 'sdr' &&
-                        _newAddress.text.trim().isEmpty) {
-                      _newAddress.text = '127.0.0.1:49161';
-                    }
-                    // KrakenSDR web UI default.
-                    if (_newDriverId == 'kraken' &&
-                        _newAddress.text.trim().isEmpty) {
-                      _newAddress.text = '127.0.0.1:8081';
-                    }
-                  }),
-                ),
+        _section('Radios & networks', [
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading:
+                const Icon(Icons.router, color: OutrideColors.purple),
+            title: Text('RADIOS & NETWORKS',
+                style: OutrideType.rowValue(OutrideColors.onDark)),
+            subtitle: Text(
+                'RADIOS AND NETWORK CONNECTIONS NOW LIVE IN SENSORS.',
+                style: OutrideType.section(10)),
+            trailing: const Icon(Icons.chevron_right,
+                color: OutrideColors.faint, size: 20),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) =>
+                    RadiosNetworksScreen(state: widget.state),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 2,
-                child: _field(
-                    _newAddress, 'Address (IP)', 'e.g. 172.17.97.182'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: _field(
-                    _newLabel, 'Label (optional)', 'e.g. North ridge'),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _addRadio,
-                  child: const Text('Add radio'),
-                ),
-              ),
-            ],
+            ),
           ),
         ]),
         _section('Detector', [
@@ -1661,48 +1538,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ]),
-        _section('Find radios on LAN', [
-          _field(_subnet, 'Discovery subnet (CIDR)', 'e.g. 172.17.97.0/24'),
-          const SizedBox(height: 10),
-          ElevatedButton(
-            onPressed: _scanning ? null : _scan,
-            child: Text(_scanning ? 'Scanning…' : 'Scan subnet'),
-          ),
-          if (_scanning) ...[
-            const SizedBox(height: 8),
-            LinearProgressIndicator(value: _scanProgress),
-          ],
-          if (_scanError != null) ...[
-            const SizedBox(height: 8),
-            Text(_scanError!,
-                style: const TextStyle(color: OutrideColors.red)),
-          ],
-          for (final r in _found)
-            ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.router, color: OutrideColors.blue),
-              title: Text(r.label, style: OutrideType.rowValue(OutrideColors.onDark)),
-              subtitle: Text(
-                  'TAP TO ADD AS ${r.driverId.toUpperCase()} RADIO',
-                  style: OutrideType.section(10)),
-              onTap: () async {
-                await widget.state.addRadio(RadioConfig(
-                  driverId: r.driverId,
-                  address: r.ip,
-                  label: r.label,
-                  pollInterval: (double.tryParse(_interval.text.trim()) ?? 0.25)
-                      .clamp(0.1, 60.0),
-                ));
-                if (mounted) setState(() {});
-              },
-            ),
-          if (!_scanning && _found.isEmpty && _scanError == null)
-            Text(
-              'NO SCAN YET. RADIOS MUST BE ON THIS SUBNET AND REACHABLE OVER HTTP.',
-              style: OutrideType.section(10).copyWith(height: 1.6),
-            ),
-        ]),
         _section('Auto-connect', [
           SwitchListTile(
             title: Text('AUTO-CONNECT SILVUS USB',
@@ -1983,71 +1818,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ];
   }
 
-  Widget _radioRow(int i) {
-    final c = widget.state.radioConfigs[i];
-    final st = widget.state.statusFor(c);
-    final type = driverTypes.firstWhere((t) => t.id == c.driverId,
-        orElse: () => (id: c.driverId, label: c.driverId.toUpperCase(), implemented: true));
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: driverColor(c.driverId),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  c.displayLabel,
-                  style: OutrideType.rowValue(OutrideColors.onDark)
-                      .copyWith(fontSize: 12),
-                ),
-                Text(
-                  st?.error ??
-                      (st?.lastPoll == null
-                          ? 'NOT POLLING'
-                          : '${st!.linkCount} LINKS'),
-                  style: OutrideType.section(10).copyWith(
-                      color: st?.error != null
-                          ? OutrideColors.red
-                          : OutrideColors.muted),
-                ),
-              ],
-            ),
-          ),
-          if (!type.implemented)
-            Text('SOON',
-                style: OutrideType.section(10)
-                    .copyWith(color: OutrideColors.orange))
-          else
-            Switch(
-              value: c.enabled,
-              activeThumbColor: OutrideColors.purple,
-              onChanged: (v) async {
-                await widget.state.setRadioEnabled(i, v);
-                if (mounted) setState(() {});
-              },
-            ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline,
-                color: OutrideColors.muted, size: 20),
-            onPressed: () async {
-              await widget.state.removeRadioAt(i);
-              if (mounted) setState(() {});
-            },
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _recordRow() {
     final st = widget.state;

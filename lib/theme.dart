@@ -117,6 +117,69 @@ class OutridePanel extends StatelessWidget {
   }
 }
 
+/// Glassy translucent panel (v0.30.1): a semi-transparent dark surface
+/// over the near-black background, so the new screens read as glass
+/// rather than solid panels. The fill is the surface colour at ~70-85%
+/// opacity with a faint top-to-bottom gradient; [tint] colours the
+/// fill, border and glow for per-card identity (e.g. the Radios &
+/// Networks card is glass purple, sensor cards carry their own
+/// colour). Never a solid opaque dark.
+class OutrideGlassPanel extends StatelessWidget {
+  const OutrideGlassPanel({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+    this.tint,
+    this.tintedBorder = true,
+  });
+
+  final Widget child;
+  final EdgeInsets padding;
+
+  /// Identity colour. Null keeps the panel neutral dark glass.
+  final Color? tint;
+
+  /// Whether the border/glow follow [tint]. False keeps a neutral
+  /// hairline border even when the tile inside is tinted.
+  final bool tintedBorder;
+
+  @override
+  Widget build(BuildContext context) {
+    const base = OutrideColors.surface;
+    final top = tint == null
+        ? base.withAlpha(216)
+        : Color.alphaBlend(tint!.withAlpha(38), base.withAlpha(216));
+    final bottom = tint == null
+        ? base.withAlpha(176)
+        : Color.alphaBlend(tint!.withAlpha(38), base.withAlpha(176));
+    final borderColor = tint != null && tintedBorder
+        ? tint!.withAlpha(140)
+        : OutrideColors.border;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [top, bottom],
+        ),
+        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: tint != null && tintedBorder
+            ? [
+                BoxShadow(
+                  color: tint!.withAlpha(36),
+                  blurRadius: 22,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      padding: padding,
+      child: child,
+    );
+  }
+}
+
 /// Outlined pill chip, e.g. "INBOUND", "SIZE M".
 class OutrideChip extends StatelessWidget {
   const OutrideChip({

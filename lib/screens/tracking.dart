@@ -1,16 +1,19 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../models/tracking.dart';
+import '../services/ble_scan.dart';
 import '../services/gps_positioning.dart';
 import '../services/operator_pose.dart';
 import '../services/tile_pack.dart';
 import '../services/tracker.dart';
 import '../services/web_tile_loader.dart';
+import '../services/wifi_sense.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../utils/field_map_transform.dart';
@@ -59,6 +62,12 @@ class _TrackingScreenState extends State<TrackingScreen> {
   /// Fused RTI disturbance image overlay (rtiImageLabel).
   bool _showRti = true;
 
+  // Heat-layer smoothers (v0.30.1): owned by the screen state, not
+  // the painter — the painter object is rebuilt every frame, so
+  // per-cell easing state has to live here to survive repaints.
+  final _shadowSmoother = HeatSmoother();
+  final _rtiSmoother = HeatSmoother();
+
   /// Node health overlay: recolor node dots by link freshness
   /// (green/amber/red/grey) instead of driver color.
   bool _showHealth = false;
@@ -73,6 +82,18 @@ class _TrackingScreenState extends State<TrackingScreen> {
   /// PRC-163 ground PLI joined it; the toggle copy now says what
   /// it gates.
   bool _showContacts = true;
+
+  /// Wi-Fi tripwire layer (v0.30.1): the APs this device sees,
+  /// with the associated (handshook) AP and any tripped AP marked.
+  /// Off by default — "enable" is opt-in. APs have no field
+  /// position, so the layer is a panel under the map, not dots
+  /// on it.
+  bool _showWifiTripwires = false;
+
+  /// Bluetooth tripwire layer (v0.30.1): BLE advertisers from
+  /// passive scan, with RSSI proximity (est.). Same deal: panel,
+  /// not dots — an advertiser's position is unknown.
+  bool _showBleTripwires = false;
 
   /// Map zoom (wheel / buttons). Pinch is reserved for node dragging.
   double _mapZoom = 1.0;
@@ -327,6 +348,37 @@ class _TrackingScreenState extends State<TrackingScreen> {
                     setState(() => _showContacts = !_showContacts),
                 child: Text(_showContacts ? 'CONTACTS ON' : 'CONTACTS OFF'),
               ),
+              // Tripwire layers (v0.30.1): the map shows what
+              // tripwires are available — Wi-Fi APs (handshook +
+              // tripped) and BLE advertisers. Exact labels per
+              // Jeremy; state shows by colour + weight, never by
+              // changing the words.
+              TextButton(
+                style: _toggleStyle,
+                onPressed: () => setState(
+                    () => _showWifiTripwires = !_showWifiTripwires),
+                child: Text('Wi-Fi tripwires',
+                    style: TextStyle(
+                        color: _showWifiTripwires
+                            ? OutrideColors.purple
+                            : OutrideColors.muted,
+                        fontWeight: _showWifiTripwires
+                            ? FontWeight.w800
+                            : FontWeight.w400)),
+              ),
+              TextButton(
+                style: _toggleStyle,
+                onPressed: () => setState(
+                    () => _showBleTripwires = !_showBleTripwires),
+                child: Text('BLE tripwires',
+                    style: TextStyle(
+                        color: _showBleTripwires
+                            ? OutrideColors.purple
+                            : OutrideColors.muted,
+                        fontWeight: _showBleTripwires
+                            ? FontWeight.w800
+                            : FontWeight.w400)),
+              ),
               // Live GPS (v0.28.0, EXPERIMENTAL): continuous position
               // stream for the "you are here" marker. Denied or
               // unavailable falls back to the simulated operator
@@ -403,6 +455,14 @@ class _TrackingScreenState extends State<TrackingScreen> {
           _mapVisualization(nodes, live),
           const SizedBox(height: 6),
           _mapStatusLine(),
+          if (_showWifiTripwires) ...[
+            const SizedBox(height: 8),
+            _wifiTripwirePanel(),
+          ],
+          if (_showBleTripwires) ...[
+            const SizedBox(height: 8),
+            _bleTripwirePanel(),
+          ],
           if (live) ...[
             const SizedBox(height: 8),
             Align(
@@ -416,6 +476,252 @@ class _TrackingScreenState extends State<TrackingScreen> {
         ],
       ),
     );
+  }
+
+  /// Wi-Fi tripwire layer (v0.30.1): what Wi-Fi tripwires are
+  /// available — the APs this device sees. HANDSHOOK marks the AP
+  /// this device associated with (handshake complete); TRIPPED
+  /// marks an AP whose RSSI is dipping. Listen-only: nothing here
+  /// transmits, and APs have no map position, so they are listed,
+  /// never plotted.
+  Widget _wifiTripwirePanel() {
+    final wifi = state.wifi;
+    final readings = wifi.readings;
+    return OutridePanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('WI-FI TRIPWIRES',
+                    style: OutrideType.section(),
+                    overflow: TextOverflow.ellipsis),
+              ),
+              Text('${readings.length} AP${readings.length == 1 ? '' : 'S'}',
+                  style: OutrideType.section(10)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'EACH AP IS A TRIPWIRE: A SUSTAINED RSSI DIP ON ITS PATH IS A DISTURBANCE. '
+            'HANDSHOOK = ASSOCIATED WITH THIS DEVICE. NO MAP POSITION — RSSI ONLY.',
+            style: OutrideType.section(10).copyWith(height: 1.6),
+          ),
+          const SizedBox(height: 8),
+          if (!wifi.running) ...[
+            Text('WI-FI VISION IS OFF — NOTHING IS BEING SENSED.',
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.amber)),
+            const SizedBox(height: 6),
+            TextButton(
+              onPressed: () => state.toggleWifiVision(true),
+              child: const Text('START WI-FI VISION'),
+            ),
+          ] else if (readings.isEmpty) ...[
+            Text('SCANNING — NO APS SEEN YET.',
+                style: OutrideType.section(10)),
+          ] else
+            for (final r in readings)
+              _wifiApRow(r,
+                  wifi.disturbedBssids.contains(r.bssid) ||
+                      wifi.activeCrossings.containsKey(r.bssid)),
+        ],
+      ),
+    );
+  }
+
+  Widget _wifiApRow(WifiApReading r, bool tripped) {
+    final shortBssid =
+        r.bssid.length > 5 ? r.bssid.substring(r.bssid.length - 5) : r.bssid;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.wifi, color: OutrideColors.blue, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${r.ssid.isEmpty ? '(HIDDEN SSID)' : r.ssid}  ·  $shortBssid',
+                  style: OutrideType.rowValue(OutrideColors.onDark)
+                      .copyWith(fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text('${r.rssiDbm.toStringAsFixed(0)} dBm',
+                  style: OutrideType.rowLabel()),
+            ],
+          ),
+          // Tags ride their own wrapping line: a connected AP can
+          // also trip, and HANDSHOOK + TRIPPED + RSSI do not fit
+          // one phone-width row together.
+          if (r.isConnected || tripped) ...[
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                if (r.isConnected)
+                  const OutrideChip(
+                      label: 'HANDSHOOK', color: OutrideColors.green),
+                if (tripped)
+                  const OutrideChip(
+                      label: 'TRIPPED', color: OutrideColors.amber),
+              ],
+            ),
+          ],
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: ((r.rssiDbm + 100) / 70).clamp(0.0, 1.0),
+              minHeight: 4,
+              backgroundColor: OutrideColors.surface2,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                tripped ? OutrideColors.amber : OutrideColors.blue,
+              ),
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            '~${r.estimatedDistanceM.toStringAsFixed(0)} M (EST.)',
+            style: OutrideType.section(10)
+                .copyWith(color: OutrideColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Bluetooth tripwire layer (v0.30.1): BLE advertisers from
+  /// passive scan — phones, earbuds, beacons, wearables that
+  /// broadcast. Never connects to anything; position unknown,
+  /// proximity from RSSI (est.). Listed under the map, never
+  /// plotted.
+  Widget _bleTripwirePanel() {
+    final ble = state.wifi.ble;
+    final devices = ble.devices;
+    return OutridePanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('BLUETOOTH TRIPWIRES',
+                    style: OutrideType.section(),
+                    overflow: TextOverflow.ellipsis),
+              ),
+              Text(
+                  '${devices.length} DEVICE${devices.length == 1 ? '' : 'S'}',
+                  style: OutrideType.section(10)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'PASSIVE SCAN — PHONES, EARBUDS, BEACONS AND WEARABLES THAT BROADCAST, '
+            'ROUGHLY 10–30 M. NEVER CONNECTS TO ANYTHING. POSITION UNKNOWN — '
+            'PROXIMITY FROM RSSI (EST.).',
+            style: OutrideType.section(10).copyWith(height: 1.6),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: ble.scanning
+                ? null
+                : () async {
+                    await ble.scan(
+                        simulate: state.settings.simulatedMode);
+                    if (mounted) setState(() {});
+                  },
+            child: Text(ble.scanning ? 'SCANNING…' : 'SCAN FOR BLE'),
+          ),
+          const SizedBox(height: 6),
+          if (ble.scanning)
+            Text('SCANNING…',
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.blue))
+          else if (ble.error != null)
+            Text(ble.error!,
+                style: OutrideType.section(10)
+                    .copyWith(color: OutrideColors.red))
+          else if (devices.isEmpty)
+            Text('NO BLE DEVICES SEEN YET — TAP SCAN.',
+                style: OutrideType.section(10))
+          else
+            for (final d in devices) _bleDeviceRow(d),
+        ],
+      ),
+    );
+  }
+
+  Widget _bleDeviceRow(BleNearbyDevice d) {
+    final shortId =
+        d.id.length > 5 ? d.id.substring(d.id.length - 5) : d.id;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.bluetooth,
+                  color: OutrideColors.blue, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${d.name}  ·  $shortId',
+                  style: OutrideType.rowValue(OutrideColors.onDark)
+                      .copyWith(fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text('${d.rssiDbm.toStringAsFixed(0)} dBm',
+                  style: OutrideType.rowLabel()),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // Bucket word on its own line: icon + chip + RSSI do not
+          // fit one phone-width row (overflowed 7.6 px at 360 px).
+          Row(
+            children: [
+              OutrideChip(
+                  label: d.proximityLabel.replaceAll(' (est.)', ''),
+                  color: OutrideColors.blue),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: ((d.rssiDbm + 100) / 70).clamp(0.0, 1.0),
+              minHeight: 4,
+              backgroundColor: OutrideColors.surface2,
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                  OutrideColors.blue),
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            'SEEN ${_ageLabel(d.lastSeen)} AGO',
+            style: OutrideType.section(10)
+                .copyWith(color: OutrideColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _ageLabel(DateTime t) {
+    // Clamp at 0: a device whose lastSeen is in the future (clock
+    // skew) must never read as a negative age.
+    final s = math.max(0, DateTime.now().difference(t).inSeconds);
+    if (s < 60) return '${s}S';
+    final m = s ~/ 60;
+    if (m < 60) return '${m}M';
+    return '${m ~/ 60}H';
   }
 
   /// The interactive field map visualization. With [expand], it fills
@@ -479,8 +785,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
                     track: state.track,
                     shadow: state.shadow,
                     showShadow: _showShadow,
+                    shadowSmoother: _shadowSmoother,
                     rti: state.rtiImage,
                     showRti: _showRti,
+                    rtiSmoother: _rtiSmoother,
                     showHealth: _showHealth,
                     nodeHealth: _showHealth ? state.nodeHealthMap : const {},
                     operatorPos: state.mapOperatorMeters,
@@ -1301,6 +1609,61 @@ class _TrackScopeNote extends StatelessWidget {
   }
 }
 
+/// Per-cell intensity smoother for the heat layers (v0.30.1): a
+/// detection that pops from 0 to full alpha in one frame reads as
+/// blocky and jumpy. The smoother eases each cell's displayed value
+/// toward its measured value (35% of the remaining gap per repaint)
+/// and decays cells that drop out of the feed instead of deleting
+/// them, so heat fades in AND out. State lives here — not in the
+/// painter — because the painter object is rebuilt on every frame.
+class HeatSmoother {
+  final Map<String, _HeatCell> _cells = {};
+
+  /// Cells to draw this frame: live cells eased toward their target,
+  /// plus ghosts of recently-gone cells fading out.
+  List<({double x, double y, double v})> smooth(
+      List<({double x, double y, double v})> live) {
+    final seen = <String>{};
+    for (final c in live) {
+      final key = _key(c.x, c.y);
+      seen.add(key);
+      final prev = _cells[key]?.v ?? 0.0;
+      _cells[key] = _HeatCell(c.x, c.y, prev + (c.v - prev) * 0.35);
+    }
+    // Ghosts: cells gone from the feed decay instead of vanishing.
+    final gone = <String>[];
+    for (final e in _cells.entries) {
+      if (seen.contains(e.key)) continue;
+      final v = e.value.v * 0.65;
+      if (v < 0.02) {
+        gone.add(e.key);
+      } else {
+        _cells[e.key] = _HeatCell(e.value.x, e.value.y, v);
+      }
+    }
+    for (final k in gone) {
+      _cells.remove(k);
+    }
+    return [
+      for (final c in _cells.values) (x: c.x, y: c.y, v: c.v),
+    ];
+  }
+
+  static String _key(double x, double y) =>
+      // Floor on a 2 m grid: the tracker grid step is >= 2.5 m, so
+      // two distinct cells can never share a key, while a cell
+      // jittering by centimetres cannot split across a key boundary
+      // the way 0.1 m rounding could.
+      '${(x / 2).floor()},${(y / 2).floor()}';
+}
+
+class _HeatCell {
+  const _HeatCell(this.x, this.y, this.v);
+  final double x;
+  final double y;
+  final double v;
+}
+
 class TrackingMapPainter extends CustomPainter {
   TrackingMapPainter({
     required this.transform,
@@ -1310,8 +1673,10 @@ class TrackingMapPainter extends CustomPainter {
     required this.track,
     required this.shadow,
     required this.showShadow,
+    this.shadowSmoother,
     this.rti = const [],
     this.showRti = true,
+    this.rtiSmoother,
     this.showHealth = false,
     this.nodeHealth = const {},
     this.operatorPos,
@@ -1327,9 +1692,17 @@ class TrackingMapPainter extends CustomPainter {
   final List<ShadowCell> shadow;
   final bool showShadow;
 
+  /// Smoother for the shadow layer (null = raw values, e.g. tests
+  /// that construct the painter directly).
+  final HeatSmoother? shadowSmoother;
+
   /// Fused RTI disturbance image cells ([rtiImageLabel]).
   final List<RtiCell> rti;
   final bool showRti;
+
+  /// Smoother for the RTI layer (separate instance: the two layers
+  /// share the same cell grid, so their easing state must not mix).
+  final HeatSmoother? rtiSmoother;
 
   /// When true, node dots are colored by link freshness instead of
   /// driver color. Disturbed nodes still glow amber on top.
@@ -1400,65 +1773,68 @@ class TrackingMapPainter extends CustomPainter {
 
     // Shadow heat, pinned to the intruder: only cells near the current
     // track glow. No track, no heat — the lit boundary above carries the
-    // "where we watch" information on its own.
+    // "where we watch" information on its own. v0.30.1: discs are
+    // smaller (less congested) and soft-edged (radial gradient, no
+    // hard rim), and cell intensities ease in/out via the smoother
+    // instead of popping between frames.
     final t0 = track;
-    if (showShadow && t0 != null && shadow.isNotEmpty) {
+    final shadowCells = shadowSmoother?.smooth(
+            [for (final c in shadow) (x: c.x, y: c.y, v: c.v)]) ??
+        [for (final c in shadow) (x: c.x, y: c.y, v: c.v)];
+    if (showShadow && t0 != null && shadowCells.isNotEmpty) {
       // Heat halo radius in meters: gaussian falloff around the track.
       const sigmaM = 14.0;
-      double falloff(ShadowCell c) {
+      double falloff(({double x, double y, double v}) c) {
         final dx = c.x - t0.x, dy = c.y - t0.y;
         return math.exp(-(dx * dx + dy * dy) / (2 * sigmaM * sigmaM));
       }
 
       // Overlapping soft discs so cells blend into one continuous shadow.
-      final r = 2.5 * tr.scale * 0.85;
-      for (final c in shadow) {
+      final r = 1.9 * tr.scale * 0.85;
+      for (final c in shadowCells) {
+        final fall = falloff(c);
+        if (fall < 0.03) continue;
+        final p = tr.toScreen(c.x, c.y);
+        canvas.drawCircle(
+            p, r, _softDisc(p, r, OutrideColors.amber,
+                (c.v * 130 * fall).round()));
+      }
+      // Hot core: redraw the strongest cells brighter for definition.
+      for (final c in shadowCells) {
+        if (c.v < 0.55) continue;
         final fall = falloff(c);
         if (fall < 0.03) continue;
         final p = tr.toScreen(c.x, c.y);
         canvas.drawCircle(
             p,
-            r,
-            Paint()
-              ..color = OutrideColors.amber
-                  .withAlpha((c.v * 130 * fall).round()));
-      }
-      // Hot core: redraw the strongest cells brighter for definition.
-      for (final c in shadow) {
-        if (c.v < 0.55) continue;
-        final fall = falloff(c);
-        if (fall < 0.03) continue;
-        canvas.drawCircle(
-            tr.toScreen(c.x, c.y),
             r * 0.55,
-            Paint()
-              ..color = OutrideColors.orange
-                  .withAlpha((c.v * 150 * fall).round()));
+            _softDisc(p, r * 0.55, OutrideColors.orange,
+                (c.v * 150 * fall).round()));
       }
     }
 
     // Fused RTI disturbance image (rti_imaging_weights_spec): purple
     // probability-mass discs, drawn under the track dot. This is the
     // estimated disturbance location (ground projection) — never a
-    // located object.
-    if (showRti && rti.isNotEmpty) {
-      final rr = 2.2 * tr.scale * 0.85;
-      for (final c in rti) {
-        canvas.drawCircle(
-            tr.toScreen(c.x, c.y),
-            rr,
-            Paint()
-              ..color =
-                  OutrideColors.purple.withAlpha((c.v * 110).round()));
+    // located object. v0.30.1: smaller, soft-edged, eased like shadow.
+    final rtiCells = rtiSmoother?.smooth(
+            [for (final c in rti) (x: c.x, y: c.y, v: c.v)]) ??
+        [for (final c in rti) (x: c.x, y: c.y, v: c.v)];
+    if (showRti && rtiCells.isNotEmpty) {
+      final rr = 1.7 * tr.scale * 0.85;
+      for (final c in rtiCells) {
+        final p = tr.toScreen(c.x, c.y);
+        canvas.drawCircle(p, rr,
+            _softDisc(p, rr, OutrideColors.purple, (c.v * 110).round()));
       }
-      for (final c in rti) {
+      for (final c in rtiCells) {
         if (c.v < 0.55) continue;
+        final p = tr.toScreen(c.x, c.y);
         canvas.drawCircle(
-            tr.toScreen(c.x, c.y),
+            p,
             rr * 0.55,
-            Paint()
-              ..color =
-                  OutrideColors.purple.withAlpha((c.v * 170).round()));
+            _softDisc(p, rr * 0.55, OutrideColors.purple,
+                (c.v * 170).round()));
       }
     }
 
@@ -1523,8 +1899,22 @@ class TrackingMapPainter extends CustomPainter {
           showHealth ? healthColor : driverColor(driverOf(n.nodeId));
       final color = hot ? OutrideColors.amber : base;
       canvas.drawCircle(p, 14, Paint()..color = color.withAlpha(45));
-      canvas.drawCircle(p, 8, Paint()..color = color.withAlpha(140));
-      canvas.drawCircle(p, 4.5, Paint()..color = color);
+      // Radio silhouette — a Silvus 4200-style node box with two
+      // antennas — as the map marker for a radio, not a dot.
+      final antPaint = Paint()
+        ..color = color
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(
+          p + const Offset(-4, -4), p + const Offset(-6, -12), antPaint);
+      canvas.drawLine(
+          p + const Offset(4, -4), p + const Offset(6, -12), antPaint);
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(
+              Rect.fromCenter(
+                  center: p + const Offset(0, 1), width: 13, height: 10),
+              const Radius.circular(2)),
+          Paint()..color = color);
       _label(canvas, n.callsign ?? shortNodeId(n.nodeId), p + const Offset(16, -24),
           OutrideColors.onDark);
       if (n.height >= 0.5) {
@@ -1597,6 +1987,14 @@ class TrackingMapPainter extends CustomPainter {
           p + const Offset(16, 6), color);
     }
   }
+
+  /// Soft-edged disc paint (v0.30.1): a radial gradient from the
+  /// given alpha at the centre to transparent at the rim, so heat
+  /// cells blend into one continuous shadow instead of showing
+  /// hard disc edges.
+  Paint _softDisc(Offset p, double r, Color color, int alpha) => Paint()
+    ..shader = ui.Gradient.radial(
+        p, r, [color.withAlpha(alpha), color.withAlpha(0)]);
 
   void _label(Canvas canvas, String text, Offset at, Color color) {
     final tp = TextPainter(

@@ -9,6 +9,8 @@ import 'package:outride/models/link_sample.dart';
 import 'package:outride/models/tracking.dart';
 import 'package:outride/screens/picture_screen.dart';
 import 'package:outride/screens/sensors_screen.dart';
+import 'package:outride/screens/wifi_web_gate_screen.dart';
+import 'package:outride/services/discovery.dart';
 import 'package:outride/services/experimental_sensors.dart';
 import 'package:outride/state/app_state.dart';
 import 'package:outride/theme.dart';
@@ -265,12 +267,13 @@ void main() {
     });
   });
 
-  group('SensorsScreen experimental filter', () {
-    testWidgets('OFF by default: 4 of 6 rows, no EXPERIMENTAL tags',
+  group('SensorsScreen grid (v0.30.1)', () {
+    testWidgets('OFF by default: 6 of 10 shown, no EXPERIMENTAL tags',
         (tester) async {
-      tester.view.physicalSize = const Size(360, 800);
+      tester.view.physicalSize = const Size(360, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
+      await experimentalSensors.set(false);
       final state = AppState();
       addTearDown(state.dispose);
       await tester.pumpWidget(
@@ -280,25 +283,31 @@ void main() {
       );
       await tester.pump();
       expect(tester.takeException(), isNull);
-      // v0.29.2: mock title-case names, sentence-case count line.
-      expect(find.text('Field map'), findsOneWidget);
-      expect(find.text('Beam'), findsOneWidget);
-      expect(find.text('WiFi'), findsOneWidget);
-      expect(find.text('Drone'), findsOneWidget);
-      expect(find.text('Fetch'), findsNothing);
+      // Grid cards (title case) — the six non-experimental sensors.
+      expect(find.text('Silvus RF Mesh'), findsOneWidget);
+      expect(find.text('Meshtastic'), findsOneWidget);
+      expect(find.text('Wi-Fi Sensing'), findsOneWidget);
+      expect(find.text('Bluetooth'), findsOneWidget);
+      expect(find.text('GPS'), findsOneWidget);
+      expect(find.text('Camera'), findsOneWidget);
+      expect(find.text('Fetch Ball'), findsNothing);
+      expect(find.text('mmWave Radar'), findsNothing);
+      expect(find.text('Microphone Array'), findsNothing);
       expect(find.text('Spectrum'), findsNothing);
-      expect(find.textContaining('4 of 6 shown'), findsOneWidget);
+      expect(find.textContaining('6 of 10 shown'), findsOneWidget);
+      expect(find.text('0 of 6 active'), findsOneWidget);
       expect(find.text('EXPERIMENTAL'), findsNothing);
+      expect(find.text('Scan for new sensors'), findsOneWidget);
+      expect(find.text('Radios & Networks'), findsOneWidget);
     });
 
-    testWidgets('ON: all 6 rows with EXPERIMENTAL tags on Fetch/Spectrum',
+    testWidgets(
+        'ON: all 10 cards with EXPERIMENTAL tags x4, Fetch copy exact',
         (tester) async {
-      // Taller than the 800 px default: all six rows must be built,
-      // and ListView builds lazily — the last row sits below the
-      // fold at phone height.
-      tester.view.physicalSize = const Size(360, 1200);
+      tester.view.physicalSize = const Size(360, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
+      addTearDown(() => experimentalSensors.set(false));
       final state = AppState();
       addTearDown(state.dispose);
       await tester.pumpWidget(
@@ -307,14 +316,109 @@ void main() {
             home: Scaffold(body: SensorsScreen(state: state))),
       );
       await tester.pump();
-      expect(find.text('FETCH'), findsNothing);
+      expect(find.text('Fetch Ball'), findsNothing);
       await experimentalSensors.set(true);
       await tester.pump();
       expect(tester.takeException(), isNull);
-      expect(find.text('Fetch'), findsOneWidget);
+      expect(find.text('Fetch Ball'), findsOneWidget);
+      expect(find.text('mmWave Radar'), findsOneWidget);
+      expect(find.text('Microphone Array'), findsOneWidget);
       expect(find.text('Spectrum'), findsOneWidget);
-      expect(find.text('EXPERIMENTAL'), findsNWidgets(2));
-      expect(find.textContaining('6 of 6 shown'), findsOneWidget);
+      expect(find.text('EXPERIMENTAL'), findsNWidgets(4));
+      expect(find.textContaining('10 of 10 shown'), findsOneWidget);
+      expect(find.text('0 of 10 active'), findsOneWidget);
+      // Jeremy's exact words for the Fetch Ball card.
+      expect(
+          find.text('Thrown sensor for extended object / human detection'),
+          findsOneWidget);
+    });
+
+    testWidgets('Only connected filter hides Off cards', (tester) async {
+      tester.view.physicalSize = const Size(360, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await experimentalSensors.set(false);
+      final state = AppState();
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+            theme: buildDarkTheme(),
+            home: Scaffold(body: SensorsScreen(state: state))),
+      );
+      await tester.pump();
+      expect(find.text('Silvus RF Mesh'), findsOneWidget);
+      // Fresh state: nothing is live, so every card is Off.
+      await tester.tap(find.text('Only connected'));
+      await tester.pump();
+      expect(find.text('No connected sensors.'), findsOneWidget);
+      expect(find.text('Silvus RF Mesh'), findsNothing);
+      await tester.tap(find.text('Only connected'));
+      await tester.pump();
+      expect(find.text('Silvus RF Mesh'), findsOneWidget);
+      expect(find.text('No connected sensors.'), findsNothing);
+    });
+
+    testWidgets('Scan button runs the injected scan; tapping a find adds it',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await experimentalSensors.set(false);
+      final state = AppState();
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+            theme: buildDarkTheme(),
+            home: Scaffold(
+                body: SensorsScreen(
+              state: state,
+              scanRadios: (_) async => [
+                const DiscoveredRadio(
+                  ip: '172.17.97.182',
+                  nodeIds: ['node90550'],
+                  nodeNames: ['Test radio'],
+                ),
+              ],
+            ))),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Scan for new sensors'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(find.text('SCAN RESULTS'), findsOneWidget);
+      expect(find.text('172.17.97.182 (Test radio)'), findsOneWidget);
+      await tester.tap(find.text('172.17.97.182 (Test radio)'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('ADDED'), findsOneWidget);
+      expect(state.radioConfigs.length, 1);
+      expect(state.radioConfigs.first.address, '172.17.97.182');
+      await tester.tap(find.text('DONE'));
+      await tester.pumpAndSettle();
+      expect(find.text('SCAN RESULTS'), findsNothing);
+    });
+
+    testWidgets('Radios & Networks card opens the RadiosNetworksScreen',
+        (tester) async {
+      // Tall viewport: the R&N ListView only builds what is in view,
+      // and the GL.iNet section sits last (below the fold at 1800).
+      tester.view.physicalSize = const Size(360, 4800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await experimentalSensors.set(false);
+      final state = AppState();
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+            theme: buildDarkTheme(),
+            home: Scaffold(body: SensorsScreen(state: state))),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Radios & Networks'));
+      await tester.pumpAndSettle();
+      expect(find.text('GL.INET FIELD HUB'), findsOneWidget);
+      expect(find.text('RADIOS'), findsOneWidget);
+      expect(find.text('NETWORKS'), findsOneWidget);
     });
   });
 

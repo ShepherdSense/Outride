@@ -4,6 +4,22 @@ import 'dart:typed_data';
 
 import 'silvus_api.dart';
 
+/// The scan behind "Scan for new sensors": Silvus radios + Meshtastic
+/// nodes on one subnet. Injectable seam — the production default runs
+/// the real LAN scans; tests inject a fake so no real sockets open
+/// under `flutter test`.
+typedef SensorScanFn = Future<List<DiscoveredRadio>> Function(String subnet);
+
+/// Scan one subnet for everything Outride can attach: Silvus radios
+/// (HTTP + streamscape snapshot) then Meshtastic nodes (TCP 4403).
+/// Used by the Sensors "Scan for new sensors" button and the Radios &
+/// Networks screen.
+Future<List<DiscoveredRadio>> scanForSensors(String subnet) async {
+  final silvus = await RadioDiscovery.scanSubnet(subnet);
+  final mesh = await RadioDiscovery.scanMeshtastic(subnet);
+  return [...silvus, ...mesh];
+}
+
 /// LAN discovery for Silvus radios. Ports silvus_link_doctor.py:
 /// fast TCP port-80 pre-check per host, then validate as a Silvus radio with
 /// a real `streamscape_data` JSON-RPC call. Hosts are probed in small
@@ -28,6 +44,18 @@ class DiscoveredRadio {
 }
 
 class RadioDiscovery {
+  /// True when [cidr] parses as a scannable subnet (/20–/30). Pure;
+  /// used by [AppState.setDiscoverySubnet] so a bad subnet can never
+  /// be persisted even if a caller forgets to scan first.
+  static bool isValidCidr(String cidr) {
+    try {
+      _hostsFor(cidr);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Scan a CIDR (prefix /20–/30, /24 typical). Progress callback reports
   /// (done, total) for a progress bar.
   static Future<List<DiscoveredRadio>> scanSubnet(
