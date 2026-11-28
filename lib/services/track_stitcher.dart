@@ -18,7 +18,13 @@
 /// - `checkHandoff()` fires when a driver has a NEW detection (opened
 ///   within [newWindow]) and another driver closed one within
 ///   [memoryWindow]: it scores every candidate pair with the tiny MLP
-///   and returns the best above [stitchThreshold.
+///   and returns the best above [stitchThreshold].
+/// - `checkHandoffs()` is the batch form: it takes ALL new open
+///   detections and ALL recently closed ones, scores the whole
+///   matrix, and runs the Hungarian algorithm for the globally
+///   optimal assignment (cost = 1 - P(same mover), gated below
+///   [stitchThreshold]) instead of letting each new detection
+///   greedily grab its own best match.
 ///
 /// Trained on synthetic two-mesh crossing scenarios
 /// (tools/train_stitcher.py); inference runs on the shared [TinyMlp]
@@ -32,6 +38,7 @@ import 'package:flutter/services.dart';
 import '../models/link_sample.dart';
 import '../models/tracking.dart';
 import '../utils/node_ids.dart';
+import 'hungarian.dart';
 import 'tiny_ml.dart';
 
 /// Feature order MUST match tools/train_stitcher.py.
@@ -91,9 +98,16 @@ class DriverDetection {
 }
 
 class TrackStitcher {
-  TrackStitcher._(this._mlp);
+  TrackStitcher._(this._mlp) : _probOverride = null;
 
   final TinyMlp? _mlp;
+
+  /// Test-only probability seam: when non-null, [sameMoverProb]
+  /// returns the tabled value for (closedDriverId, newDriverId)
+  /// instead of running the MLP. Only set by
+  /// [TrackStitcher.withProbabilities]; production constructors
+  /// leave it null, so production scoring is untouched.
+  final Map<(String, String), double>? _probOverride;
 
   /// Detections newer than this after closing are still stitchable.
   static const memoryWindow = Duration(minutes: 4);
@@ -121,7 +135,18 @@ class TrackStitcher {
   }
 
   /// Test/placeholder constructor without a model (scoring disabled).
-  TrackStitcher.withoutModel() : _mlp = null;
+  TrackStitcher.withoutModel()
+      : _mlp = null,
+        _probOverride = null;
+
+  /// Test-only constructor: scores pairs from [probs], keyed by
+  /// (closedDriverId, newDriverId), instead of the MLP. Pairs absent
+  /// from the table score 0.0. This is a test seam only — it exists
+  /// so batch-association unit tests can inject exact probabilities
+  /// without changing production scoring; no production code uses it.
+  TrackStitcher.withProbabilities(Map<(String, String), double> probs)
+      : _mlp = null,
+        _probOverride = Map.of(probs);
 
   bool get hasModel => _mlp != null;
 
@@ -189,6 +214,8 @@ class TrackStitcher {
 
   /// P(same mover) for a closed-then-new detection pair.
   double sameMoverProb(DriverDetection a, DriverDetection b) {
+    final override = _probOverride?[(a.driverId, b.driverId)];
+    if (override != null) return override;
     final mlp = _mlp;
     if (mlp == null) return 0.0;
     final probs = mlp.predictProbs(extractStitchFeatures(a, b));
@@ -203,7 +230,11 @@ class TrackStitcher {
     required String activeDriver,
   }) {
     final mlp = _mlp;
-    if (mlp == null) return null;
+    // No model and no test probability seam: nothing can be scored.
+    // (The override check is the seam's only other touchpoint;
+    // production constructors leave _probOverride null, so this
+    // guard behaves exactly as before in production.)
+    if (mlp == null && _probOverride == null) return null;
     final cur = _open[activeDriver];
     if (cur == null) return null;
     if (now.difference(cur.tFirst) > newWindow) return null;
@@ -222,6 +253,61 @@ class TrackStitcher {
       return (fromDriver: bestFrom, confidence: bestConf);
     }
     return null;
+  }
+
+  /// Batch handoff association: scores ALL currently-new open
+  /// detections against ALL recently-closed detections and returns
+  /// the globally-optimal assignment (Hungarian, minimum total
+  /// cost) instead of letting each new detection greedily grab its
+  /// own best match.
+  ///
+  /// Cost matrix: rows are the new open detections (opened within
+  /// [newWindow]), columns are the closed detections (closed within
+  /// [memoryWindow]); cost = 1 - P(same mover). Pairs below
+  /// [stitchThreshold] — including same-driver pairs, which can
+  /// never be a handoff — get a prohibitive cost and are never
+  /// assigned. Only pairs at/above threshold are returned, sorted
+  /// by confidence descending. Each new detection and each closed
+  /// detection appears at most once.
+  List<({String newDriver, String fromDriver, double confidence})>
+      checkHandoffs({required DateTime now}) {
+    final news = _open.values
+        .where((d) => now.difference(d.tFirst) <= newWindow)
+        .toList()
+      ..sort((a, b) => a.driverId.compareTo(b.driverId));
+    final olds = _closed
+        .where((c) => now.difference(c.tLast) <= memoryWindow)
+        .toList()
+      ..sort((a, b) => a.driverId.compareTo(b.driverId));
+    if (news.isEmpty || olds.isEmpty) return const [];
+    // Probabilities first so the returned confidence is the scored
+    // value, not 1 - cost recomputed from a rounded matrix.
+    const big = 1e9;
+    final probs = List.generate(news.length, (i) {
+      return List.generate(olds.length, (j) {
+        if (olds[j].driverId == news[i].driverId) return 0.0;
+        return sameMoverProb(olds[j], news[i]);
+      });
+    });
+    final cost = List.generate(news.length, (i) {
+      return List.generate(olds.length, (j) {
+        final p = probs[i][j];
+        if (p < stitchThreshold) return big;
+        return 1.0 - p;
+      });
+    });
+    final pairs = hungarian(cost);
+    final out = <({String newDriver, String fromDriver, double confidence})>[];
+    for (final (i, j) in pairs) {
+      if (cost[i][j] >= big) continue; // gated pair: never assigned
+      out.add((
+        newDriver: news[i].driverId,
+        fromDriver: olds[j].driverId,
+        confidence: probs[i][j],
+      ));
+    }
+    out.sort((a, b) => b.confidence.compareTo(a.confidence));
+    return out;
   }
 
   /// For tests: inspect open/closed state.

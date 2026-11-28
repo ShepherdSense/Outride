@@ -1,5 +1,5 @@
 # Outride
-**First out. First to know.**
+**Protect the herd.**
 
 > **Renamed — Shepherd is now Outride.** Same product, same mission, new name: another company already ships a product called Shepherd, so we changed ours to avoid the confusion. Everything else is unchanged.
 
@@ -15,7 +15,7 @@ Built by **ShepherdSense**.
 
 ## Download
 
-**Latest release: [v0.29.7](https://github.com/ShepherdSense/Outride/releases/tag/v0.29.7)** — native Cloudflare hub support and ZeroTier support built in; fresh installs open LIVE.
+**Latest release: [v0.31.0](https://github.com/ShepherdSense/Outride/releases/tag/v0.31.0)** — full v0.30.0 delta ported onto the v0.30.1 line (amber retheme, motion layer, dip time series, tripwire notifications, Freezed sensor events, TripState, Hungarian stitching) + Meshtastic improvements package; fresh installs open LIVE.
 
 **Just want the app?** Grab the latest release — no building needed:
 
@@ -189,6 +189,9 @@ Every version keeps its own built apps — download whichever version you want, 
 
 | Version | Android | Windows | What's new |
 |---|---|---|---|
+| [v0.31.0](https://github.com/ShepherdSense/Outride/releases/tag/v0.31.0) | [outride-android.apk](https://github.com/ShepherdSense/Outride/releases/download/v0.31.0/outride-android.apk) | [outride-windows.zip](https://github.com/ShepherdSense/Outride/releases/download/v0.31.0/outride-windows.zip) | Full v0.30.0 delta ported onto the v0.30.1 line (amber retheme, motion layer, dip time series, tripwire notifications, Freezed sensor events, TripState, Hungarian stitching) + Meshtastic improvements package (per-packet link stream, ORT1 probe payload, MQTT tap, hygiene config, authenticated control plane) |
+| [v0.30.1](https://github.com/ShepherdSense/Outride/releases/tag/v0.30.1) | [outride-android.apk](https://github.com/ShepherdSense/Outride/releases/download/v0.30.1/outride-android.apk) | [outride-windows.zip](https://github.com/ShepherdSense/Outride/releases/download/v0.30.1/outride-windows.zip) | GL.iNet support + Sensors grid + Tunnels & Feeds + tripwire layers + smoother heat map |
+| [v0.29.7](https://github.com/ShepherdSense/Outride/releases/tag/v0.29.7) | [outride-android.apk](https://github.com/ShepherdSense/Outride/releases/download/v0.29.7/outride-android.apk) | [outride-windows.zip](https://github.com/ShepherdSense/Outride/releases/download/v0.29.7/outride-windows.zip) | Native Cloudflare hub support + ZeroTier support built in; fresh installs open LIVE, web sim stays simulated |
 | [v0.29.6](https://github.com/ShepherdSense/Outride/releases/tag/v0.29.6) | [outride-android.apk](https://github.com/ShepherdSense/Outride/releases/download/v0.29.6/outride-android.apk) | [outride-windows.zip](https://github.com/ShepherdSense/Outride/releases/download/v0.29.6/outride-windows.zip) | B1 fusion bench + node power-sizing calculator (benches built, measurement pending recorded data) |
 | [v0.29.5](https://github.com/ShepherdSense/Outride/releases/tag/v0.29.5) | [outride-android.apk](https://github.com/ShepherdSense/Outride/releases/download/v0.29.5/outride-android.apk) | [outride-windows.zip](https://github.com/ShepherdSense/Outride/releases/download/v0.29.5/outride-windows.zip) | 1:1 tiles by default, three-tab UI, encrypted fleet chat (experimental), live GPS map |
 

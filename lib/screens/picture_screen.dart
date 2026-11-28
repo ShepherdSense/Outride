@@ -12,6 +12,8 @@ import '../services/web_tile_loader.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../utils/field_map_transform.dart';
+import '../widgets/live_dot.dart';
+import '../widgets/outride_motion.dart';
 import 'dashboard.dart' show eventSizeColor;
 import 'events_list_screen.dart';
 import 'fleet_screen.dart';
@@ -193,23 +195,34 @@ class PictureScreen extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: live
-                            ? OutrideColors.green
-                            : OutrideColors.orange,
-                        shape: BoxShape.circle,
-                      ),
+                    // Live dot pulses slowly (green = live status);
+                    // SIM is a static orange dot. The label
+                    // crossfades on a mode change.
+                    LiveDot(
+                      color: live
+                          ? OutrideColors.green
+                          : OutrideColors.orange,
+                      size: 7,
+                      pulsing: live,
                     ),
                     const SizedBox(width: 7),
-                    Text(
-                      live ? 'LIVE' : 'SIM',
-                      style: OutrideType.chip(live
-                              ? OutrideColors.green
-                              : OutrideColors.orange)
-                          .copyWith(fontSize: 10),
+                    AnimatedSwitcher(
+                      duration: OutrideMotion.fast,
+                      switchInCurve: OutrideMotion.curve,
+                      switchOutCurve: OutrideMotion.curve,
+                      transitionBuilder: (child, animation) =>
+                          FadeTransition(
+                        opacity: animation,
+                        child: child,
+                      ),
+                      child: Text(
+                        live ? 'LIVE' : 'SIM',
+                        key: ValueKey<bool>(live),
+                        style: OutrideType.chip(live
+                                ? OutrideColors.green
+                                : OutrideColors.orange)
+                            .copyWith(fontSize: 10),
+                      ),
                     ),
                   ],
                 ),
@@ -495,8 +508,9 @@ class PictureScreen extends StatelessWidget {
     );
   }
 
-  /// One big action, full width, 56 px tall. The theme's transparent
-  /// purple style — never a solid block.
+  /// One big action, full width, 56 px tall. The theme's filled
+  /// amber primary style (2026-11-25 direction) — no per-screen
+  /// styling.
   Widget _startStopButton() {
     return SizedBox(
       width: double.infinity,

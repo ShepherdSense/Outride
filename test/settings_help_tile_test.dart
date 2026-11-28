@@ -12,13 +12,15 @@ import 'package:outride/state/app_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Same drained-exception rig as fetch_voice_settings_test.dart:
-/// pumping the whole Settings screen trips two pre-existing debug
-/// assertions that have nothing to do with the help tile — the
-/// radios driver dropdown overflowing at 360 px ("FETCH (throwable
-/// sensor ball)" is wider than the screen) and every SwitchListTile
-/// inside an OutridePanel tripping the "ListTile background / ink
-/// splashes may be invisible" assertion. They are counted per
-/// symptom so a NEW failure mode still shows up in `other`.
+/// pumping the whole Settings screen trips one pre-existing debug
+/// assertion that has nothing to do with the help tile — every
+/// SwitchListTile inside an OutridePanel tripping the "ListTile
+/// background / ink splashes may be invisible" assertion. It is
+/// counted per symptom so a NEW failure mode still shows up in
+/// `other`. (The radios driver dropdown overflow at 360 px used to
+/// be a second known issue here; the 2026-11-23 settings_radios_360
+/// fix — `isExpanded: true` on that dropdown — removed it, and the
+/// count is now asserted to be zero.)
 class _Drained {
   int radiosOverflow = 0;
   int listTileBackground = 0;
@@ -137,11 +139,14 @@ void main() {
     expect(find.text('TAP TO EXPAND'), findsOneWidget);
     expect(find.textContaining('EACH RADIO IS POLLED INDEPENDENTLY'),
         findsNothing);
-    // Only the two known pre-existing Settings issues occurred.
+    // Only the one known pre-existing Settings issue occurred, and
+    // the radios overflow is gone (2026-11-23 settings_radios_360
+    // fix): a reappearance here is a regression.
     final counts = trap.counts;
     expect(counts.other, 0,
         reason: 'a new failure mode appeared — see debugPrint above');
-    expect(counts.radiosOverflow, greaterThan(0));
+    expect(counts.radiosOverflow, 0,
+        reason: 'the radios driver dropdown overflowed again at 360 px');
     expect(counts.listTileBackground, greaterThan(0));
   });
 

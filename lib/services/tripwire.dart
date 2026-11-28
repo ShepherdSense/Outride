@@ -94,6 +94,30 @@ class TripwireConfig {
   final double varFloor;
 }
 
+/// Explicit alert lifecycle for one link direction.
+///
+///   armed → tripped → confirmed → cleared → armed
+///
+/// The state is DERIVED from the detector's existing per-link
+/// bookkeeping — this enum only NAMES it; it changes no detection
+/// logic and no public API:
+///
+/// - [armed]: no open episode, no unconfirmed dip in progress. This
+///   is also the state of a link the detector has never seen.
+/// - [tripped]: a disturbance is in progress (`dipCount > 0`) but the
+///   confirmation streak ([TripwireConfig.confirmPolls]) has not been
+///   reached yet — no event has been emitted.
+/// - [confirmed]: a [CrossingEvent] has been emitted and the episode
+///   is still open (the disturbance is ongoing).
+/// - [cleared]: the episode just ended (its [EpisodeSummary] was
+///   recorded). TRANSIENT: the next poll of that link resolves it —
+///   a calm poll returns it to [armed], a disturbed poll to
+///   [tripped]. A link that re-baselines after a lasting level change
+///   goes straight to [armed], never [cleared] (the old level is gone,
+///   so there is nothing to show as cleared — see the re-baseline
+///   comment in [Tripwire.process]).
+enum TripState { armed, tripped, confirmed, cleared }
+
 /// Rolling-median baseline disturbance detector, one instance per link
 /// direction.
 ///
@@ -164,6 +188,7 @@ class Tripwire {
       _dipStart.remove(k);
       _dipPeak.remove(k);
       _held.remove(k);
+      _cleared.remove(k);
       _rebaselinedAt.remove(k);
       _linkMedian.remove(k);
       _varHist.remove(k);
@@ -181,6 +206,37 @@ class Tripwire {
   final List<CrossingEvent> _pending = [];
   final Map<String, DateTime> _rebaselinedAt = {};
   int _rebaselines = 0;
+
+  /// Links whose confirmed episode just ended ([TripState.cleared]).
+  /// Only the cleared state needs explicit storage: armed is the
+  /// default, tripped is `_dipCount > 0`, confirmed is an open
+  /// episode (see [stateFor]). A link leaves this set on its next
+  /// poll (calm → armed, disturbed → tripped), on re-baseline, or
+  /// when the link is swept as stale.
+  final Set<String> _cleared = {};
+
+  /// This link's explicit alert lifecycle state (see [TripState]).
+  /// Purely derived from the existing per-link bookkeeping — reading
+  /// it changes nothing.
+  TripState stateFor(String linkKey) {
+    if (_openEpisodes.containsKey(linkKey)) return TripState.confirmed;
+    if ((_dipCount[linkKey] ?? 0) > 0) return TripState.tripped;
+    if (_cleared.contains(linkKey)) return TripState.cleared;
+    return TripState.armed;
+  }
+
+  /// First disturbed poll after calm: armed → tripped.
+  void _transitionToTripped(String key) => _cleared.remove(key);
+
+  /// Confirmation streak reached, event emitted: tripped → confirmed.
+  void _transitionToConfirmed(String key) => _cleared.remove(key);
+
+  /// Episode ended, summary recorded: confirmed → cleared (transient).
+  void _transitionToCleared(String key) => _cleared.add(key);
+
+  /// Calm poll with nothing open, or re-baseline after a lasting
+  /// level change: cleared → armed (or stays armed).
+  void _transitionToArmed(String key) => _cleared.remove(key);
 
   /// Last trusted baseline median per link — the fade-level reference.
   final Map<String, double> _linkMedian = {};
@@ -356,6 +412,10 @@ class Tripwire {
           _varBase.remove(key);
           _closeEpisode(key, raw.timestamp);
           _resetEpisode(key);
+          // Re-baseline is not a clear: the old level is gone, so
+          // anything still standing there is invisible — the link
+          // goes straight back to armed, never cleared.
+          _transitionToArmed(key);
           _rebaselines += 1;
           _rebaselinedAt[key] = raw.timestamp;
           return raw.copyWith(
@@ -373,6 +433,7 @@ class Tripwire {
         _dipStart[key] = raw.timestamp;
         _dipPeak[key] = dev;
         _varFired[key] = varDisturbed;
+        _transitionToTripped(key);
       } else {
         _dipPeak[key] = math.max(_dipPeak[key] ?? dev, dev);
         if (varDisturbed) _varFired[key] = true;
@@ -391,6 +452,7 @@ class Tripwire {
           direction: direction,
           viaVariance: _varFired[key] ?? false,
         ));
+        _transitionToConfirmed(key);
         _openEpisodes[key] = _EpisodeTrack(confirmedAt: raw.timestamp)
           ..peak = peak
           ..viaVariance = _varFired[key] ?? false;
@@ -403,8 +465,12 @@ class Tripwire {
       }
       _dipCount[key] = count;
     } else {
+      // Calm poll: close any open episode (→ cleared) or, with
+      // nothing open, resolve a transient cleared state back to armed.
+      final wasOpen = _openEpisodes.containsKey(key);
       _closeEpisode(key, raw.timestamp);
       _resetEpisode(key);
+      if (!wasOpen) _transitionToArmed(key);
     }
 
     return raw.copyWith(
@@ -441,6 +507,7 @@ class Tripwire {
   void _closeEpisode(String key, DateTime now) {
     final open = _openEpisodes.remove(key);
     if (open == null) return;
+    _transitionToCleared(key);
     final start = _dipStart[key] ?? open.confirmedAt;
     _closed.add(EpisodeSummary(
       linkKey: key,

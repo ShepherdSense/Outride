@@ -441,28 +441,29 @@ void main() {
     });
   });
 
-  group('Transparent purple buttons', () {
-    test('OutrideButtons.primary is translucent purple, never solid', () {
+  group('Amber filled primary buttons', () {
+    test('OutrideButtons.primary is filled warm amber, dark text', () {
       final style = OutrideButtons.primary;
       final bg = style.backgroundColor!.resolve({})!;
-      expect(bg, OutrideColors.purple.withAlpha(31));
-      expect((bg.a * 255).round(), lessThan(64));
-      expect(style.foregroundColor!.resolve({}), OutrideColors.purple);
-      expect(style.side!.resolve({})!.color,
-          OutrideColors.purple.withAlpha(110));
-      // The outline sibling: same purple, fully transparent fill.
+      expect(bg, OutrideColors.accent);
+      expect((bg.a * 255).round(), 255);
+      expect(style.foregroundColor!.resolve({}),
+          OutrideColors.background);
+      expect(style.side!.resolve({})!.color, OutrideColors.accent);
+      // The outline sibling: grey/white, fully transparent fill.
       final outlineBg = OutrideButtons.outline.backgroundColor!.resolve({})!;
       expect((outlineBg.a * 255).round(), 0);
       expect(OutrideButtons.outline.foregroundColor!.resolve({}),
-          OutrideColors.purple);
+          OutrideColors.onDark);
     });
 
-    test('theme gives every ElevatedButton the transparent purple style',
+    test('theme gives every ElevatedButton the amber filled style',
         () {
       final style = buildDarkTheme().elevatedButtonTheme.style!;
       expect(style.backgroundColor!.resolve({}),
-          OutrideColors.purple.withAlpha(31));
-      expect(style.foregroundColor!.resolve({}), OutrideColors.purple);
+          OutrideColors.accent);
+      expect(style.foregroundColor!.resolve({}),
+          OutrideColors.background);
     });
   });
 

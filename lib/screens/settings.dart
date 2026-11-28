@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import '../services/adaptive_baseline.dart';
 import '../services/cloudflare_auto.dart';
 import '../services/zmeta_pairing.dart' show zmetaParseTarget;
+import '../services/build_age.dart';
+import '../services/experimental_build.dart';
 import '../services/experimental_sensors.dart';
 import '../services/recorder.dart';
 import '../services/tile_pack.dart';
@@ -103,6 +105,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _fetchVoiceEnabled;
   late bool _fetchVoiceMuted;
   late double _fetchVoiceRate;
+  late bool _fetchNotificationsEnabled;
   late String _tileSourceId;
   late String _droneStreamSource;
   late bool _autoConnectSilvusUsb;
@@ -161,10 +164,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // them so the switches never show a stale value.
     if (st.fetchVoiceEnabled != _fetchVoiceEnabled ||
         st.fetchVoiceMuted != _fetchVoiceMuted ||
-        st.fetchVoiceRate != _fetchVoiceRate) {
+        st.fetchVoiceRate != _fetchVoiceRate ||
+        st.fetchNotificationsEnabled != _fetchNotificationsEnabled) {
       _fetchVoiceEnabled = st.fetchVoiceEnabled;
       _fetchVoiceMuted = st.fetchVoiceMuted;
       _fetchVoiceRate = st.fetchVoiceRate;
+      _fetchNotificationsEnabled = st.fetchNotificationsEnabled;
       if (mounted) setState(() {});
     }
   }
@@ -349,6 +354,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _fetchVoiceEnabled = widget.state.fetchVoiceEnabled;
     _fetchVoiceMuted = widget.state.fetchVoiceMuted;
     _fetchVoiceRate = widget.state.fetchVoiceRate;
+    _fetchNotificationsEnabled = widget.state.fetchNotificationsEnabled;
     // On web the stored id is normalized to the EFFECTIVE source
     // (v0.29.4): a stored OSM selection renders as USGS Topo on
     // web, so the dropdown must open on Topo — showing OSM while
@@ -735,6 +741,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
+        // EXPERIMENTAL BUILD — UNTESTED (branch-only, non-dismissible,
+        // always at the top, never gated by the Experimental sensors
+        // toggle below). The live release is v0.31.0.
+        if (kIsExperimentalBuild) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: OutrideColors.amber.withAlpha(30),
+              border: Border.all(
+                  color: OutrideColors.amber.withAlpha(128)),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'EXPERIMENTAL BUILD — UNTESTED',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: OutrideColors.amber,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Outride $kExperimentalVersion. This build contains '
+                  'measurement benches that have not been validated on '
+                  'real data. It is not the live release. Bench results '
+                  'here are measurements, not capabilities. Do not use '
+                  'this build for live operations. The live release is '
+                  'v$kExperimentalBaseVersion.',
+                  style: OutrideType.section(12)
+                      .copyWith(height: 1.5),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Based on Outride v$kExperimentalBaseVersion, cut '
+                  '${buildDate.year}-${buildDate.month.toString().padLeft(2, '0')}-${buildDate.day.toString().padLeft(2, '0')}. '
+                  'Feed server: ${widget.state.feedServerStatus}.',
+                  style: OutrideType.section(11).copyWith(
+                      color: OutrideColors.muted, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         _section('Radios & networks', [
           ListTile(
             dense: true,
@@ -786,14 +840,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               // is disabled there with the reason shown, rather than
               // hidden, so a web visitor is never left wondering
               // where it went. The state layer (applySettings) forces
-              // it too, so no UI path can unlock it.
-              widget.state.isWeb
+              // it too, so no UI path can unlock it. EXPERIMENTAL
+              // EXCEPTION: the experimental web build is a live-feed
+              // client, default LIVE — its toggle stays enabled.
+              (widget.state.isWeb && !kIsExperimentalBuild)
                   ? 'THE WEB SIM ALWAYS RUNS SIMULATED.'
                   : 'GENERATE SYNTHETIC LINK DATA — NO HARDWARE NEEDED.',
               style: OutrideType.section(10).copyWith(height: 1.6),
             ),
             value: _simulated,
-            onChanged: widget.state.isWeb
+            onChanged: (widget.state.isWeb && !kIsExperimentalBuild)
                 ? null
                 : (v) => setState(() => _simulated = v),
           ),
@@ -902,6 +958,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Test voice'),
           ),
         ]),
+        _section('Fetch trip notifications — EXPERIMENTAL', [
+          SwitchListTile(
+            title: Text('FETCH TRIP NOTIFICATIONS',
+                style: OutrideType.rowValue(OutrideColors.onDark)),
+            subtitle: Text(
+              defaultTargetPlatform == TargetPlatform.android
+                  ? 'POST A LOCAL NOTIFICATION WHEN A FETCH TRIP CONFIRMS, BESIDE THE VOICE ALERT. TURNING ON ASKS FOR THE NOTIFICATION PERMISSION. DEFAULT OFF.'
+                  : 'ANDROID ONLY IN THIS BUILD — NOTIFICATIONS DO NOT POST ON THIS PLATFORM.',
+              style: OutrideType.section(10).copyWith(height: 1.6),
+            ),
+            value: _fetchNotificationsEnabled,
+            // Off-Android the switch is disabled: the notifier is an
+            // explicit no-op there (see tripwire_notifications.dart),
+            // so there is nothing to turn on.
+            onChanged: defaultTargetPlatform == TargetPlatform.android
+                ? (v) async {
+                    await widget.state.setFetchNotificationsEnabled(v);
+                    if (mounted) {
+                      setState(() => _fetchNotificationsEnabled =
+                          widget.state.fetchNotificationsEnabled);
+                    }
+                  }
+                : null,
+          ),
+        ]),
         _section('Phone tier, signatures & offline maps', [
           SwitchListTile(
             title: Text('PHONE-ONLY TIER',
@@ -933,6 +1014,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // map cannot render. Options come from the shared
             // helper so the dropdown and the loader can never
             // drift apart again.
+            // isExpanded: the longest tile-source label is wider
+            // than the panel, and without it the button sizes
+            // itself to the widest menu item and overflows this
+            // full-width field by 12 px at 360 px (same root cause
+            // as the Radios driver dropdown, fixed 2026-11-23).
+            isExpanded: true,
             initialValue: tileSourceOptionsFor(isWeb: kIsWeb)
                     .any((s) => s.id == _tileSourceId)
                 ? _tileSourceId
@@ -1184,17 +1271,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Text('STREAM SOURCE',
                 style: OutrideType.section(10).copyWith(height: 1.6)),
             const SizedBox(width: 12),
-            DropdownButton<String>(
-              value: _droneStreamSource,
-              dropdownColor: OutrideColors.surface2,
-              style: OutrideType.rowValue(OutrideColors.onDark),
-              items: const [
-                DropdownMenuItem(
-                    value: 'local', child: Text('LOCAL LINK')),
-                DropdownMenuItem(value: 'cloud', child: Text('CLOUD')),
-              ],
-              onChanged: (v) =>
-                  setState(() => _droneStreamSource = v ?? 'local'),
+            // Expanded + isExpanded: without them the button sizes
+            // itself to its widest item ('LOCAL LINK') and the Row
+            // overflows by 25 px at 360 px (same root cause as the
+            // Radios driver dropdown, fixed 2026-11-23).
+            Expanded(
+              child: DropdownButton<String>(
+                value: _droneStreamSource,
+                isExpanded: true,
+                dropdownColor: OutrideColors.surface2,
+                style: OutrideType.rowValue(OutrideColors.onDark),
+                items: const [
+                  DropdownMenuItem(
+                      value: 'local', child: Text('LOCAL LINK')),
+                  DropdownMenuItem(value: 'cloud', child: Text('CLOUD')),
+                ],
+                onChanged: (v) =>
+                    setState(() => _droneStreamSource = v ?? 'local'),
+              ),
             ),
           ]),
         ]),
@@ -1559,7 +1653,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 16),
         Center(
           child: Text(
-            'OUTRIDE — FIRST OUT. FIRST TO KNOW.\n'
+            'OUTRIDE — PROTECT THE HERD.\n'
             'Formerly Shepherd — same product, new name.',
             textAlign: TextAlign.center,
             style: OutrideType.section(10).copyWith(height: 1.6),

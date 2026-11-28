@@ -7,6 +7,7 @@ import '../services/radio_driver.dart';
 import '../services/experimental_sensors.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/animated_value_text.dart';
 import 'beam.dart';
 import 'drone_tab.dart';
 import 'fetch_screen.dart';
@@ -525,12 +526,14 @@ class _SensorsScreenState extends State<SensorsScreen> {
           color: color.withAlpha(230),
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Text(status.label,
-            style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF1A1207)),
-            overflow: TextOverflow.ellipsis),
+        child: AnimatedValueText(
+          value: status.label,
+          style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF1A1207)),
+          overflow: TextOverflow.ellipsis,
+        ),
       );
     }
     return Container(
@@ -540,12 +543,14 @@ class _SensorsScreenState extends State<SensorsScreen> {
         border: Border.all(color: OutrideColors.muted.withAlpha(120)),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(status.label,
-          style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: OutrideColors.muted),
-          overflow: TextOverflow.ellipsis),
+      child: AnimatedValueText(
+        value: status.label,
+        style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: OutrideColors.muted),
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 
@@ -711,6 +716,7 @@ class _SensorsScreenState extends State<SensorsScreen> {
               ));
               setDialogState(() {});
             },
+
     );
   }
 }

@@ -15,6 +15,18 @@ class LinkSample {
   /// Radio-internal SNR units. Estimate; use deltas, not absolutes.
   final double? snr;
 
+  /// Received RSSI in dBm (Meshtastic `MeshPacket.rx_rssi`, field
+  /// 12 — NOT field 9, which is hop_limit). Null when the driver
+  /// did not report one. Estimate; use deltas, not absolutes.
+  final double? rssi;
+
+  /// True when this sample arrived on an authenticated channel
+  /// (AEAD — the AES-CCM tag authenticates every packet — or
+  /// STRICT signing without AEAD, per the locked mesh config).
+  /// Default false = UNTRUSTED fusion input: corroborate/upgrade,
+  /// never veto — and Meshtastic samples never veto a Silvus tripwire.
+  final bool authenticated;
+
   /// Link-adaptation MCS index, if reported.
   final int? mcs;
 
@@ -64,6 +76,8 @@ class LinkSample {
     required this.fromNode,
     required this.toNode,
     this.snr,
+    this.rssi,
+    this.authenticated = false,
     this.mcs,
     this.pcns = const [],
     this.noiseFrom,
@@ -96,12 +110,16 @@ class LinkSample {
           double? fadeLevel,
           double? baseline,
           double? threshold,
-          double? bearingDeg}) =>
+          double? bearingDeg,
+          double? rssi,
+          bool? authenticated}) =>
       LinkSample(
         timestamp: timestamp,
         fromNode: fromNode,
         toNode: toNode,
         snr: snr,
+        rssi: rssi ?? this.rssi,
+        authenticated: authenticated ?? this.authenticated,
         mcs: mcs,
         pcns: pcns,
         noiseFrom: noiseFrom,

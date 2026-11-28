@@ -5,43 +5,120 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import '../models/link_sample.dart';
+import 'meshtastic_link_series.dart';
+import 'meshtastic_mesh_config.dart';
+import 'meshtastic_proto.dart';
+import 'meshtastic_probe.dart';
 import 'radio_driver.dart';
 
-/// Meshtastic LoRa-mesh driver (RX only — the driver never transmits on
-/// the mesh; it only talks to the local node's client API over TCP).
+/// Meshtastic LoRa-mesh driver.
 ///
-/// Connects to a Meshtastic node's client API on TCP port 4403, performs
-/// the `want_config` handshake, and maintains the mesh's NodeDB:
-/// per-node GPS position, last-heard SNR, and neighbor edges
-/// (from the NeighborInfo module when the mesh broadcasts it).
+/// DESIGN DECISION — RX-only stance CHANGED (2026-11-28, improvement
+/// #2; see also `docs/meshtastic_driver_spec.md` and
+/// `docs/meshtastic_hygiene_config.md`): this driver historically
+/// never transmitted on the mesh. It still does NOT transmit by
+/// default. When the operator explicitly opts in to probing
+/// ([MeshtasticProbeSender.enabled]), Outride transmits normal
+/// Meshtastic broadcast packets on OUR OWN channel via the local
+/// node's client API — a link-report on private portnum 300. That is
+/// legitimate operation of our own mesh, not an attack; nothing here
+/// jams, deauths, spoofs, or touches any other network. The probe
+/// sender lives in `meshtastic_probe.dart` and is OFF by default.
+///
+/// Connects to a Meshtastic node's client API on TCP port 4403,
+/// performs the `want_config` handshake, and maintains the mesh's
+/// NodeDB: per-node GPS position, last-heard SNR/RSSI, and neighbor
+/// edges (from the NeighborInfo module when the mesh broadcasts it).
 ///
 /// What Outride gets from this:
 /// - every mesh node on the map (GPS → node position, auto-placed)
+/// - per-packet link samples: EVERY received MeshPacket is logged
+///   into [linkSeries] as sender → our node, with `rx_snr`,
+///   `rx_rssi`, timestamp, hop count, and portnum — a per-edge time
+///   series, not just last-heard SNR
 /// - coarse link-health samples: `meshtastic:local → meshtastic:!<id>`
-///   (SNR at which OUR node heard that node) and
+///   (SNR/RSSI at which OUR node heard that node) and
 ///   `meshtastic:!<a> → meshtastic:!<b>` (neighbor edges with SNR)
+/// - channel-utilization telemetry (ChUtil / AirUtil, portnum 67)
 ///
 /// HONEST SCOPE: Meshtastic telemetry is coarse — positions update on
-/// the mesh's own slow cadence (often minutes) and neighbor SNR is a
-/// single number per edge, not a fast disturbance signal. This driver
-/// gives you node presence, node-loss, and coarse link health. It is
-/// NOT tripwire-grade sensing; fine disturbance detection is the job
-/// of the SX1276 LoRa backhaul nodes (field_kit/esp32/lora_node),
-/// whose events arrive as proper tripwire links.
+/// the mesh's own slow cadence (often minutes) and per-packet SNR/RSSI
+/// is a single number per packet, not a fast disturbance signal. A
+/// step change in the series is CONSISTENT WITH a link disturbance,
+/// never proof of one. This driver gives you node presence,
+/// node-loss, and coarse link health. It is NOT tripwire-grade
+/// sensing; fine disturbance detection is the job of the SX1276 LoRa
+/// backhaul nodes (field_kit/esp32/lora_node), whose events arrive
+/// as proper tripwire links.
 ///
-/// Protocol notes (meshtastic/protobufs, verified against mesh.proto):
+/// Protocol notes (meshtastic/protobufs, verified against mesh.proto,
+/// telemetry.proto, mqtt.proto, toradio.proto on 2026-11-28):
 /// TCP framing is 4 bytes [0x94, 0xC3, lenMSB, lenLSB] + protobuf.
 /// Client → radio: ToRadio; radio → client: FromRadio. On connect we
 /// send ToRadio{want_config_id} and the radio streams its NodeDB as
 /// FromRadio{node_info} packets, then live MeshPackets. Protobuf is
-/// decoded by the minimal wire reader below — only the fields we need:
-/// FromRadio{packet=2,node_info=4}, NodeInfo{num=1,position=3,snr=4},
-/// Position{latitude_i=1,longitude_i=2 (sfixed32, x1e-7 deg)},
-/// MeshPacket{from=1,decoded=4,rx_snr=8}, Data{portnum=1,payload=2},
+/// decoded by the SHARED minimal wire reader in
+/// `meshtastic_proto.dart` ([MeshProtoReader]) — the driver used to
+/// carry its own private copy, which is how the len-0 bug existed
+/// in two places at once (FIX, review 2026-11-28, small item:
+/// unified onto the shared reader; there is now one reader).
+/// FromRadio{packet=2,my_info=3,node_info=4},
+/// MyNodeInfo{my_node_num=1}, NodeInfo{num=1,position=3,snr=4,
+/// device_metrics=6}, Position{latitude_i=1,longitude_i=2
+/// (sfixed32, x1e-7 deg)},
+/// MeshPacket{from=1,to=2,decoded=4,rx_snr=8 float,hop_limit=9
+/// varint,rx_rssi=12 int32 varint,hop_start=15 varint},
+/// Data{portnum=1,payload=2},
+/// Telemetry{device_metrics=2},
+/// DeviceMetrics{channel_utilization=3 float,air_util_tx=4 float},
 /// NeighborInfo{neighbors=4} / Neighbor{node_id=1,snr=2},
-/// NEIGHBORINFO_APP portnum = 71.
+/// NEIGHBORINFO_APP portnum = 71, TELEMETRY_APP portnum = 67,
+/// Outride probe portnum = 300 (private range 256-511).
+/// CORRECTION: `rx_rssi` is field 12, NOT field 9 (field 9 is
+/// hop_limit — the deep-dive report got this wrong). `rx_rssi` is
+/// int32 varint: negatives arrive sign-extended (10 bytes); the
+/// reader sign-extends from 32 bits.
 class MeshtasticDriver extends RadioDriver {
-  MeshtasticDriver({required this.host, required this.port});
+  MeshtasticDriver({
+    required this.host,
+    required this.port,
+    MeshLinkSeries? linkSeries,
+    this.meshConfig,
+  }) : linkSeries = linkSeries ?? MeshLinkSeries();
+
+  /// The per-edge link time series every received packet feeds.
+  /// Shared with the MQTT tap when the app wires both to one store.
+  /// Public on purpose (review 2026-11-28, item 16): the bench
+  /// reads the series through this field — `driver.linkSeries` —
+  /// so the package is exercisable without settings UI or app wiring.
+  final MeshLinkSeries linkSeries;
+
+  /// Locked mesh config, when the app supplies one. Its
+  /// [MeshtasticMeshConfig.authenticated] (AEAD authenticates, or
+  /// STRICT signing without AEAD) decides whether emitted
+  /// [LinkSample]s are marked authenticated; false (default) means
+  /// UNTRUSTED fusion input.
+  final MeshtasticMeshConfig? meshConfig;
+
+  /// True when this channel counts as authenticated (AEAD, or
+  /// STRICT signing). Default false = untrusted.
+  bool get authenticated => meshConfig?.authenticated ?? false;
+
+  /// Packets / payloads that arrived but could not be decoded
+  /// (malformed probe reports; corrupt frame lengths). Counted and
+  /// surfaced, never silently dropped without a trace — matches
+  /// the MQTT tap's `malformedCount` (FIX, review small item).
+  int malformedCount = 0;
+
+  /// Our local node's number, once `FromRadio.my_info` arrives.
+  /// 0 = not yet learned; series edges to the local node use
+  /// [MeshLinkSeries.localNode] (0) until then.
+  int get localNodeNum => _localNodeNum;
+  int _localNodeNum = 0;
+
+  /// Latest channel-utilization telemetry per node (ChUtil/AirUtil).
+  final MeshChannelUtilization channelUtilization =
+      MeshChannelUtilization();
 
   factory MeshtasticDriver.fromAddress(String address) {
     var addr = address.trim();
@@ -167,6 +244,7 @@ class MeshtasticDriver extends RadioDriver {
       }
       final len = (bytes[i + 2] << 8) | bytes[i + 3];
       if (len > 512 || len < 0) {
+        malformedCount++;
         i += 2; // corrupt length: resync past the header
         continue;
       }
@@ -180,13 +258,15 @@ class MeshtasticDriver extends RadioDriver {
   }
 
   void _parseFromRadio(Uint8List pb) {
-    final r = _PbReader(pb);
+    final r = MeshProtoReader(pb);
     while (!r.done) {
       final tag = r.readTag();
       final field = tag >> 3;
       final wire = tag & 7;
       if (field == 2 && wire == 2) {
         _parseMeshPacket(r.readBytes());
+      } else if (field == 3 && wire == 2) {
+        _parseMyNodeInfo(r.readBytes());
       } else if (field == 4 && wire == 2) {
         _parseNodeInfo(r.readBytes());
       } else {
@@ -195,10 +275,28 @@ class MeshtasticDriver extends RadioDriver {
     }
   }
 
+  /// FromRadio.my_info → MyNodeInfo{my_node_num=1}: our own node
+  /// number, so direct series edges can name the real local node
+  /// instead of the 0 sentinel.
+  void _parseMyNodeInfo(Uint8List pb) {
+    final r = MeshProtoReader(pb);
+    while (!r.done) {
+      final tag = r.readTag();
+      final field = tag >> 3;
+      final wire = tag & 7;
+      if (field == 1 && wire == 0) {
+        final num = r.readVarint();
+        if (num != 0) _localNodeNum = num;
+      } else {
+        r.skip(wire);
+      }
+    }
+  }
+
   void _parseNodeInfo(Uint8List pb) {
-    final r = _PbReader(pb);
+    final r = MeshProtoReader(pb);
     var num = 0;
-    double? lat, lon, snr;
+    double? lat, lon, snr, chUtil, airUtil;
     while (!r.done) {
       final tag = r.readTag();
       final field = tag >> 3;
@@ -211,6 +309,11 @@ class MeshtasticDriver extends RadioDriver {
         lon = p.$2;
       } else if (field == 4 && wire == 5) {
         snr = r.readFloat();
+      } else if (field == 6 && wire == 2) {
+        // NodeInfo.device_metrics → DeviceMetrics{chUtil=3, airUtil=4}
+        final m = _parseDeviceMetrics(r.readBytes());
+        chUtil = m.$1;
+        airUtil = m.$2;
       } else {
         r.skip(wire);
       }
@@ -225,12 +328,39 @@ class MeshtasticDriver extends RadioDriver {
       n.snr = snr;
       n.snrAt = DateTime.now();
     }
+    if (chUtil != null || airUtil != null) {
+      n.chUtil = chUtil;
+      n.airUtil = airUtil;
+      channelUtilization.record(num, chUtil, airUtil);
+    }
     n.lastHeard = DateTime.now();
+  }
+
+  /// DeviceMetrics{channel_utilization=3 float, air_util_tx=4 float}
+  /// (telemetry.proto). Returns (chUtil, airUtil); either may be null.
+  (double?, double?) _parseDeviceMetrics(Uint8List pb) {
+    final r = MeshProtoReader(pb);
+    double? chUtil, airUtil;
+    while (!r.done) {
+      final tag = r.readTag();
+      final field = tag >> 3;
+      final wire = tag & 7;
+      if (field == 3 && wire == 5) {
+        final v = r.readFloat();
+        if (v.isFinite) chUtil = v;
+      } else if (field == 4 && wire == 5) {
+        final v = r.readFloat();
+        if (v.isFinite) airUtil = v;
+      } else {
+        r.skip(wire);
+      }
+    }
+    return (chUtil, airUtil);
   }
 
   /// Returns (lat, lon) in degrees, or (null, null).
   (double?, double?) _parsePosition(Uint8List pb) {
-    final r = _PbReader(pb);
+    final r = MeshProtoReader(pb);
     double? lat, lon;
     while (!r.done) {
       final tag = r.readTag();
@@ -248,9 +378,13 @@ class MeshtasticDriver extends RadioDriver {
   }
 
   void _parseMeshPacket(Uint8List pb) {
-    final r = _PbReader(pb);
+    final r = MeshProtoReader(pb);
     var from = 0;
     double? rxSnr;
+    double? rxRssi;
+    int? hopLimit;
+    int? hopStart;
+    var hasHopStart = false;
     Uint8List? decoded;
     while (!r.done) {
       final tag = r.readTag();
@@ -261,16 +395,72 @@ class MeshtasticDriver extends RadioDriver {
       } else if (field == 4 && wire == 2) {
         decoded = r.readBytes();
       } else if (field == 8 && wire == 5) {
-        rxSnr = r.readFloat();
+        final v = r.readFloat();
+        if (v.isFinite) rxSnr = v;
+      } else if (field == 9 && wire == 0) {
+        // hop_limit — NOT rx_rssi (deep-dive field-number error,
+        // corrected 2026-11-28; see header).
+        hopLimit = r.readVarint();
+      } else if (field == 12 && wire == 0) {
+        // rx_rssi, int32 varint, sign-extended from 32 bits.
+        rxRssi = r.readSignedVarint32().toDouble();
+      } else if (field == 15 && wire == 0) {
+        hopStart = r.readVarint();
+        hasHopStart = true;
       } else {
         r.skip(wire);
       }
     }
-    if (decoded != null) _parseData(from, decoded, rxSnr);
+    if (from == 0) return;
+    final now = DateTime.now();
+    int? hopCount;
+    if (hasHopStart && hopStart != null && hopStart > 0 && hopLimit != null) {
+      hopCount = hopStart - hopLimit;
+      if (hopCount < 0) hopCount = 0;
+    }
+    // Per-packet link stream (#1): EVERY packet is a link sample,
+    // sender → our node. Recorded before any portnum filtering, so
+    // telemetry / text / probe packets all count.
+    final node = _nodes.putIfAbsent(from, () => _MeshNode(from));
+    node.lastHeard = now;
+    if (rxSnr != null) {
+      node.snr = rxSnr;
+      node.snrAt = now;
+    }
+    if (rxRssi != null) {
+      node.rssi = rxRssi;
+      node.rssiAt = now;
+    }
+    int? portnum;
+    double? chUtil, airUtil;
+    if (decoded != null) {
+      final parsed = _parseData(from, decoded);
+      portnum = parsed.$1;
+      chUtil = parsed.$2;
+      airUtil = parsed.$3;
+    }
+    linkSeries.record(MeshLinkSample(
+      timestamp: now,
+      fromNode: from,
+      toNode: _localNodeNum,
+      snr: rxSnr,
+      rssi: rxRssi,
+      hopCount: hopCount,
+      portnum: portnum,
+      chUtil: chUtil,
+      airUtil: airUtil,
+    ));
   }
 
-  void _parseData(int from, Uint8List pb, double? rxSnr) {
-    final r = _PbReader(pb);
+  /// Parse `Data{portnum=1, payload=2}`. Returns (portnum, chUtil,
+  /// airUtil) — the utilization fields are set only for telemetry
+  /// packets, so the caller can attach them to the single per-packet
+  /// series record instead of double-counting the packet.
+  /// Dispatches by portnum: 71 NeighborInfo, 67 Telemetry, 300
+  /// Outride probe; anything else is ignored (but the packet itself
+  /// was already recorded in the series by [_parseMeshPacket]).
+  (int?, double?, double?) _parseData(int from, Uint8List pb) {
+    final r = MeshProtoReader(pb);
     var portnum = 0;
     Uint8List? payload;
     while (!r.done) {
@@ -285,9 +475,28 @@ class MeshtasticDriver extends RadioDriver {
         r.skip(wire);
       }
     }
-    if (portnum != 71 || payload == null) return; // NEIGHBORINFO_APP
+    if (payload == null) {
+      // FIX (review small item): a Data with a known portnum but no
+      // payload used to return (null, null, null), discarding the
+      // portnum from the series record. Keep the portnum.
+      return (portnum == 0 ? null : portnum, null, null);
+    }
     final now = DateTime.now();
-    final pr = _PbReader(payload);
+    if (portnum == 71) {
+      _parseNeighborInfo(from, payload, now);
+      return (portnum, null, null);
+    } else if (portnum == 67) {
+      final m = _parseTelemetry(from, payload, now);
+      return (portnum, m.$1, m.$2);
+    } else if (portnum == outrideProbePortnum) {
+      _parseProbeReport(from, payload, now);
+      return (portnum, null, null);
+    }
+    return (portnum, null, null);
+  }
+
+  void _parseNeighborInfo(int from, Uint8List payload, DateTime now) {
+    final pr = MeshProtoReader(payload);
     while (!pr.done) {
       final tag = pr.readTag();
       if ((tag >> 3) == 4 && (tag & 7) == 2) {
@@ -304,8 +513,74 @@ class MeshtasticDriver extends RadioDriver {
     }
   }
 
+  /// Telemetry{device_metrics=2} → DeviceMetrics{chUtil=3, airUtil=4}
+  /// (telemetry.proto). Returns (chUtil, airUtil); the caller
+  /// attaches them to the single per-packet series record.
+  (double?, double?) _parseTelemetry(
+      int from, Uint8List payload, DateTime now) {
+    double? chUtil, airUtil;
+    final tr = MeshProtoReader(payload);
+    while (!tr.done) {
+      final tag = tr.readTag();
+      if ((tag >> 3) == 2 && (tag & 7) == 2) {
+        final m = _parseDeviceMetrics(tr.readBytes());
+        chUtil = m.$1;
+        airUtil = m.$2;
+      } else {
+        tr.skip(tag & 7);
+      }
+    }
+    if (chUtil == null && airUtil == null) return (null, null);
+    final n = _nodes.putIfAbsent(from, () => _MeshNode(from));
+    n.chUtil = chUtil;
+    n.airUtil = airUtil;
+    n.lastHeard = now;
+    channelUtilization.record(from, chUtil, airUtil, at: now);
+    return (chUtil, airUtil);
+  }
+
+  /// Outride probe report (portnum 300): each neighbor triple is an
+  /// observation the sender made of that neighbor, recorded as
+  /// reporter -> heard (sender -> neighbor) — the NeighborInfo /
+  /// LinkSample convention, so the series edge and the neighbor
+  /// table agree on direction (FIX, review item 8: the series edge
+  /// used to be neighbor -> sender while the neighbor table emitted
+  /// sender -> neighbor for the same observation).
+  /// The report's `senderNodeNum` is cross-checked against the
+  /// packet's `from` (FIX, review small item): a mismatch is
+  /// malformed — the report is dropped, counted, and the packet
+  /// itself was already series-recorded. A malformed report is
+  /// ignored otherwise — it must never break packet parsing.
+  void _parseProbeReport(int from, Uint8List payload, DateTime now) {
+    MeshtasticProbeReport report;
+    try {
+      report = MeshtasticProbePayload.decode(payload);
+    } catch (_) {
+      malformedCount++;
+      return;
+    }
+    if (report.senderNodeNum != from) {
+      malformedCount++;
+      return;
+    }
+    final sender = _nodes.putIfAbsent(from, () => _MeshNode(from));
+    sender.lastHeard = now;
+    for (final nb in report.neighbors) {
+      linkSeries.record(MeshLinkSample(
+        timestamp: now,
+        fromNode: from,
+        toNode: nb.nodeNum,
+        snr: nb.snr,
+        rssi: nb.rssi,
+        portnum: outrideProbePortnum,
+      ));
+      sender.neighbors[nb.nodeNum] = nb.snr;
+    }
+    sender.neighborsAt = now;
+  }
+
   (int, double)? _parseNeighbor(Uint8List pb) {
-    final r = _PbReader(pb);
+    final r = MeshProtoReader(pb);
     var id = 0;
     double? snr;
     while (!r.done) {
@@ -337,6 +612,22 @@ class MeshtasticDriver extends RadioDriver {
   @visibleForTesting
   List<LinkSample> buildSamplesForTest() => _buildSamples(DateTime.now());
 
+  /// Test hook: move a node's per-field measurement timestamps
+  /// (used by the staleness test: a fresh RSSI must not carry a
+  /// stale SNR as current). Only the fields given are moved;
+  /// [lastHeard] is untouched, so the node itself is not pruned.
+  @visibleForTesting
+  void setNodeMeasurementTimesForTest(
+    int nodeNum, {
+    DateTime? snrAt,
+    DateTime? rssiAt,
+  }) {
+    final n = _nodes[nodeNum];
+    if (n == null) return;
+    if (snrAt != null) n.snrAt = snrAt;
+    if (rssiAt != null) n.rssiAt = rssiAt;
+  }
+
   @override
   Future<List<LinkSample>> poll() async {
     try {
@@ -363,15 +654,28 @@ class MeshtasticDriver extends RadioDriver {
 
     for (final n in _nodes.values) {
       final id = nodeIdOf(n.num);
-      // Direct edge: SNR at which OUR node heard this node.
-      if (n.snr != null &&
+      // Direct edge: SNR/RSSI at which OUR node heard this node.
+      // FIX (re-review item 12): each field is checked against
+      // maxAge on its own timestamp. The old code used
+      // lastHeardAt = max(snrAt, rssiAt), so a fresh RSSI carried
+      // a >15-min-old SNR presented as current (bounded by the
+      // 15-min sampleMaxAge, but still a mislabel). A stale field
+      // is now emitted as null, never as current; the sample is
+      // dropped only when nothing is fresh.
+      final snrFresh = n.snr != null &&
           n.snrAt != null &&
-          now.difference(n.snrAt!) <= maxAge) {
+          now.difference(n.snrAt!) <= maxAge;
+      final rssiFresh = n.rssi != null &&
+          n.rssiAt != null &&
+          now.difference(n.rssiAt!) <= maxAge;
+      if (snrFresh || rssiFresh) {
         out.add(LinkSample(
           timestamp: now,
           fromNode: 'meshtastic:local',
           toNode: id,
-          snr: n.snr,
+          snr: snrFresh ? n.snr : null,
+          rssi: rssiFresh ? n.rssi : null,
+          authenticated: authenticated,
         ));
       }
       // Neighbor edges reported by this node.
@@ -383,6 +687,7 @@ class MeshtasticDriver extends RadioDriver {
             fromNode: id,
             toNode: nodeIdOf(e.key),
             snr: e.value,
+            authenticated: authenticated,
           ));
         }
       }
@@ -452,92 +757,11 @@ class _MeshNode {
   double? lon;
   double? snr;
   DateTime? snrAt;
+  double? rssi;
+  DateTime? rssiAt;
+  double? chUtil;
+  double? airUtil;
   DateTime lastHeard = DateTime.now();
   final Map<int, double> neighbors = {};
   DateTime? neighborsAt;
-}
-
-/// Minimal protobuf wire-format reader: varint, 32-bit, and
-/// length-delimited fields. Skips anything it doesn't understand,
-/// so firmware additions can't break the parse.
-class _PbReader {
-  _PbReader(this.buf) : _b = ByteData.sublistView(buf);
-
-  final Uint8List buf;
-  final ByteData _b;
-  int _i = 0;
-
-  bool get done => _i >= buf.length;
-
-  int readTag() => readVarint();
-
-  int readVarint() {
-    var result = 0;
-    var shift = 0;
-    while (_i < buf.length && shift < 64) {
-      final byte = buf[_i++];
-      result |= (byte & 0x7F) << shift;
-      if ((byte & 0x80) == 0) return result;
-      shift += 7;
-    }
-    return result; // truncated varint: best effort
-  }
-
-  int readFixed32() {
-    if (_i + 4 > buf.length) {
-      _i = buf.length;
-      return 0;
-    }
-    final v = _b.getUint32(_i, Endian.little);
-    _i += 4;
-    return v;
-  }
-
-  int readSfixed32() {
-    if (_i + 4 > buf.length) {
-      _i = buf.length;
-      return 0;
-    }
-    final v = _b.getInt32(_i, Endian.little);
-    _i += 4;
-    return v;
-  }
-
-  double readFloat() {
-    if (_i + 4 > buf.length) {
-      _i = buf.length;
-      return double.nan;
-    }
-    final v = _b.getFloat32(_i, Endian.little);
-    _i += 4;
-    return v;
-  }
-
-  Uint8List readBytes() {
-    final len = readVarint();
-    if (len <= 0 || _i + len > buf.length) {
-      _i = buf.length;
-      return Uint8List(0);
-    }
-    final out = buf.sublist(_i, _i + len);
-    _i += len;
-    return out;
-  }
-
-  void skip(int wire) {
-    switch (wire) {
-      case 0:
-        readVarint();
-      case 1:
-        _i += 8;
-      case 2:
-        final len = readVarint();
-        _i += len < 0 ? 0 : len;
-      case 5:
-        _i += 4;
-      default:
-        _i = buf.length; // groups (3/4): deprecated, abort field
-    }
-    if (_i > buf.length) _i = buf.length;
-  }
 }

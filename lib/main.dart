@@ -9,6 +9,8 @@ import 'screens/settings.dart';
 import 'services/experimental_sensors.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
+import 'widgets/app_top_bar.dart';
+import 'widgets/outride_motion.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,52 +54,15 @@ class _OutrideAppState extends State<OutrideApp> {
       themeMode: ThemeMode.dark,
       home: Scaffold(
         appBar: AppBar(
-          // Mock top bar: OUTRIDE wordmark (RIDE in purple) + a
+          // Mock top bar: all-white OUTRIDE wordmark + a
           // SIMULATED / LIVE pill. No subtitle — the mock has none.
+          // The bar itself lives in widgets/app_top_bar.dart so it
+          // is testable at desktop viewports on its own.
           title: ListenableBuilder(
             listenable: _state,
-            builder: (context, _) {
-              final simulated = _state.settings.simulatedMode;
-              return Row(
-                children: [
-                  RichText(
-                    text: TextSpan(
-                      style: OutrideType.section(20).copyWith(
-                        color: OutrideColors.onDark,
-                        letterSpacing: 1,
-                        fontWeight: FontWeight.w800,
-                      ),
-                      children: const [
-                        TextSpan(text: 'OUT'),
-                        TextSpan(
-                          text: 'RIDE',
-                          style: TextStyle(color: OutrideColors.purple),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: OutrideColors.purpleDeep,
-                      border: Border.all(color: OutrideColors.purpleStrong),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      simulated ? 'SIMULATED' : 'LIVE',
-                      style: const TextStyle(
-                        color: Color(0xFFE9D5FF),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
+            builder: (context, _) => AppTopBar(
+              simulated: _state.settings.simulatedMode,
+            ),
           ),
         ),
         // Three destinations, not eight: one watch view (Picture),
@@ -105,14 +70,24 @@ class _OutrideAppState extends State<OutrideApp> {
         // still exists — the instruments live one tap away under
         // Sensors, opened unchanged. Fleet join is an action, not a
         // destination: Picture fleet chip + Settings Fleet section.
-        body: _tab == 0
-            ? PictureScreen(state: _state)
-            : _tab == 1
-                ? SensorsScreen(state: _state)
-                : SettingsScreen(state: _state),
+        // Tab changes crossfade + slide (fast, deliberate — see
+        // OutrideMotion), they never just flip.
+        body: AnimatedSwitcher(
+          duration: OutrideMotion.standard,
+          switchInCurve: OutrideMotion.curve,
+          switchOutCurve: OutrideMotion.curve,
+          transitionBuilder: OutrideMotion.fadeSlideTransition,
+          child: _tab == 0
+              ? PictureScreen(key: const ValueKey(0), state: _state)
+              : _tab == 1
+                  ? SensorsScreen(key: const ValueKey(1), state: _state)
+                  : SettingsScreen(key: const ValueKey(2), state: _state),
+        ),
         bottomNavigationBar: BottomNavigationBar(
           // Three destinations: fixed type keeps every label visible
           // (the shifting default would hide unselected labels).
+          // Selected/unselected colours come from the theme
+          // (accent / muted grey, 2026-11-25 direction).
           type: BottomNavigationBarType.fixed,
           currentIndex: _tab,
           onTap: (i) => setState(() => _tab = i),

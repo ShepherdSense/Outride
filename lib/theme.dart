@@ -24,6 +24,18 @@ class OutrideColors {
   static const purple = Color(0xFFA78BFA); // scan actions
   static const purpleStrong = Color(0xFF8B5CF6); // mock strong purple
   static const purpleDeep = Color(0xFF4C1D95); // mock deep purple (pills)
+  /// Single live/primary accent (v0.30.0 refinement, Jeremy's pick
+  /// 2026-11-25): warm amber #F3BF3E (Sentry's range). ONE named
+  /// constant: swapping the accent is a one-line change here, and
+  /// every primary/selected use reads it. The accent appears ONLY
+  /// as the filled primary button and the selected-tab treatment;
+  /// everything else is grey/white/green, and green/red/amber
+  /// status colours stay status-only. Amber is also the
+  /// degraded/elevated status colour, so the two roles are kept
+  /// apart by context: accent = filled button / selected tab,
+  /// status amber = dots, text and bars on the affected row only.
+  /// Dark theme is non-negotiable; purple is no longer a constraint.
+  static const accent = Color(0xFFF3BF3E);
   static const muted = Color(0xFF8A94A6); // secondary labels
   /// Mock dim ink: secondary text on the mock screens.
   static const dim = Color(0xFFB3AAD4);
@@ -217,28 +229,28 @@ class OutrideChip extends StatelessWidget {
   }
 }
 
-/// The one button style in the app: transparent purple, never a solid
-/// block. A translucent Outride purple (#A78BFA, ~12% opacity) fill
-/// over the dark background, purple text, hairline purple border.
-/// Draco's call: buttons read purple but none is a solid block.
-/// The global [ElevatedButton] theme below uses [primary], so every
+/// The one button style in the app: FILLED warm amber, dark text
+/// (v0.30.0 refinement, Jeremy's pick 2026-11-25 — the accent's
+/// filled-button role; the mockup's RUN DIAGNOSTIC button is the
+/// model). This supersedes the old transparent-purple rule: the
+/// global [ElevatedButton] theme below uses [primary], so every
 /// primary action in the app — START/STOP included — gets this style
 /// with no per-screen styling. [outline] is the border-only sibling
-/// for secondary actions (mute, hunt).
+/// for secondary actions (mute, hunt): grey/white, never purple.
 class OutrideButtons {
   static ButtonStyle get primary => ButtonStyle(
         backgroundColor: WidgetStateProperty.resolveWith((states) =>
             states.contains(WidgetState.disabled)
                 ? OutrideColors.muted.withAlpha(16)
-                : OutrideColors.purple.withAlpha(31)),
+                : OutrideColors.accent),
         foregroundColor: WidgetStateProperty.resolveWith((states) =>
             states.contains(WidgetState.disabled)
                 ? OutrideColors.muted
-                : OutrideColors.purple),
+                : OutrideColors.background),
         side: WidgetStateProperty.resolveWith((states) => BorderSide(
             color: states.contains(WidgetState.disabled)
                 ? OutrideColors.muted.withAlpha(60)
-                : OutrideColors.purple.withAlpha(110))),
+                : OutrideColors.accent)),
         shape: WidgetStateProperty.all(RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20))),
         padding: WidgetStateProperty.all(
@@ -251,7 +263,7 @@ class OutrideButtons {
         )),
       );
 
-  /// Border-only sibling of [primary]: same purple text and hairline
+  /// Border-only sibling of [primary]: onDark text and a hairline
   /// border, fully transparent fill.
   static ButtonStyle get outline => ButtonStyle(
         backgroundColor:
@@ -259,11 +271,11 @@ class OutrideButtons {
         foregroundColor: WidgetStateProperty.resolveWith((states) =>
             states.contains(WidgetState.disabled)
                 ? OutrideColors.muted
-                : OutrideColors.purple),
+                : OutrideColors.onDark),
         side: WidgetStateProperty.resolveWith((states) => BorderSide(
             color: states.contains(WidgetState.disabled)
                 ? OutrideColors.muted.withAlpha(60)
-                : OutrideColors.purple.withAlpha(110))),
+                : OutrideColors.border)),
         shape: WidgetStateProperty.all(RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20))),
         padding: WidgetStateProperty.all(
@@ -334,7 +346,7 @@ class OutrideZoomControls extends StatelessWidget {
     if (!active) return child;
     return Container(
       decoration: BoxDecoration(
-        color: OutrideColors.purple.withAlpha(60),
+        color: OutrideColors.accent.withAlpha(60),
         borderRadius: BorderRadius.circular(8),
       ),
       child: child,
@@ -368,19 +380,23 @@ ThemeData buildDarkTheme() {
       ),
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      // Mock: 3 buttons, 60px, active purple with ~12% purple bg.
+      // 3 buttons, 60px; selected tab is the warm-amber accent
+      // (2026-11-25 direction), unselected tabs stay muted grey.
       backgroundColor: Color(0xFF0B0F14),
-      selectedItemColor: OutrideColors.purple,
-      unselectedItemColor: OutrideColors.faint,
+      selectedItemColor: OutrideColors.accent,
+      unselectedItemColor: OutrideColors.muted,
     ),
     switchTheme: SwitchThemeData(
-      // Mock switch: 58x34, purple when on.
+      // Switch: green track when on (on/active is a status),
+      // grey track when off. Amber is never used here — the accent
+      // appears only as the filled primary button and the
+      // selected tab.
       thumbColor: WidgetStateProperty.resolveWith(
         (s) => s.contains(WidgetState.selected) ? Colors.white : OutrideColors.dim,
       ),
       trackColor: WidgetStateProperty.resolveWith(
         (s) => s.contains(WidgetState.selected)
-            ? OutrideColors.purpleStrong
+            ? OutrideColors.green
             : OutrideColors.surface2,
       ),
     ),
@@ -412,8 +428,8 @@ ThemeData buildDarkTheme() {
           color: OutrideColors.muted, fontFamily: OutrideType.mono, fontSize: 12),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
-      // One style for every primary action: transparent purple, never
-      // a solid block (see OutrideButtons).
+      // One style for every primary action: filled warm amber,
+      // dark text (see OutrideButtons).
       style: OutrideButtons.primary,
     ),
     textButtonTheme: TextButtonThemeData(

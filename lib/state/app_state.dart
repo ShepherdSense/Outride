@@ -37,6 +37,7 @@ import '../services/generic_sensor_driver.dart';
 import '../services/fetch_driver.dart';
 import '../services/fetch_voice_alerts.dart';
 import '../services/operator_pose.dart';
+import '../services/tripwire_notifications.dart';
 import '../services/voice_alert_service.dart';
 import '../models/sensor_observation.dart';
 import '../services/recorder.dart';
@@ -924,6 +925,12 @@ class AppState extends ChangeNotifier {
   /// off — connect by hand), or 'unavailable' (web: no probe).
   /// Runtime-only.
   String cloudflarePathReason = 'not configured';
+
+  /// Last feed-server start result (address label or `ERROR: ...`).
+  /// The live feed server runs on the experimental branch only, so on
+  /// main this stays `'off'` — the field exists so the Settings
+  /// experimental banner (which reads it) compiles on both trees.
+  String feedServerStatus = 'off';
 
   /// Cloudflare auto-path evaluation: probe the stored ingest host and
   /// select the transport per [selectZmetaTransport].
@@ -2293,6 +2300,12 @@ class AppState extends ChangeNotifier {
   Tripwire _tripwire = Tripwire();
   final Tracker _tracker = Tracker();
 
+  /// Current tripwire lifecycle state for one link, for the UI
+  /// (the animated [TripStateIndicator]): armed → tripped →
+  /// confirmed → cleared. Read-only view of [_tripwire]; the
+  /// detector itself is untouched.
+  TripState tripwireStateFor(String linkKey) => _tripwire.stateFor(linkKey);
+
   /// ARTI geometrically-gated online reference updater + guided
   /// calibration routine (adaptive_baseline_spec.md). Sits next to the
   /// tripwire, not inside it: detection stays deterministic; ARTI
@@ -2674,6 +2687,12 @@ class AppState extends ChangeNotifier {
   /// Voice alerts master switch. Default OFF.
   bool fetchVoiceEnabled = false;
 
+  /// Local-notification trip alerts master switch (v0.30.0).
+  /// Default OFF. Android only — the notifier is an explicit no-op
+  /// elsewhere (see tripwire_notifications.dart), so the toggle is
+  /// disabled off-Android in Settings.
+  bool fetchNotificationsEnabled = false;
+
   /// Fast silence for the Fetch screen mute toggle. Default false.
   bool fetchVoiceMuted = false;
 
@@ -2707,6 +2726,24 @@ class AppState extends ChangeNotifier {
   /// fakes so tests never touch flutter_tts or the location channel.
   @visibleForTesting
   set voiceAlertServiceForTest(VoiceAlertService s) => _voiceService = s;
+
+  /// Notification sink, created lazily on first use so an install
+  /// that never enables trip notifications never touches the
+  /// notifications platform channel.
+  TripwireNotifier? _tripwireNotifier;
+
+  /// Test hook: replace the notifier with a fake so tests never
+  /// touch flutter_local_notifications or the permission channel.
+  @visibleForTesting
+  set tripwireNotifierForTest(TripwireNotifier n) => _tripwireNotifier = n;
+
+  TripwireNotifier get tripwireNotifier {
+    final cur = _tripwireNotifier;
+    if (cur != null) return cur;
+    final next = LocalTripwireNotifier();
+    _tripwireNotifier = next;
+    return next;
+  }
 
   @visibleForTesting
   set operatorPoseForTest(OperatorPoseProvider p) => _operatorPose = p;
@@ -2851,6 +2888,8 @@ class AppState extends ChangeNotifier {
       final j = jsonDecode(raw) as Map<String, dynamic>;
       final e = j['enabled'];
       if (e is bool) fetchVoiceEnabled = e;
+      final n = j['notifications'];
+      if (n is bool) fetchNotificationsEnabled = n;
       final m = j['muted'];
       if (m is bool) fetchVoiceMuted = m;
       final r = j['speechRate'];
@@ -2868,6 +2907,7 @@ class AppState extends ChangeNotifier {
         _fetchVoiceSettingsKey,
         jsonEncode({
           'enabled': fetchVoiceEnabled,
+          'notifications': fetchNotificationsEnabled,
           'muted': fetchVoiceMuted,
           'speechRate': fetchVoiceRate,
         }),
@@ -2880,6 +2920,28 @@ class AppState extends ChangeNotifier {
     fetchVoiceEnabled = v;
     await _saveFetchVoiceSettings();
     notifyListeners();
+  }
+
+  /// Trip notifications on/off. Persists. Enabling requests the
+  /// notification permission in-app first (Android 13+
+  /// POST_NOTIFICATIONS via permission_handler); when it is denied
+  /// — or the platform posts no notifications at all (anything but
+  /// Android in this build) — the feature stays OFF and this
+  /// returns false. Turning off never touches permissions. Returns
+  /// true when the requested state took effect.
+  Future<bool> setFetchNotificationsEnabled(bool v) async {
+    if (v) {
+      final granted = await tripwireNotifier.ensurePermission();
+      if (!granted) {
+        fetchNotificationsEnabled = false;
+        notifyListeners();
+        return false;
+      }
+    }
+    fetchNotificationsEnabled = v;
+    await _saveFetchVoiceSettings();
+    notifyListeners();
+    return true;
   }
 
   /// Fast silence (Fetch screen mute toggle). Persists.
@@ -2950,21 +3012,30 @@ class AppState extends ChangeNotifier {
   void announceFetchTripsForTest(FetchDriver driver) =>
       _maybeAnnounceFetchTrips(driver);
 
-  /// Feed NEW Fetch trip events to the voice service. Called from
-  /// [_tickPoller] after a successful Fetch poll — only when voice
-  /// alerts are enabled, not muted, and not replaying. Never throws
-  /// into the poll loop and never blocks the tick: the pose refresh
-  /// is fire-and-forget and speaking is queued, not awaited.
+  /// Feed NEW Fetch trip events to the voice service and the trip
+  /// notification sink. Called from [_tickPoller] after a
+  /// successful Fetch poll — only when at least one alert channel
+  /// is live (voice enabled and not muted, or trip notifications
+  /// enabled), and not replaying. The two channels gate
+  /// independently: a notification posts even when voice is off,
+  /// and voice speaks even when notifications are off. The trigger
+  /// is shared — one fresh, deduped trip producing a phrase from
+  /// [FetchVoiceAlerts.nextPhrase] (which also throttles repeats
+  /// per sensor) fires both channels beside each other; neither
+  /// suppresses or replaces the other. Never throws into the poll
+  /// loop and never blocks the tick: the pose refresh is
+  /// fire-and-forget and speaking / posting are queued, not awaited.
   void _maybeAnnounceFetchTrips(FetchDriver driver) {
-    if (!fetchVoiceEnabled || fetchVoiceMuted || replaying) return;
+    final voiceOn = fetchVoiceEnabled && !fetchVoiceMuted;
+    if ((!voiceOn && !fetchNotificationsEnabled) || replaying) return;
     try {
       unawaited(_operatorPose.refresh());
       final now = DateTime.now();
       final op = _operatorPose.currentPosition(now: now);
       for (final e in driver.events) {
         if (!e.anyTrip) continue;
-        // Only fresh trips speak: an event that arrived while voice
-        // was off must not bark minutes later when it is switched on.
+        // Only fresh trips alert: an event that arrived while alerts
+        // were off must not bark minutes later when one is switched on.
         if (now.difference(e.receivedAt) > const Duration(seconds: 30)) {
           continue;
         }
@@ -2978,7 +3049,15 @@ class AppState extends ChangeNotifier {
           heading: _operatorPose.heading,
           throwPoint: throwPoint,
         );
-        if (phrase != null) voiceAlertService.enqueue(phrase);
+        if (phrase != null) {
+          if (voiceOn) voiceAlertService.enqueue(phrase);
+          if (fetchNotificationsEnabled) {
+            unawaited(tripwireNotifier.postTripAlert(
+              title: 'Outride — Fetch trip',
+              body: phrase,
+            ));
+          }
+        }
       }
       while (_announcedFetchEvents.length > 200) {
         _announcedFetchEvents.removeAt(0);
@@ -3887,6 +3966,24 @@ class AppState extends ChangeNotifier {
           continue;
         }
         _lastSampleTs[r.linkKey] = r.timestamp;
+        // Unauthenticated Meshtastic samples are UNTRUSTED fusion
+        // input: a spoofed/unsigned packet must never trip the
+        // tripwire (corroborate/upgrade, never veto — see the
+        // Meshtastic hygiene doc and the v0.31.0 CHANGELOG). They
+        // are still recorded to history below so the link stays
+        // visible as evidence, but they skip `_tripwire.process`
+        // entirely — no enrichment, so history carries the raw
+        // sample (dip 0, baseline/threshold NaN) and the dip-series
+        // chart shows no dip for unauthenticated mesh links.
+        if (p.driver is MeshtasticDriver && !r.authenticated) {
+          enrichedAll.add(r);
+          final h = history.putIfAbsent(r.linkKey, () => []);
+          h.add(r);
+          while (h.length > maxHistory) {
+            h.removeAt(0);
+          }
+          continue;
+        }
         final enriched = _tripwire.process(r);
         enrichedAll.add(enriched);
         final h = history.putIfAbsent(enriched.linkKey, () => []);
@@ -4033,26 +4130,22 @@ class AppState extends ChangeNotifier {
       dipThreshold: settings.dipThreshold,
     );
     if (track != null) {
-      final activeDrivers = <String>{};
-      for (final s in geo) {
-        if (s.isDisturbed(settings.dipThreshold)) {
-          activeDrivers.add(driverOf(s.fromNode));
-        }
-      }
-      String? bestLabel;
-      double bestConf = 0.0;
-      for (final d in activeDrivers) {
-        final h = _stitcher.checkHandoff(now: now, activeDriver: d);
-        if (h != null && h.confidence > bestConf) {
-          bestConf = h.confidence;
-          bestLabel =
-              '${h.fromDriver.toUpperCase()} → ${d.toUpperCase()}';
-        }
-      }
-      if (bestLabel != null) {
+      // Track stitching, Hungarian batch (v0.30.0): one
+      // globally-optimal assignment across all open/closed detections
+      // instead of a greedy per-driver max. Results are sorted by
+      // confidence descending. The first pair is the
+      // highest-confidence pair OF the globally-optimal assignment —
+      // not necessarily the single best pair overall, since Hungarian
+      // maximizes the TOTAL assignment confidence and can sacrifice
+      // the best pair to improve the total. The greedy checkHandoff()
+      // stays available for single-driver callers.
+      final handoffs = _stitcher.checkHandoffs(now: now);
+      if (handoffs.isNotEmpty) {
+        final h = handoffs.first;
         track = track!.copyWith(
-          stitchLabel: bestLabel,
-          stitchConfidence: bestConf,
+          stitchLabel:
+              '${h.fromDriver.toUpperCase()} → ${h.newDriver.toUpperCase()}',
+          stitchConfidence: h.confidence,
         );
       }
     }
@@ -4347,7 +4440,11 @@ class AppState extends ChangeNotifier {
   /// Collect static RSS into the guided routine's accumulator while
   /// calibrating. Only nodes flagging `calib` in their beacon count
   /// toward the fit (a node mid-reboot must not contaminate it);
-  /// mesh (non-ESP32) links are always eligible.
+  /// mesh (non-ESP32) links are always eligible — except
+  /// unauthenticated Meshtastic samples, which are UNTRUSTED: a
+  /// spoofed dip during calibration must not bias that link's median
+  /// or the path-loss fit (same gate as the tripwire, see
+  /// `_tickPoller`).
   void _accumulateCalibration(List<LinkSample> samples) {
     final calibNodes = <String>{};
     for (final p in _pollers) {
@@ -4357,6 +4454,9 @@ class AppState extends ChangeNotifier {
     for (final s in samples) {
       final level = s.snr;
       if (level == null || !level.isFinite) continue;
+      if (driverOf(s.fromNode) == 'meshtastic' && !s.authenticated) {
+        continue;
+      }
       if (driverOf(s.fromNode) == 'esp32' &&
           !calibNodes.contains(s.fromNode.replaceFirst('esp32:', ''))) {
         continue;

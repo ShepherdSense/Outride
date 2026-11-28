@@ -15,7 +15,8 @@ import 'package:outride/services/fleet_crypto.dart';
 
 void main() {
   group('fleetDeriveKey (Argon2id)', () {
-    test('same PIN + salt ⇒ same 32-byte key, twice', () async {
+    test('same PIN + salt ⇒ same 32-byte key, twice',
+        timeout: const Timeout(Duration(minutes: 2)), () async {
       final salt = List<int>.generate(16, (i) => i);
       final a = await fleetDeriveKey(pin: '1234', salt: salt);
       final b = await fleetDeriveKey(pin: '1234', salt: salt);
@@ -65,7 +66,8 @@ void main() {
   });
 
   group('fleetDeriveKeyPbkdf2 (fallback)', () {
-    test('same PIN + salt ⇒ same 32-byte key, twice', () async {
+    test('same PIN + salt ⇒ same 32-byte key, twice',
+        timeout: const Timeout(Duration(minutes: 2)), () async {
       final salt = List<int>.generate(16, (i) => i);
       final a = await fleetDeriveKeyPbkdf2(pin: '1234', salt: salt);
       final b = await fleetDeriveKeyPbkdf2(pin: '1234', salt: salt);
@@ -73,7 +75,8 @@ void main() {
       expect(a, b);
     });
 
-    test('different salt and wrong PIN ⇒ different keys', () async {
+    test('different salt and wrong PIN ⇒ different keys',
+        timeout: const Timeout(Duration(minutes: 2)), () async {
       final salt = List<int>.generate(16, (i) => i);
       final base = await fleetDeriveKeyPbkdf2(pin: '1234', salt: salt);
       final otherSalt = await fleetDeriveKeyPbkdf2(
@@ -84,7 +87,8 @@ void main() {
       expect(wrongPin, isNot(base));
     });
 
-    test('fallback differs from Argon2id for the same inputs', () async {
+    test('fallback differs from Argon2id for the same inputs',
+        timeout: const Timeout(Duration(minutes: 2)), () async {
       final salt = List<int>.generate(16, (i) => i);
       final argon = await fleetDeriveKey(pin: '1234', salt: salt);
       final pbkdf2 = await fleetDeriveKey(

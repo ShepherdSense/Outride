@@ -7,23 +7,29 @@
 /// constructs the real flutter_tts channel on toggle.
 ///
 /// NOTE on drained exceptions: pumping the whole Settings screen in
-/// the test harness trips pre-existing debug assertions that have
-/// nothing to do with the voice section. They are drained here
-/// (and counted per symptom — see [_Drained] and [_ErrorTrap] — so
-/// a NEW failure mode still shows up as a count in `other`, or a
-/// change in the known counts) rather than fixed, because the
-/// layout is out of scope for the voice-alerts feature; the voice
-/// assertions below are what this test owns.
+/// the test harness trips a pre-existing debug assertion that has
+/// nothing to do with the voice section. It is drained here (and
+/// counted per symptom — see [_Drained] and [_ErrorTrap] — so a NEW
+/// failure mode still shows up as a count in `other`, or a change in
+/// the known counts) rather than fixed, because the layout is out of
+/// scope for the voice-alerts feature; the voice assertions below
+/// are what this test owns.
 ///
 /// KNOWN PRE-EXISTING ISSUES (filed here, not fixed in this pass —
 /// layout is out of scope):
-/// 1. Radios driver dropdown overflows at 360 px: its longest item,
-///    "FETCH (throwable sensor ball)", is wider than the screen —
-///    a RenderFlex overflow ("A RenderFlex overflowed by … pixels").
-/// 2. Every SwitchListTile inside a OutridePanel trips the
+/// 1. Every SwitchListTile inside a OutridePanel trips the
 ///    "ListTile background / ink splashes may be invisible"
 ///    assertion (OutridePanel is a DecoratedBox, so the tile's ink
 ///    has no Material background to draw on).
+///
+/// FIXED 2026-11-23 (settings_radios_360 fix — NOT a known issue
+/// any more, and asserted as zero below): the Radios driver
+/// dropdown used to overflow at 360 px because its longest item,
+/// "FETCH (throwable sensor ball)", is wider than the screen and
+/// the button sized itself to the widest menu item. `isExpanded:
+/// true` on that dropdown makes the button take its flexed share
+/// instead, so the overflow is gone; a reappearance here is a
+/// regression.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -135,13 +141,17 @@ Future<int> _pumpSettings(
   return drained;
 }
 
-/// Assert the trapped error counts: only the two known pre-existing
-/// failure modes occurred — a new one would land in `other` — and
-/// both known ones did occur, so the counts are live, not vacuous.
+/// Assert the trapped error counts: only the known pre-existing
+/// failure mode occurred — a new one would land in `other` — the
+/// ListTile one did occur (so the counts are live, not vacuous),
+/// and the radios overflow did NOT occur: the 2026-11-23
+/// settings_radios_360 fix (`isExpanded: true` on the driver
+/// dropdown) removed it, so a reappearance here is a regression.
 void _expectOnlyKnownErrors(_Drained counts) {
   expect(counts.other, 0,
       reason: 'a new failure mode appeared — see debugPrint above');
-  expect(counts.radiosOverflow, greaterThan(0));
+  expect(counts.radiosOverflow, 0,
+      reason: 'the radios driver dropdown overflowed again at 360 px');
   expect(counts.listTileBackground, greaterThan(0));
 }
 
