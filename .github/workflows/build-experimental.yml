@@ -1,0 +1,197 @@
+# Experimental Outride build — branch-only workflow (never on main).
+#
+# Trigger: workflow_dispatch ONLY (no push, no tags). Builds the
+# experimental variant (0.29.7-experimental: Bench area, recording,
+# live web feed) for Android + Windows + web, then creates ONE
+# prerelease with all three assets.
+#
+# Tag: experimental-2026-11-23 (NO `v` prefix — a `v*` tag would trip
+# the main build-apps.yml release job, gated on refs/tags/v*, and
+# could displace v0.29.7 as Latest). prerelease: true,
+# make_latest: false. The release is created ONLY by this workflow.
+name: Build experimental
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: flutter pub get
+      - run: flutter build apk --debug
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: outride-android-experimental
+          path: build/app/outputs/flutter-apk/app-debug.apk
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build windows --release
+      - run: 'Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath Outride-0.29.7-experimental-windows.zip'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: outride-windows-experimental
+          path: Outride-0.29.7-experimental-windows.zip
+
+  web:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build web --release
+      - run: 'zip -r Outride-0.29.7-experimental-web.zip build/web'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: outride-web-experimental
+          path: Outride-0.29.7-experimental-web.zip
+
+  release:
+    needs: [android, windows, web]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: outride-android-experimental
+          path: dist/android
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: outride-windows-experimental
+          path: dist/windows
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: outride-web-experimental
+          path: dist/web
+      - run: 'mv dist/android/app-debug.apk Outride-0.29.7-experimental.apk'
+      - run: 'mv dist/windows/Outride-0.29.7-experimental-windows.zip .'
+      - run: 'mv dist/web/Outride-0.29.7-experimental-web.zip .'
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        with:
+          tag_name: experimental-2026-11-23
+          target_commitish: experimental/bench-apps
+          prerelease: true
+          make_latest: false
+          name: 'Outride 0.29.7-experimental (untested)'
+          files: |
+            Outride-0.29.7-experimental.apk
+            Outride-0.29.7-experimental-windows.zip
+            Outride-0.29.7-experimental-web.zip
+          body: |
+            ## EXPERIMENTAL BUILD — UNTESTED. Do not use for live operations.
+
+            Outride 0.29.7-experimental (cut 2026-11-23): the v0.29.7 app plus
+            a Bench area (Sensors → Bench, experimental toggle), in-app
+            field-session recording, and a live web build that connects to
+            one mesh node as a client. Nothing here has been verified
+            on-device or in a browser yet — this build is a measurement
+            instrument waiting for recorded data, not a feature release.
+
+            ### The three assets
+
+            - `Outride-0.29.7-experimental.apk` — Android (debug build).
+              Install on the EUD; it serves the live feed for the web
+              build on port 49163 while it runs.
+            - `Outride-0.29.7-experimental-windows.zip` — Windows app.
+              Extract and run; same feed server on port 49163.
+            - `Outride-0.29.7-experimental-web.zip` — web build. Extract
+              and serve locally, then open in a browser:
+              `python -m http.server 8000` inside the extracted
+              `build/web` folder (the zip contains `build/web`, not
+              `web`), then open http://localhost:8000. The web app is a CLIENT: it
+              connects to one mesh node (or hub) over the local network and
+              views/controls/records through it. It never joins the mesh
+              itself and the mesh works unchanged underneath. If no feed
+              source is reachable it says so plainly and shows no live data;
+              simulated mode is a labeled toggle only, default OFF.
+
+            > **Port 49163 is unauthenticated and LAN-reachable:** anyone
+            > on the local network can read the live feed and send
+            > `record_start` / `record_stop`. Test use on a trusted
+            > network only.
+
+            ### Bench inventory (31 verdict units)
+
+            15 IMPLEMENT harnesses that run on recorded input — B1 (CI/ICI
+            fusion + Rønning/Forsling refinements), B4 (bounded replay),
+            B5 arms (sequential-pairwise CI, fading SCI,
+            per-link variance), B7 (CSI k-NN typing; SVM arm PENDING until
+            a weights sidecar exists), B9 (multi-target association),
+            B10 (1-bit detector, accuracy arm only), B11 (ACM path
+            splitting, LBP), B12 + B-W1–B-W4 (CSI presence) — and 16
+            QUEUED-BLOCKED with the blocker named on each row. With no
+            input every harness reports "measurement pending — no recorded
+            data". No synthetic data anywhere.
+
+            ### How to supply sessions
+
+            - Record in the app: Sensors → Bench → Record a session
+              (template, label, waypoints, baseline window). Files land in
+              `bench_sessions/` in the app documents dir, in the BenchSession
+              format the harnesses read (dip_db from a vacant-baseline
+              window + operator-declared scripted truth). Copy them out via
+              USB/file manager — there is no share sheet in the app yet.
+            - Or copy session files in by hand: RF-track CSVs into
+              `bench_sessions/` (`t_iso,link_key,from_node,to_node,snr_db,
+              dip_db,truth_x,truth_y,truth_id` + `<session>.nodes.json`
+              sidecar), CSI CSVs into `csi_sessions/`
+              (`t_iso,link_id,subcarrier,amp,phase` + `<session>.meta.json`
+              sidecar). Malformed files are listed with a reason, never
+              silently skipped.
+
+            See `experimental/README.md` on the `experimental/bench-apps`
+            branch for the full notes.
